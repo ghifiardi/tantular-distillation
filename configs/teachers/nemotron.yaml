@@ -1,0 +1,30 @@
+# NVIDIA Nemotron 3.5 Lightning 30B-A3B — Mixture-of-Experts.
+#
+# LICENSE: ships under NVIDIA's own open model license, NOT Apache 2.0.
+# Confirm its synthetic-data terms permit training a derivative model you
+# intend to ship commercially BEFORE generating a corpus from it. This is the
+# one teacher here whose terms are not already settled.
+#
+# "A3B" = ~3B active parameters per token. That buys throughput, not memory:
+# all experts stay resident, so budget the same ~32GB at FP8 as a dense 30B.
+#
+# Strengths to draw on: complex reasoning, structured problem solving,
+# tool calling.
+
+name: nemotron
+port: 8002
+served_model_name: nemotron
+license: nvidia-open-model-license   # VERIFY before commercial use
+
+repos:
+  fp8: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16   # serve --quantization fp8
+  bf16: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16
+
+# Use the instruct build above, never *-Base-BF16 — a base model has no
+# instruction following and will not produce usable teacher traces.
+# NVFP4 variants require Blackwell; unusable on Ada.
+
+sampling:
+  temperature: 0.6
+  top_p: 0.95
+  max_tokens: 2048

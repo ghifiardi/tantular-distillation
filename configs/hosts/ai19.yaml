@@ -1,0 +1,18 @@
+# ai19 — 2x RTX 4090 24GB (Ada, sm_89), no NVLink.
+#
+# 48GB total, but split across two cards, so a 30B must shard with
+# tensor-parallel. The cards talk over PCIe (no NVLink), which costs
+# wall-clock on every forward pass. That is fine for offline batch
+# generation and painful for anything interactive.
+#
+# Ada supports FP8 natively. It does NOT support NVFP4 (Blackwell only) —
+# do not point this host at an NVFP4 build, it will fail to load.
+
+name: ai19
+gpu: "2x RTX 4090 24GB"
+tensor_parallel_size: 2
+quantization: fp8
+# Two 24GB cards holding ~32GB of FP8 weights leaves little headroom; keep
+# some back for KV cache or long-context requests will OOM mid-run.
+gpu_memory_utilization: 0.90
+max_model_len: 32768

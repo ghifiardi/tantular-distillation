@@ -1,0 +1,16 @@
+# A single 48GB Ada card — RTX 6000 Ada (~$0.74/hr) or L40S (~$0.79/hr) on
+# RunPod community cloud.
+#
+# Preferred over ai19 when a run needs to finish fast: same 48GB, but on ONE
+# card, so there is no tensor-parallel hop over PCIe. FP8 is native.
+#
+# Do NOT substitute an RTX A6000 because it is cheaper ($0.33/hr). The A6000
+# is Ampere and cannot do FP8 — it would silently force int4 and degrade every
+# trace the teacher produces.
+
+name: rented-48gb
+gpu: "1x RTX 6000 Ada / L40S 48GB"
+tensor_parallel_size: 1
+quantization: fp8
+gpu_memory_utilization: 0.92
+max_model_len: 32768

@@ -1,0 +1,63 @@
+# QLoRA: Qwen3.5 9B student, single 24GB card (a 4090 on ai19, or rented).
+#
+# This produces the FIRST genuinely fine-tuned tantular-office model. Today's
+# tantular-office:0.4-9b is a runtime profile — Modelfile.office-9b is
+# `FROM qwen3.5:9b` plus a SYSTEM prompt, with no trained weights. There is no
+# earlier Office checkpoint to continue from, so this run starts at base.
+#
+# Full fine-tuning a 9B does not fit 24GB. LoRA over a 4-bit base does, with
+# room for a 32k sequence.
+
+base_model: Qwen/Qwen3.5-9B-Instruct
+load_in_4bit: true
+max_seq_length: 32768
+
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.05
+  # Attention + MLP projections. Attention-only converges faster but retains
+  # less of the structured-output behaviour the Studio features depend on.
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+training:
+  num_train_epochs: 2
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.03
+  gradient_checkpointing: true
+  bf16: true
+  logging_steps: 10
+  save_steps: 200
+
+data:
+  train: data/promoted/train.jsonl
+  eval: data/promoted/eval.jsonl
+
+# GATE EVERY RUN ON THIS. Distillation reliably buys reasoning while quietly
+# costing Indonesian voice and JSON-contract adherence — and the Studio
+# features break outright when the edit contract drifts. Run before and after,
+# compare, and do not promote an adapter that regresses either.
+eval_gates:
+  - name: office_json_contract
+    source: ../tantular_office_addin/tests   # edit-contract shape must still parse
+    min_pass_rate: 0.98
+  - name: indonesian_voice
+    source: ../tantular/data/eval            # eval set added in 55d10e8
+    min_pass_rate: 0.95
+
+output:
+  adapter_dir: adapters/tantular-office-9b-v2
+  # Merge + quantize to GGUF for Ollama, then rebuild Modelfile.office-9b to
+  # point at the merged weights instead of stock qwen3.5:9b.
+  export_gguf: true
+  quantization: q4_k_m

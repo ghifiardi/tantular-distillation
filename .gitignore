@@ -1,0 +1,13 @@
+# Corpora and weights never belong in git — HF hosts those.
+data/raw/
+data/promoted/
+adapters/
+*.jsonl
+!prompts/*.jsonl
+*.gguf
+*.safetensors
+
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/

@@ -1,0 +1,18 @@
+# Local M4 Pro 24GB — validation scale ONLY.
+#
+# A 4-bit 30B is ~17GB of a 24GB unified pool, which loads but leaves almost
+# nothing for anything else. Use this to hand-check that teacher prompts
+# produce the trace shape judge.py expects, on a few dozen prompts. It is not
+# a corpus host, and int4 output quality is below what you want baked into a
+# student.
+#
+# Served by Ollama or mlx_lm rather than vLLM (no CUDA on Metal).
+
+name: mac-validate
+gpu: "Apple M4 Pro 24GB unified"
+runtime: mlx
+tensor_parallel_size: 1
+quantization: int4
+max_model_len: 8192
+validate_only: true
+max_prompts: 50
