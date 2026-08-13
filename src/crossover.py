@@ -177,6 +177,109 @@ def analyze(plan: dict, out_dir: Path) -> int:
     return 0
 
 
+def noise_report(arm: str, replicate_paths: list[Path], prompts_path: Path) -> int:
+    """Within-arm noise floor across R replicates of one arm.
+
+    This is control-side work: it needs no treatment arm and characterises the
+    runtime rather than any precision difference. With R=2 only a range is
+    observable; R>=3 gives a standard deviation, which is what a later effect
+    must be compared against.
+    """
+    prompts = {json.loads(l)["family"]: json.loads(l) for l in
+               prompts_path.read_text(encoding="utf-8").splitlines() if l.strip()}
+    runs = []
+    for path in replicate_paths:
+        if not path.exists():
+            sys.exit(f"missing replicate: {path}")
+        runs.append({json.loads(l)["family"]: json.loads(l)
+                     for l in path.read_text(encoding="utf-8").splitlines() if l.strip()})
+
+    print(f"arm '{arm}' — {len(runs)} replicates over {len(prompts)} prompts")
+    if len(runs) < 3:
+        print("  NOTE: with fewer than 3 replicates only a range is observable, "
+              "not a standard deviation")
+
+    # Answer-level divergence, which is what a corpus would actually inherit.
+    answer_varies = sum(
+        1 for family in prompts
+        if len({r[family]["completion"] for r in runs if family in r}) > 1)
+    print(f"  answer text varies across replicates: {answer_varies}/{len(prompts)} prompts")
+
+    print(f"\n  {'metric':<20}{'mean':>10}{'range':>10}{'stdev':>10}")
+    floors = {}
+    for metric in PAIRED_METRICS:
+        spreads, stdevs = [], []
+        for family in prompts:
+            values = []
+            for run in runs:
+                record = run.get(family)
+                if record:
+                    score = per_trace_scores(record, prompts[family]).get(metric)
+                    if score is not None:
+                        values.append(float(score))
+            if len(values) >= 2:
+                spreads.append(max(values) - min(values))
+                if len(values) >= 3:
+                    stdevs.append(statistics.stdev(values))
+        if not spreads:
+            continue
+        mean_spread = statistics.mean(spreads)
+        floors[metric] = mean_spread
+        stdev_txt = f"{round(statistics.mean(stdevs), 4):>10}" if stdevs else f"{'n/a':>10}"
+        print(f"  {metric:<20}{round(mean_spread, 4):>10}"
+              f"{round(max(spreads), 4):>10}{stdev_txt}")
+
+    # --- volatile families, reported individually -------------------------
+    # An aggregate mean of 0.0294 can mean "everything drifts slightly" or "one
+    # prompt flips completely and the rest are stable". Those demand different
+    # responses, and only the per-prompt view distinguishes them. A range of 1.0
+    # on a boolean metric IS a full flip.
+    volatile = {}
+    for family in prompts:
+        flips = {}
+        for metric in PAIRED_METRICS:
+            values = []
+            for run in runs:
+                record = run.get(family)
+                if record:
+                    score = per_trace_scores(record, prompts[family]).get(metric)
+                    if score is not None:
+                        values.append(float(score))
+            if len(values) >= 2 and max(values) > min(values):
+                flips[metric] = [round(v, 3) for v in values]
+        answers = {run[family]["completion"] for run in runs if family in run}
+        if flips or len(answers) > 1:
+            volatile[family] = {"metric_flips": flips, "distinct_answers": len(answers)}
+
+    print(f"\n  VOLATILE FAMILIES ({len(volatile)}/{len(prompts)}) — preserved "
+          "individually, not averaged away")
+    for family, detail in sorted(volatile.items()):
+        flips = ", ".join(f"{m}={v}" for m, v in detail["metric_flips"].items())
+        print(f"    {family:<34} answers={detail['distinct_answers']}"
+              + (f"  {flips}" if flips else "  (answer text only)"))
+
+    payload = {
+        "arm": arm,
+        "replicates": len(runs),
+        "prompts": len(prompts),
+        "answer_varies": answer_varies,
+        "floors": {m: round(v, 4) for m, v in floors.items()},
+        "volatile_families": volatile,
+    }
+    out_path = ROOT / "calibration" / f"noise_floor.{arm}.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                        encoding="utf-8")
+    print(f"\n  recorded -> {out_path.relative_to(ROOT)}")
+
+    print("\n  This is the floor, and it is a DISTRIBUTION, not a scalar. A later "
+          "treatment-vs-control\n  effect must exceed the corresponding control-side "
+          "variability per metric — and a\n  volatile family cannot support a "
+          f"per-prompt claim at all. Measured on {arm},\n  which is int4 on Ampere "
+          "— NOT an FP8 arm.")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -191,6 +294,11 @@ def main() -> None:
     for name in ("execute", "analyze"):
         p = sub.add_parser(name)
         p.add_argument("--plan", type=Path, required=True)
+
+    n = sub.add_parser("noise", help="within-arm noise floor from R replicates")
+    n.add_argument("--arm", required=True)
+    n.add_argument("--replicates", nargs="+", type=Path, required=True)
+    n.add_argument("--prompts", type=Path, required=True)
 
     args = parser.parse_args()
 
@@ -208,6 +316,9 @@ def main() -> None:
         print(f"  {args.out}/<arm>.r<replicate>.jsonl")
         print("then run `analyze`. Arm order per prompt is recorded in the plan.")
         return
+
+    if args.command == "noise":
+        sys.exit(noise_report(args.arm, args.replicates, args.prompts))
 
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
     out_dir = args.plan.parent

@@ -1,0 +1,76 @@
+{
+  "arm": "ai19-ollama",
+  "replicates": 2,
+  "prompts": 52,
+  "answer_varies": 11,
+  "floors": {
+    "constraints_ok": 0.0294,
+    "source_preserved": 0.0,
+    "router_correct": 0.0,
+    "indonesian": 0.0,
+    "refusal": 0.0385,
+    "empty": 0.0,
+    "truncated": 0.0
+  },
+  "volatile_families": {
+    "prose:cekAman::0001": {
+      "metric_flips": {
+        "refusal": [
+          0.0,
+          1.0
+        ]
+      },
+      "distinct_answers": 2
+    },
+    "prose:tanyaDokumen::0000": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    },
+    "prose:tanyaDokumen::0001": {
+      "metric_flips": {
+        "constraints_ok": [
+          0.0,
+          1.0
+        ]
+      },
+      "distinct_answers": 2
+    },
+    "prose:umum::0000": {
+      "metric_flips": {
+        "refusal": [
+          0.0,
+          1.0
+        ]
+      },
+      "distinct_answers": 2
+    },
+    "document:memo::0000": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    },
+    "document:memo::0001": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    },
+    "document:email::0001": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    },
+    "document:report::0000": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    },
+    "document:report::0001": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    },
+    "document:spreadsheet-text::0000": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    },
+    "document:slide-text::0001": {
+      "metric_flips": {},
+      "distinct_answers": 2
+    }
+  }
+}
