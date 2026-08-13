@@ -53,7 +53,7 @@ def load_corpus(paths: list[Path]) -> list[dict]:
 
 # Teacher quantizations that must never reach training. "remote" means a
 # gateway whose precision we do not control; Ollama-backed ones are ~Q4.
-UNTRAINABLE_QUANTIZATION = {"remote", "int4"}
+UNTRAINABLE_QUANTIZATION = {"remote", "int4", "int4_mlx", "int4_ollama"}
 
 
 def split_balance(records: list[dict], manifest: dict) -> list[tuple]:

@@ -1,0 +1,34 @@
+# ai19's EXISTING Ollama, reached directly over an SSH tunnel.
+#
+# Not a second copy of the model: this is the very server that backed the
+# openai.ina17.com gateway. Reaching it directly removes the Cloudflare proxy
+# and the LiteLLM routing layer — which matters, because the gateway
+# de-registered its ollama/* deployments mid-study while the weights stayed
+# right here.
+#
+# Same int4 weights, so this is the correct BASELINE arm for the
+# int4-vs-FP8 calibration. It is not an FP8 substitute: these are 3090s.
+#
+# Open the tunnel first:
+#   ssh -i ~/.ssh/tantular_ai19 -p 2219 -N -L 11435:localhost:11434 \
+#       ghifi@office.ina17.com
+#
+# Data handling: point-to-point to a host we control, no third-party operator
+# in the path. Strictly better than the gateway for real material.
+
+data_egress: internal
+
+name: ai19-ollama
+runtime: gateway            # OpenAI-compatible HTTP; no weights to resolve here
+base_url: http://localhost:11435/v1
+gpu: "2x RTX 3090 24GB (Ampere sm_86) — shared, in production"
+supports_fp8: false
+quantization: int4_ollama
+
+# Ollama needs no auth, but it is also unauthenticated — never expose 11434
+# beyond the tunnel.
+min_max_tokens: 800
+request_timeout_s: 600
+# Shared box running a face_ai_service and serving other users: a high
+# concurrency here would evict their models from VRAM.
+concurrency: 4
