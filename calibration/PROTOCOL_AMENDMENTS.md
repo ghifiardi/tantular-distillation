@@ -264,3 +264,61 @@ for Ollama to show the evidence is *missing* rather than checked.
 
 `reasoning_strength: high` on both arms, matching the deployment baseline.
 Evaluating `low` is a separate generation-policy experiment.
+
+---
+
+## Amendment 8 — the runtime is NOT deterministic, and the noise floor exceeds the thresholds
+
+The controlled rerun was launched only to confirm reproducible generation. It
+refuted it.
+
+**Two runs of the same arm — same weights, same rendered bytes (hash-verified),
+temperature 0.0, seed 0, no stops, concurrency 4:**
+
+```
+compared 52 families
+  identical            34
+  token_count_only      7
+  answer_divergent     11
+NON-DETERMINISTIC — 18 of 52 (34.6%) differ
+```
+
+Both runs are preserved. Neither replaces the other; the newer is not "more
+correct", and discarding either would destroy the evidence that this variance
+exists.
+
+### The noise floor, in metric terms
+
+| metric | run A | run B | \|Δ\| | pre-registered bound |
+|---|---|---|---|---|
+| refusal_rate | 0.0192 | 0.0577 | **0.0385** | 0.00 — **exceeded** |
+| constraint_satisfaction | 0.9706 | 1.0 | **0.0294** | 0.00 — **exceeded** |
+| router_label_accuracy | 1 | 1 | 0 | 0.00 |
+| source_preservation | 1.0 | 1.0 | 0 | 0.00 |
+| empty / truncation rate | 0.0 | 0.0 | 0 | 0.00 |
+| indonesian_quality | 1.0 | 1.0 | 0 | 0.05 |
+
+**Run-to-run variance alone breaches the critical tolerance on two metrics.** A
+single-run int4-vs-FP8 comparison therefore cannot support a verdict: noise
+would produce a FAIL, or a spurious PASS, with no precision effect present.
+
+### What this does and does not change
+
+- Thresholds are **NOT** revised. They were pre-registered; loosening them
+  after seeing variance is exactly the move pre-registration exists to prevent.
+- The **study design** is what is insufficient. A verdict needs either
+  replicates per arm compared as distributions, a paired per-prompt comparison
+  (statistically far more efficient — the same prompt through both arms,
+  differences tested pairwise rather than as aggregate rates), or a serving
+  configuration that is actually deterministic.
+- The int4 arm remains **parity-validated**: 52/52 identical to production was
+  measured within one run pair and is unaffected. Reproducibility is now
+  answered — negatively.
+
+### Suspected cause
+
+Concurrency. Batched inference groups requests differently between runs, and
+reduction order within a batch is not fixed, so identical inputs can yield
+different logits. Being tested at concurrency 1 on a 12-prompt subset before
+any expensive redesign. If serial generation reproduces, the fix is a serving
+configuration; if it does not, the fix must be statistical.
