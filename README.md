@@ -142,6 +142,27 @@ synthetic coverage presented as production data.
 Current: 12 kinds have traces (synthetic, from the canary), **14 blocked** on
 approved source material.
 
+## Corpus status
+
+**int4-only, under a signed waiver** (`calibration/INT4_WAIVER.md`, accepted
+2026-08-13). The FP8 gate is UNMET, not passed — `verify_corpus.py --gate`
+still fails and still exits 1. No FP8 claim may be made.
+
+| Path | Contents |
+|---|---|
+| `data/raw/` | authoritative corpus — **empty**, awaiting approved sources |
+| `data/validation/` | pipeline-validation artifacts, never corpus |
+| `data/crossover/control/` | 3 int4 replicates, control noise floor |
+| `data/calibration/` | deployment baseline + parity validation |
+
+Remaining sequence:
+
+1. Approve and redact sources for the **14 blocked strata** (`src/inventory.py status`)
+2. Write seeds only for approved kinds
+3. Generate through ai19 under the waiver, **with replicates for the 3 volatile families**
+4. ~~Exclude the gateway canaries~~ — done, preserved in `data/validation/`
+5. **Rotate the gateway key** before production use
+
 ## Gates
 
 Every run is gated on regression evals (`train/qlora_9b.yaml`). Distillation

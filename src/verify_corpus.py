@@ -53,9 +53,19 @@ def load_corpus(paths: list[Path]) -> list[dict]:
     return records
 
 
-# Teacher quantizations that must never reach training. "remote" means a
-# gateway whose precision we do not control; Ollama-backed ones are ~Q4.
+# Teacher quantizations that must never reach training unqualified.
 UNTRAINABLE_QUANTIZATION = {"remote", "int4", "int4_mlx", "int4_ollama"}
+
+# What the SIGNED waiver actually covers: the Q4_K_M muse-glimmer:30b teacher
+# served by ai19's own Ollama. Nothing else.
+#
+# This distinction matters and is easy to lose. A gateway trace
+# (quantization "remote") is ALSO int4 — but it came through a third-party
+# operator's proxy at a precision we did not control and cannot attest, from a
+# deployment that has already vanished once mid-study. The waiver names a
+# specific teacher on a specific host; a trace from anywhere else is
+# unauthorised rather than merely quantized.
+WAIVER_COVERED = {("int4_ollama", "ai19-ollama")}
 
 
 def volatile_families() -> dict[str, list[str]]:
@@ -202,19 +212,31 @@ def check(records: list[dict], manifest: dict, gate: bool = False) -> list[str]:
             )
 
     # Quantization error in the teacher is baked permanently into the student.
-    bad_quant = Counter(
-        r.get("provenance", {}).get("quantization")
-        for r in records
-        if r.get("provenance", {}).get("quantization") in UNTRAINABLE_QUANTIZATION
-    )
-    if bad_quant:
+    quantized = [r for r in records
+                 if r.get("provenance", {}).get("quantization") in UNTRAINABLE_QUANTIZATION]
+    if quantized:
         errors.append(
-            f"{sum(bad_quant.values())} trace(s) from a quantized teacher "
-            f"({dict(bad_quant)}) — regenerate at fp8 before training, or proceed "
-            "under a SIGNED waiver (calibration/INT4_WAIVER.md). This gate stays "
-            "FAILED either way: a waiver authorises proceeding despite the failure, "
-            "it does not convert it into a pass, and no FP8 claim may be made."
+            f"{len(quantized)} trace(s) from a quantized teacher "
+            f"({dict(Counter(r['provenance']['quantization'] for r in quantized))}) — "
+            "regenerate at fp8 before training, or proceed under a SIGNED waiver "
+            "(calibration/INT4_WAIVER.md). This gate stays FAILED either way: a "
+            "waiver authorises proceeding despite the failure, it does not convert "
+            "it into a pass, and no FP8 claim may be made."
         )
+        # Separately: is each quantized trace even covered by the waiver we hold?
+        uncovered = Counter(
+            (r["provenance"].get("quantization"), r["provenance"].get("host"))
+            for r in quantized
+            if (r["provenance"].get("quantization"), r["provenance"].get("host"))
+            not in WAIVER_COVERED
+        )
+        if uncovered:
+            errors.append(
+                f"{sum(uncovered.values())} trace(s) NOT COVERED BY ANY WAIVER — "
+                f"{dict(uncovered)}. The signed waiver names the Q4_K_M teacher on "
+                "ai19-ollama only. Regenerate these through ai19 or exclude them "
+                "from the authoritative corpus."
+            )
 
     return errors
 
