@@ -1,0 +1,1883 @@
+{
+  "arms": [
+    "ai19-ollama",
+    "rented-48gb"
+  ],
+  "prompts": "prompts/calibration.jsonl",
+  "replicates": 3,
+  "seed": 20260813,
+  "observations": [
+    {
+      "family": "router:TANYA_DOKUMEN::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:TANYA_DOKUMEN::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:EDIT_TEKS::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:EDIT_TEKS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:EDIT_TEKS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:EDIT_TEKS::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:EDIT_TEKS::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:EDIT_TEKS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:EDIT_TEKS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:EDIT_TEKS::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:EDIT_TEKS::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:EDIT_TEKS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:EDIT_TEKS::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:EDIT_TEKS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:DRAFT_TEKS::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:DRAFT_TEKS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:DRAFT_TEKS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:DRAFT_TEKS::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:DRAFT_TEKS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:DRAFT_TEKS::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:DRAFT_TEKS::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:DRAFT_TEKS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:DRAFT_TEKS::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:DRAFT_TEKS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:DRAFT_TEKS::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:DRAFT_TEKS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:TERJEMAH::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:TERJEMAH::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:TERJEMAH::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:TERJEMAH::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:TERJEMAH::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:TERJEMAH::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:TERJEMAH::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:TERJEMAH::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:TERJEMAH::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:TERJEMAH::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:TERJEMAH::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:TERJEMAH::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:RINGKAS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:RINGKAS::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:RINGKAS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:RINGKAS::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:RINGKAS::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:RINGKAS::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:RINGKAS::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:RINGKAS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:RINGKAS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:RINGKAS::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:RINGKAS::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:RINGKAS::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:UBAH_NADA::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:UBAH_NADA::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:UBAH_NADA::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:UBAH_NADA::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:UBAH_NADA::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:UBAH_NADA::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:UBAH_NADA::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:UBAH_NADA::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:UBAH_NADA::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:UBAH_NADA::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:UBAH_NADA::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:UBAH_NADA::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:CEK_AMAN::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:CEK_AMAN::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:CEK_AMAN::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:CEK_AMAN::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:CEK_AMAN::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:CEK_AMAN::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:CEK_AMAN::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:CEK_AMAN::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:CEK_AMAN::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:CEK_AMAN::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:CEK_AMAN::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:CEK_AMAN::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:UMUM::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:UMUM::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:UMUM::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:UMUM::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:UMUM::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:UMUM::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "router:UMUM::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "router:UMUM::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "router:UMUM::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "router:UMUM::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "router:UMUM::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "router:UMUM::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:koreksi::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:koreksi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:koreksi::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:koreksi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:koreksi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:koreksi::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:koreksi::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:koreksi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:koreksi::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:koreksi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:koreksi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:koreksi::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:perjelas::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:perjelas::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:perjelas::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:perjelas::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:perjelas::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:perjelas::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:perjelas::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:perjelas::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:perjelas::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:perjelas::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:perjelas::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:perjelas::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:elaborasi::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:elaborasi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:elaborasi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:elaborasi::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:elaborasi::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:elaborasi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:elaborasi::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:elaborasi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:elaborasi::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:elaborasi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:elaborasi::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:elaborasi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ringkas_bagian::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ringkas_bagian::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ringkas_bagian::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ringkas_bagian::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ringkas_bagian::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ringkas_bagian::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ringkas_bagian::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ringkas_bagian::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ringkas_bagian::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ringkas_bagian::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ringkas_bagian::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ringkas_bagian::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ubah_istilah::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ubah_istilah::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ubah_istilah::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ubah_istilah::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ubah_istilah::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ubah_istilah::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ubah_istilah::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ubah_istilah::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ubah_istilah::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ubah_istilah::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:ubah_istilah::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:ubah_istilah::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:restrukturisasi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:restrukturisasi::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:restrukturisasi::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:restrukturisasi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:restrukturisasi::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:restrukturisasi::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "edit:restrukturisasi::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "edit:restrukturisasi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "edit:restrukturisasi::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "edit:restrukturisasi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "edit:restrukturisasi::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "edit:restrukturisasi::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:cekAman::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:cekAman::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:cekAman::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:cekAman::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:cekAman::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:cekAman::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:cekAman::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:cekAman::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:cekAman::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:cekAman::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:cekAman::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:cekAman::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:draftTeks::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:draftTeks::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:draftTeks::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:draftTeks::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:draftTeks::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:draftTeks::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:draftTeks::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:draftTeks::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:draftTeks::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:draftTeks::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:draftTeks::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:draftTeks::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ringkas::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ringkas::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ringkas::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ringkas::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ringkas::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ringkas::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ringkas::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ringkas::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ringkas::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ringkas::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ringkas::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ringkas::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:tanyaDokumen::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:tanyaDokumen::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:tanyaDokumen::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:tanyaDokumen::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:tanyaDokumen::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:tanyaDokumen::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:tanyaDokumen::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:tanyaDokumen::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:tanyaDokumen::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:tanyaDokumen::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:tanyaDokumen::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:tanyaDokumen::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:terjemah::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:terjemah::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:terjemah::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:terjemah::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:terjemah::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:terjemah::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:terjemah::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:terjemah::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:terjemah::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:terjemah::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:terjemah::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:terjemah::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ubahNada::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ubahNada::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ubahNada::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ubahNada::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ubahNada::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ubahNada::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ubahNada::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ubahNada::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ubahNada::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ubahNada::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:ubahNada::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:ubahNada::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:umum::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:umum::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:umum::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:umum::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:umum::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:umum::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "prose:umum::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "prose:umum::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "prose:umum::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "prose:umum::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "prose:umum::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "prose:umum::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:memo::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:memo::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:memo::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:memo::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:memo::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:memo::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:memo::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:memo::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:memo::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:memo::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:memo::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:memo::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:email::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:email::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:email::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:email::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:email::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:email::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:email::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:email::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:email::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:email::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:email::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:email::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:report::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:report::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:report::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:report::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:report::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:report::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:report::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:report::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:report::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:report::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:report::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:report::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:spreadsheet-text::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:spreadsheet-text::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:spreadsheet-text::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:spreadsheet-text::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:spreadsheet-text::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:spreadsheet-text::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:spreadsheet-text::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:spreadsheet-text::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:spreadsheet-text::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:spreadsheet-text::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:spreadsheet-text::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:spreadsheet-text::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:slide-text::0000",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:slide-text::0000",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:slide-text::0000",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:slide-text::0000",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:slide-text::0000",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:slide-text::0000",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    },
+    {
+      "family": "document:slide-text::0001",
+      "arm": "ai19-ollama",
+      "replicate": 0,
+      "order_position": 0
+    },
+    {
+      "family": "document:slide-text::0001",
+      "arm": "rented-48gb",
+      "replicate": 0,
+      "order_position": 1
+    },
+    {
+      "family": "document:slide-text::0001",
+      "arm": "rented-48gb",
+      "replicate": 1,
+      "order_position": 0
+    },
+    {
+      "family": "document:slide-text::0001",
+      "arm": "ai19-ollama",
+      "replicate": 1,
+      "order_position": 1
+    },
+    {
+      "family": "document:slide-text::0001",
+      "arm": "ai19-ollama",
+      "replicate": 2,
+      "order_position": 0
+    },
+    {
+      "family": "document:slide-text::0001",
+      "arm": "rented-48gb",
+      "replicate": 2,
+      "order_position": 1
+    }
+  ]
+}

@@ -322,3 +322,63 @@ reduction order within a batch is not fixed, so identical inputs can yield
 different logits. Being tested at concurrency 1 on a 12-prompt subset before
 any expensive redesign. If serial generation reproduces, the fix is a serving
 configuration; if it does not, the fix must be statistical.
+
+---
+
+## Amendment 9 — concurrency finding, and the repeated-crossover design
+
+### Concurrency 1: a serving-configuration finding, not a determinism proof
+
+12-prompt subset, two runs, concurrency 1, everything else unchanged:
+
+```
+answers identical    12/12
+reasoning identical   8/12   <- variance lives here
+```
+
+**Answer text is deterministic at concurrency 1; the reasoning channel is
+not.** Since metrics score the answer channel, concurrency 1 looks stable —
+but that is a property of a serving configuration, not evidence that
+production concurrency is deterministic. A teacher run at concurrency > 1 has
+already been shown to diverge on 34.6% of families, and a verdict that only
+holds at concurrency 1 describes a configuration nobody will deploy.
+
+So: recorded as a diagnostic. **The FP8 verdict uses the concurrency and
+replication policy intended for deployment**, not the one that happens to look
+reproducible.
+
+### Repeated crossover replaces the single paired run
+
+`src/crossover.py`. One paired observation per arm cannot separate a precision
+effect from a runtime that moves refusal_rate by 0.0385 between identical runs.
+
+- every prompt through **both** arms, so prompt difficulty cancels in the
+  within-prompt delta rather than inflating variance;
+- **arm order randomized per prompt**, seeded for reproducibility, so a warm
+  cache or a drifting box cannot favour whichever arm ran second;
+- **R replicates per arm per prompt**, so within-arm variance is measured
+  rather than assumed;
+- **runtime noise and effect are reported separately and never combined**. An
+  effect at or below the floor is not evidence of a precision difference.
+
+Validated by a **null experiment** — the same int4 data fed in as both arms:
+
+```
+EFFECT (armB - armA)          all metrics: mean delta 0.0
+NOISE FLOOR recovered         constraints_ok 0.0294, refusal 0.0385
+```
+
+The harness reports zero effect where there is none, and independently
+recovers the noise floor measured directly. A design that could not do that
+would be untrustworthy for a real comparison.
+
+### Two claims now kept distinct
+
+- **Production equivalence within a run** — VALIDATED. The canonical rendering
+  reproduces Ollama's chat endpoint 52/52 per-prompt inside a single run pair.
+- **Repeatability across runs** — REFUTED. 34.6% of families differ between
+  runs at production concurrency.
+
+These are different properties. The first is what makes the normalized
+protocol a faithful stand-in for production; the second is what determines how
+much evidence a verdict needs. Thresholds are unchanged.
