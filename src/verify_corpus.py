@@ -32,6 +32,8 @@ from pathlib import Path
 
 import splits as splits_module
 
+ROOT = Path(__file__).resolve().parent.parent
+
 
 def load_corpus(paths: list[Path]) -> list[dict]:
     records = []
@@ -54,6 +56,22 @@ def load_corpus(paths: list[Path]) -> list[dict]:
 # Teacher quantizations that must never reach training. "remote" means a
 # gateway whose precision we do not control; Ollama-backed ones are ~Q4.
 UNTRAINABLE_QUANTIZATION = {"remote", "int4", "int4_mlx", "int4_ollama"}
+
+
+def volatile_families() -> dict[str, list[str]]:
+    """Families a measured control arm showed flipping a metric between runs.
+
+    Read from calibration/noise_floor.<arm>.json rather than hardcoded, so the
+    rule follows the measurement instead of a comment going stale.
+    """
+    flipping = {}
+    for path in sorted((ROOT / "calibration").glob("noise_floor.*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for family, detail in (payload.get("volatile_families") or {}).items():
+            metrics = sorted(detail.get("metric_flips") or {})
+            if metrics:
+                flipping.setdefault(family, []).extend(metrics)
+    return {f: sorted(set(m)) for f, m in flipping.items()}
 
 
 def split_balance(records: list[dict], manifest: dict) -> list[tuple]:
@@ -166,6 +184,22 @@ def check(records: list[dict], manifest: dict, gate: bool = False) -> list[str]:
             + ", ".join(f"{k}(-{sorted(assigned[k] - present[k])})" for k in thin[:6])
             + (" ..." if len(thin) > 6 else "")
         )
+
+    # Signed waiver condition (calibration/INT4_WAIVER.md): a family whose
+    # metric flips between runs must be represented by replicates or not at
+    # all. One arbitrary trace from a bimodal family records whichever mode
+    # that run happened to land in, and training on it teaches the coin toss
+    # as if it were the teacher's judgment.
+    flipping = volatile_families()
+    if flipping:
+        counts = Counter(r.get("family") for r in records)
+        singletons = {f: m for f, m in flipping.items() if counts.get(f, 0) == 1}
+        if singletons:
+            errors.append(
+                f"{len(singletons)} volatile family/families present with a SINGLE "
+                "trace — replicate or exclude them (INT4_WAIVER.md): "
+                + ", ".join(f"{f}({'/'.join(m)})" for f, m in sorted(singletons.items()))
+            )
 
     # Quantization error in the teacher is baked permanently into the student.
     bad_quant = Counter(

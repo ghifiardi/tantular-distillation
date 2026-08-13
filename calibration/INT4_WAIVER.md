@@ -1,8 +1,6 @@
 # int4-only distillation — quality waiver
 
-**Status: DRAFTED, NOT ACCEPTED.** The acceptance block at the bottom is blank
-on purpose. Recording the terms is engineering work; accepting the tradeoff is
-not, and nothing here takes effect until a named person signs it.
+**Status: ACCEPTED 2026-08-13.** See the acceptance block at the bottom.
 
 ---
 
@@ -108,10 +106,33 @@ It is **not** equivalent to proving FP8 would not improve the student.
 
 | Field | Value |
 |---|---|
-| Accepted by | _(name, role)_ |
-| Date | _(YYYY-MM-DD)_ |
-| Scope | _(specific corpus freeze / training run id)_ |
-| Conditions 1-5 verified by | _(name)_ |
-| Review trigger | _(when FP8 hardware becomes available)_ |
+| Accepted by | ghifiardi (project owner) |
+| Date | 2026-08-13 |
+| Scope | int4-only distillation programme — Q4_K_M teacher `muse-glimmer:30b` on ai19. Each corpus freeze and training run must cite this waiver by id. |
+| Review trigger | availability of a 48GB Ada or 80GB Hopper host |
 
-Unsigned, this document records terms only. It authorises nothing.
+### Accepted text, verbatim
+
+> I accept proceeding with the Q4_K_M int4 teacher on ai19 despite the failed
+> FP8 corpus gate. This does not claim FP8 equivalence. The control noise is
+> bimodal, so volatile families will not be represented by an arbitrary single
+> trace: they must use replicated/distributional sampling or be excluded from
+> the authoritative training corpus. The 14 unapproved strata and gateway-key
+> rotation remain independent production blockers.
+
+### What this authorises, and what it does not
+
+Authorises: training from the int4 teacher despite `verify_corpus.py --gate`
+failing on teacher quantization.
+
+Does **not** authorise: any FP8 claim; treating the gate as passed; generating
+a production corpus (14 strata still lack approved sources); or production
+generation before the gateway key is rotated.
+
+### Enforced, not merely promised
+
+The volatile-family condition in the accepted text is checked by
+`verify_corpus.py --gate`, which fails if a family known to flip a metric
+appears in the corpus with a single trace. Families are read from
+`calibration/noise_floor.<arm>.json`. The rule is: **replicated, or excluded —
+never one arbitrary sample.**
