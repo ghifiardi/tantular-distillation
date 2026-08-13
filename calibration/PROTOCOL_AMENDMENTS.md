@@ -382,3 +382,67 @@ would be untrustworthy for a real comparison.
 These are different properties. The first is what makes the normalized
 protocol a faithful stand-in for production; the second is what determines how
 much evidence a verdict needs. Thresholds are unchanged.
+
+---
+
+## Amendment 10 — the control floor at R=3: variance is BIMODAL, not diffuse
+
+Three replicates, production concurrency 4, everything else fixed.
+
+```
+r2 vs r0   52/52 identical answers      <- exact reproduction
+r2 vs r1   41/52 identical answers
+every volatile family: exactly 2 distinct answers across 3 runs
+```
+
+**The runtime is not randomly noisy. It lands in one of two stable states and
+is fully deterministic within each.** The three metric-flipping families show
+the same shape: `refusal=[0.0, 1.0, 0.0]`, `constraints_ok=[0.0, 1.0, 0.0]` —
+r1 is the outlier, r0 and r2 agree exactly.
+
+Consistent with batched inference: request grouping under load selects a
+computational path, each path deterministic. Not noise around a mean.
+
+### The floor
+
+| metric | mean spread | range | stdev (R=3) |
+|---|---|---|---|
+| refusal | 0.0385 | **1.0** | 0.0222 |
+| constraints_ok | 0.0294 | **1.0** | 0.0170 |
+| source_preserved, router_correct, indonesian, empty, truncated | 0.0 | 0.0 | 0.0 |
+
+Volatile: 11 of 52 families. 8 vary in answer text only; **3 flip a metric
+fully** — `prose:cekAman::0001`, `prose:umum::0000` (refusal),
+`prose:tanyaDokumen::0001` (constraints_ok).
+
+### Why the summary statistics mislead here
+
+A stdev of 0.0222 suggests a tight distribution to average out with more
+samples. That is the wrong model. The truth is a **discrete choice between two
+outcomes**, so:
+
+- more replicates estimate the *mode probability*, they do not shrink toward a
+  point;
+- a mean over a bimodal variable describes a state the system never occupies;
+- for the 3 flipping families, a single observation is a coin toss — no sample
+  size makes an individual trace from them trustworthy.
+
+### Consequences for the FP8 comparison
+
+- The treatment arm will have its **own** mode structure, which must be
+  characterised the same way before any effect is claimed. Comparing a mean
+  from a bimodal control against a mean from an uncharacterised treatment is
+  not a comparison.
+- With modes rather than noise, an effect is credible only if it moves outcomes
+  **beyond the span the control already covers** — for refusal and
+  constraints_ok that span is the full 0-to-1 range on the affected families.
+- The 49 metric-stable families support per-prompt claims. The 3 volatile ones
+  do not, at any effect size, and must be reported separately rather than
+  folded into an aggregate.
+
+### Consequence for the corpus (waiver condition 2)
+
+A single trace drawn from a flipping family records whichever mode that run
+landed in. Training on it teaches the coin toss as if it were the teacher's
+judgment. Sample those families across replicates, or exclude them —
+deliberately and on the record.

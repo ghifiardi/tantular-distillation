@@ -1,6 +1,6 @@
 {
   "arm": "ai19-ollama",
-  "replicates": 2,
+  "replicates": 3,
   "prompts": 52,
   "answer_varies": 11,
   "floors": {
@@ -17,7 +17,8 @@
       "metric_flips": {
         "refusal": [
           0.0,
-          1.0
+          1.0,
+          0.0
         ]
       },
       "distinct_answers": 2
@@ -30,7 +31,8 @@
       "metric_flips": {
         "constraints_ok": [
           0.0,
-          1.0
+          1.0,
+          0.0
         ]
       },
       "distinct_answers": 2
@@ -39,7 +41,8 @@
       "metric_flips": {
         "refusal": [
           0.0,
-          1.0
+          1.0,
+          0.0
         ]
       },
       "distinct_answers": 2
