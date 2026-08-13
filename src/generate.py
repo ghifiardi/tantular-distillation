@@ -29,6 +29,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+import splits as splits_module
 from bridge_client import TeacherClient, write_traces
 from config import base_url, resolve
 
@@ -134,6 +135,29 @@ async def run(args: argparse.Namespace) -> None:
                 f"  export {resolved['HOST_API_KEY_ENV']}=sk-..."
             )
 
+    prompts = load_prompts(Path(args.prompts))
+
+    # Splits come from the manifest, never from the prompt file. A prompt that
+    # declares its own split can put the same family in train here and eval
+    # there, which is precisely the leak the split-before-generate policy
+    # exists to prevent. Resolving every family up front also means an unknown
+    # family id fails now rather than after an hour of generation.
+    manifest = splits_module.load()
+    splits_module.verify(manifest)
+    for prompt in prompts:
+        family_id = prompt.get("family", "")
+        resolved_split = splits_module.split_of(family_id, manifest)
+        declared = prompt.get("split")
+        if declared and declared != resolved_split:
+            raise SystemExit(
+                f"{family_id}: prompt file says split {declared!r} but the manifest "
+                f"says {resolved_split!r}. The manifest wins — remove the field."
+            )
+        prompt["split"] = resolved_split
+
+    # Only now touch the network. Everything above is free and local, so a
+    # malformed prompt file or an unknown family should surface immediately
+    # rather than behind a connection error — or worse, an hour into a run.
     client = TeacherClient(
         base_url=args.base_url or host_url or base_url(resolved, args.serve_host),
         # On a gateway the served name IS the remote model id, prefix included.
@@ -149,8 +173,6 @@ async def run(args: argparse.Namespace) -> None:
             else f"start one:  ./scripts/serve_teacher.sh {args.teacher} {args.host}"
         )
         raise SystemExit(f"no teacher answering at {client.base_url}\n{hint}")
-
-    prompts = load_prompts(Path(args.prompts))
 
     # A validation host exists to check trace SHAPE cheaply, not to build a
     # corpus. Cap it loudly rather than letting an int4 run quietly become
@@ -219,6 +241,11 @@ async def run(args: argparse.Namespace) -> None:
                 "quantization": resolved["HOST_QUANTIZATION"],
                 "completion_tokens": answer["tokens"],
                 "batched": len(batches) < len(prompts),
+                # Which partitioning produced this trace. Traces generated
+                # under different seeds must never be mixed into one training
+                # set, and this is what makes that detectable.
+                "split_seed": manifest["seed"],
+                "split_fingerprint": manifest["fingerprint"],
             },
         }
         expected = prompt.get("expected")
