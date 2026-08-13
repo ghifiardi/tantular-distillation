@@ -45,15 +45,22 @@ TEMPLATE_PATH = ROOT / "calibration" / "parity" / "chat_template.jinja"
 FINAL_MARKER = "<|start|>assistant to=user<|message|>"
 STOP_TOKENS = ("<|eot|>", "<|end|>", "<|return|>")
 
-# Protocol stop sequences, sent EXPLICITLY on both arms.
+# Optional protocol stop sequences — OFF BY DEFAULT, and deliberately so.
 #
-# Raw/completion paths bypass the chat template, and stop sequences normally
-# come from it — so without these the model generates to the full token budget
-# every time. That does not break parsing (the final channel is still
-# extracted), but it makes completion_tokens measure the budget rather than the
-# response, and it would differ between runtimes for reasons unrelated to
-# precision. Both arms send this exact list.
-PROTOCOL_STOPS = ["<|eot|>", "<|return|>"]
+# The hypothesis that raw mode ignores stops and runs to the token budget was
+# REFUTED: the diagnostic run returned 129-2024 tokens (median 388), none at
+# the 4096 ceiling, done_reason "stop" throughout. Generation terminates on EOS
+# without help.
+#
+# Worse, forcing these would be actively risky. `<|eot|>` is a channel
+# delimiter as well as a terminator, so stopping at the first occurrence could
+# cut generation off BEFORE the final answer channel — turning a good answer
+# into a malformed trace. The no-stops configuration is the one proven to
+# reproduce production output exactly (52/52 identical).
+#
+# Kept available because a different runtime may not honour EOS the same way.
+# Whatever is chosen must be identical on both arms.
+DEFAULT_STOPS: list[str] = []
 
 
 def sha256(text: str) -> str:
@@ -132,32 +139,43 @@ def parse_channels(raw: str) -> dict:
 
 async def complete(client: httpx.AsyncClient, base: str, model: str, prompt: str,
                    *, temperature: float, seed: int, max_tokens: int,
-                   runtime: str, timeout: float) -> dict:
+                   runtime: str, timeout: float, stops: list[str]) -> dict:
     if runtime == "ollama":
         response = await client.post(
             f"{base}/api/generate",
             json={"model": model, "prompt": prompt, "raw": True, "stream": False,
                   "options": {"temperature": temperature, "seed": seed,
-                              "num_predict": max_tokens, "stop": PROTOCOL_STOPS}},
+                              "num_predict": max_tokens,
+                              **({"stop": stops} if stops else {})}},
             timeout=timeout)
         response.raise_for_status()
         payload = response.json()
         return {"raw": payload.get("response") or "",
                 "completion_tokens": payload.get("eval_count"),
-                "done_reason": payload.get("done_reason")}
+                "done_reason": payload.get("done_reason"),
+                # Ollama exposes no per-stop attribution. Recorded as absent so
+                # a reader can see the evidence is missing rather than assume
+                # it was checked.
+                "stop_reason": "__absent__"}
     # vLLM and anything else OpenAI-compatible: the completions path, not chat,
     # so no server-side template is applied to our already-rendered prompt.
     response = await client.post(
         f"{base}/v1/completions",
         json={"model": model, "prompt": prompt, "temperature": temperature,
-              "seed": seed, "max_tokens": max_tokens, "stop": PROTOCOL_STOPS},
+              "seed": seed, "max_tokens": max_tokens,
+              **({"stop": stops} if stops else {})},
         timeout=timeout)
     response.raise_for_status()
     payload = response.json()
     choice = payload["choices"][0]
     return {"raw": choice.get("text") or "",
             "completion_tokens": (payload.get("usage") or {}).get("completion_tokens"),
-            "done_reason": choice.get("finish_reason")}
+            "done_reason": choice.get("finish_reason"),
+            # vLLM-specific and genuinely informative: `stop_reason` names the
+            # stop string or token id that ended generation, and is null when
+            # the model emitted its own EOS. That is the evidence Ollama does
+            # not give us, so it must not be discarded.
+            "stop_reason": choice.get("stop_reason", "__absent__")}
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -172,6 +190,8 @@ async def run(args: argparse.Namespace) -> None:
     timeout = float(resolved["HOST_REQUEST_TIMEOUT_S"])
     concurrency = args.concurrency or int(resolved["HOST_CONCURRENCY"])
 
+    stops = args.stop or DEFAULT_STOPS
+
     prompts = [json.loads(l) for l in
                Path(args.prompts).read_text(encoding="utf-8").splitlines() if l.strip()]
 
@@ -184,6 +204,7 @@ async def run(args: argparse.Namespace) -> None:
     print(f"  template sha256   {template_hash[:16]}")
     print(f"  reasoning_strength {args.reasoning_strength}")
     print(f"  temperature {args.temperature}  seed {args.seed}  max_tokens {args.max_tokens}")
+    print(f"  stop sequences    {stops or '(none — EOS)'}")
     print(f"  {len(prompts)} prompts, concurrency {concurrency}\n")
 
     rendered = [render(template, p.get("system", ""), p["user"], args.reasoning_strength)
@@ -200,7 +221,8 @@ async def run(args: argparse.Namespace) -> None:
                     results[index] = await complete(
                         client, base, model, rendered[index],
                         temperature=args.temperature, seed=args.seed,
-                        max_tokens=args.max_tokens, runtime=runtime, timeout=timeout)
+                        max_tokens=args.max_tokens, runtime=runtime, timeout=timeout,
+                        stops=stops)
                 except (httpx.HTTPError, httpx.TransportError) as error:
                     # Endpoint failure: never mixed into quality denominators.
                     infrastructure.append({"index": index,
@@ -242,7 +264,13 @@ async def run(args: argparse.Namespace) -> None:
                 # Termination is recorded as evidence plus a derived category,
                 # never as a claim the runtime did not actually make.
                 "raw_done_reason": result["done_reason"],
-                "stop_sequences": PROTOCOL_STOPS,
+                "raw_stop_reason": result.get("stop_reason", "__absent__"),
+                # Did the runtime terminate on its own EOS rather than on a
+                # sequence we supplied? Only answerable where the runtime says.
+                "eos_applied_by_runtime": (
+                    None if result.get("stop_reason") == "__absent__"
+                    else result.get("stop_reason") is None),
+                "stop_sequences": stops,
                 "ended_at_marker": termination["ended_at_marker"],
                 "terminated_by": termination["terminated_by"],
                 "truncated": termination["terminated_by"] == "length",
@@ -294,6 +322,10 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--stop", action="append", default=None,
+                        help="explicit stop sequence (repeatable). Default: none — "
+                             "EOS terminates generation, verified against production. "
+                             "Must be identical on both arms.")
     parser.add_argument("--concurrency", type=int, default=0)
     asyncio.run(run(parser.parse_args()))
 

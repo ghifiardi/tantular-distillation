@@ -183,7 +183,7 @@ Fixed **before** the diagnostic run's results were inspected.
 | # | Dataset | Protocol | Status | Used for |
 |---|---|---|---|---|
 | 1 | `data/calibration/int4/` | Ollama **chat endpoint**, server-side template + channel parsing | immutable | **Deployment baseline** — what the pane actually receives today |
-| 2 | `data/calibration/int4-normalized/` | raw completion, official template, **no explicit stops** | **DIAGNOSTIC ONLY** | tests the budget-exhaustion hypothesis; excluded from any verdict |
+| 2 | `data/calibration/int4-normalized/` | raw completion, official template, no explicit stops | **PARITY VALIDATION** (see Amendment 7) | proves the canonical rendering reproduces production 52/52 |
 | 3 | `data/calibration/int4-normalized-controlled/` | raw completion, official template, **explicit stops**, full termination metadata | authoritative | **Precision-comparison baseline** vs FP8 |
 
 These are three different measurements of the same weights. They are reported
@@ -205,3 +205,62 @@ protocols into a number describing none of them.
 
 Client-side truncation is never reported as if the runtime had stopped
 generation. The answer is valid; the length metric is not.
+
+---
+
+## Amendment 7 — diagnostic result, and the finalized protocol
+
+**The budget-exhaustion hypothesis was REFUTED.** Run 2's distribution:
+129–2024 completion tokens, median 388, **none at the 4096 ceiling**, 44 of 52
+under 1000, `done_reason: "stop"` throughout. Raw mode terminates on EOS
+unaided. The slowness was contention on a shared box, not runaway generation.
+
+**Run 2 is therefore reclassified from DIAGNOSTIC to PARITY VALIDATION**, on
+much stronger evidence than it was launched to gather. Compared per-prompt
+against the deployment baseline:
+
+```
+families compared      52
+identical token counts 52/52
+identical answers      52/52
+```
+
+Every aggregate metric matches to four decimals. The canonical harmony
+rendering **is** what Ollama's chat endpoint produces. Amendment 5 was right
+that the divergence was response-side and wrong that it mattered: the earlier
+probe "failed" only because raw multi-channel output was compared against
+parsed chat output.
+
+### Finalized protocol
+
+- **No explicit stops by default.** The problem they addressed does not exist,
+  and forcing them is actively risky: `<|eot|>` is a channel delimiter as well
+  as a terminator, so stopping at the first occurrence could cut generation off
+  before the final answer channel — turning good answers into malformed traces.
+  The no-stops configuration is the one proven to reproduce production exactly.
+- **EOS is left to each runtime**, and how it terminated is recorded rather
+  than assumed.
+- `--stop` remains available for a runtime that does not honour EOS. If used,
+  it must be identical on both arms.
+- Ollama's bare `"stop"` stays `ambiguous`. It attributes nothing, so nothing
+  is claimed.
+
+### FP8 arm requirements (enforced by `src/compare_arms.py`)
+
+The comparison is **blocked**, not merely annotated, unless:
+
+- per-prompt `prompt_sha256` is identical across arms — the same bytes reached
+  both models;
+- `template_sha256` is identical;
+- `reasoning_strength`, `temperature`, `seed`, `max_tokens` and `stop_sequences`
+  all match;
+- the family sets are the same.
+
+Termination is reported side by side and never equated. vLLM exposes
+`stop_reason` — the stop string or token id that fired, `null` when the model
+emitted its own EOS — which is precisely the evidence Ollama withholds. Both
+are recorded verbatim, along with `eos_applied_by_runtime`, which is `null`
+for Ollama to show the evidence is *missing* rather than checked.
+
+`reasoning_strength: high` on both arms, matching the deployment baseline.
+Evaluating `low` is a separate generation-policy experiment.
