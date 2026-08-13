@@ -103,3 +103,73 @@ Full capture: `data/calibration/int4/environment.txt`.
 
 Latency and throughput from this arm measure a **contended production server**,
 not the hardware. They stay informational and non-gating.
+
+---
+
+## Amendment 5 — rendering parity resolved, and what it revealed
+
+**Parity by naive rendering: FAILED.** Seven candidate serializations
+(`sys_blank_user`, `sys_nl_user`, `labelled_turns`, `user_only`, and three
+harmony variants) were run through Ollama's raw path at temperature 0 and
+compared against its chat endpoint. None reproduced it. Recorded in
+`calibration/parity/ai19-ollama.probe.json`.
+
+**Root cause.** The model is **harmony-format**, and Ollama renders it with a
+built-in architecture renderer — which is why the Modelfile shows a bare
+`TEMPLATE {{ .Prompt }}` and the GGUF carries no `chat_template`. The
+authoritative template is `chat_template.jinja`, shipped in the FP8 repo the
+treatment arm will load, and vendored here at
+`calibration/parity/chat_template.jinja`.
+
+Canonical rendering (probe hash `3c923547bfe3acab`):
+
+```
+<|start|>system<|message|>{system}
+
+Reasoning strength: high.
+
+# Valid recipients: "self", "user".<|eot|><|start|>user<|message|>{user}<|eot|><|start|>assistant
+```
+
+**The divergence is on the RESPONSE side, not the prompt side.** Raw generation
+returns every channel; the chat endpoint parses them and returns only the final
+message. Full raw shape:
+
+```
+ to=self<|message|>{reasoning}<|start|>assistant to=user<|message|>{final answer}
+```
+
+**Normalized protocol for both arms:**
+
+1. Render with `chat_template.jinja`; record the SHA-256 of the rendered string.
+2. Send that exact string via a completion path — `/api/generate` with
+   `raw: true` (Ollama), `/v1/completions` (vLLM). Prompt parity then holds by
+   construction and the hash proves it.
+3. Extract the final message identically on both arms: take the content after
+   the last `<|start|>assistant to=user<|message|>`, strip trailing `<|eot|>`.
+4. Set temperature, seed, max tokens, model revision and `reasoning_strength`
+   explicitly on both arms; rely on no server default.
+
+**Consequence.** The existing 52-prompt int4 result was produced through
+Ollama's chat endpoint, i.e. a different response path. It stands as the
+**deployment baseline** — it measures what the pane would actually get today —
+but the **int4-vs-FP8 verdict must use a normalized re-run**. Thresholds are
+unchanged.
+
+### Side finding with product impact
+
+`reasoning_strength` is a **chat-template variable**, defaulting to `'high'`:
+
+```jinja
+set rs = reasoning_strength if reasoning_strength is defined and reasoning_strength else 'high'
+```
+
+It is not the `reasoning_effort` API field. That explains two earlier
+observations: `reasoning_effort: "none"` was silently ignored, and ~230 tokens
+went to reasoning before any content appeared.
+
+This reaches beyond the study. `tantular_office_addin/src/tantularClient.js`
+sends `reasoning_effort: "none"` specifically to stop thinking from consuming
+short budgets — the intent router allots 4 tokens. Against any harmony-format
+model that field does nothing, and the control must be passed as a chat
+template kwarg instead.
