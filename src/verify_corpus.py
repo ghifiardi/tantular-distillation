@@ -176,7 +176,10 @@ def check(records: list[dict], manifest: dict, gate: bool = False) -> list[str]:
     if bad_quant:
         errors.append(
             f"{sum(bad_quant.values())} trace(s) from a quantized teacher "
-            f"({dict(bad_quant)}) — regenerate at fp8 before training"
+            f"({dict(bad_quant)}) — regenerate at fp8 before training, or proceed "
+            "under a SIGNED waiver (calibration/INT4_WAIVER.md). This gate stays "
+            "FAILED either way: a waiver authorises proceeding despite the failure, "
+            "it does not convert it into a pass, and no FP8 claim may be made."
         )
 
     return errors
