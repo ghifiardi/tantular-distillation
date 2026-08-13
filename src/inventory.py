@@ -83,7 +83,9 @@ REQUIRED_REAL = ("owner", "originals_location")
 # nothing real in it to redact.
 REQUIRED_SYNTHETIC = ("generator",)
 GENERATOR_FIELDS = ("service", "model", "version", "prompt_template_sha256", "generated_at")
-VALID_SOURCE_CLASSES = ("real", "synthetic")
+# "local_real"  — an actual document, held locally, sanitized before use
+# "synthetic"   — fabricated; nothing real in it
+VALID_SOURCE_CLASSES = ("local_real", "synthetic")
 
 
 def load_inventory() -> dict:
@@ -138,7 +140,7 @@ def missing_fields(row: dict) -> list[str]:
     if source_class and source_class not in VALID_SOURCE_CLASSES:
         missing.append(f"source_class(invalid:{source_class})")
 
-    if source_class == "real":
+    if source_class == "local_real":
         missing.extend(f for f in REQUIRED_REAL if not row.get(f))
         # Real material must actually be sanitized, and the sanitized artifact
         # still crosses a boundary when it reaches ai19.
@@ -175,6 +177,37 @@ def _inside_repo(location: str) -> bool:
 
 def is_ready(row: dict) -> bool:
     return not missing_fields(row)
+
+
+def resolve_for_family(inventory: dict, family_id: str) -> tuple[str, dict] | tuple[None, None]:
+    """A family-specific row wins over its kind's row.
+
+    Rows may be keyed by KIND (`document:memo`, covering all its families) or by
+    FAMILY (`document:memo::0003`, covering exactly one). Different families of
+    a kind usually come from different documents, so the family key is the more
+    honest granularity — but a single document legitimately backing a whole kind
+    should not require ten identical rows.
+    """
+    if family_id in inventory:
+        return family_id, inventory[family_id]
+    kind = family_id.split("::")[0]
+    if kind in inventory:
+        return kind, inventory[kind]
+    return None, None
+
+
+def family_coverage(inventory: dict, manifest: dict) -> dict:
+    """Per-family readiness, which is what generation actually needs."""
+    out = {}
+    for family_id in manifest["assignments"]:
+        key, row = resolve_for_family(inventory, family_id)
+        out[family_id] = {
+            "key": key,
+            "granularity": ("family" if key == family_id else
+                            "kind" if key else None),
+            "missing": missing_fields(row) if row else ["no inventory row"],
+        }
+    return out
 
 
 def status(inventory: dict, corpus_paths: list[Path]) -> None:
@@ -218,6 +251,24 @@ def status(inventory: dict, corpus_paths: list[Path]) -> None:
             print(f"  {kind:<28} missing: {', '.join(missing_fields(row))}")
         print("\nThis is the correct state to report. Do not write invented "
               "documents to close the gap.")
+
+    # Per-family view. Kind-level rows cover all families of that kind; a
+    # family-level row overrides for one. Generation needs family granularity,
+    # so report it explicitly rather than letting a kind row imply that ten
+    # families are all backed by the same approved document.
+    try:
+        manifest = splits_module.load()
+    except SystemExit:
+        return
+    coverage = family_coverage(inventory, manifest)
+    ready = [f for f, c in coverage.items() if not c["missing"]]
+    by_grain = Counter(c["granularity"] for c in coverage.values() if not c["missing"])
+    print(f"\nper-family: {len(ready)}/{len(coverage)} families ready"
+          + (f"  (backed by: {dict(by_grain)})" if by_grain else ""))
+    if ready and by_grain.get("kind"):
+        print("  NOTE: families backed by a KIND-level row all inherit one source. "
+              "If different\n        families of that kind come from different "
+              "documents, add family-level rows.")
 
 
 def main() -> None:

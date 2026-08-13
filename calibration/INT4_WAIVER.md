@@ -238,3 +238,54 @@ the generation step itself.
   teacher precision.
 - Gateway key rotation remains a separate production gate.
 - Real-corpus approval is deferred, not waived.
+
+---
+
+## Addendum 3 — Drive as source registry, generation from sanitized local copies
+
+Drive makes files **discoverable**. It does not establish approval, redaction,
+or ai19 transfer authorization — those are separate, recorded, per stratum.
+
+Originals in Drive are never moved or overwritten. What gets registered and
+hashed is a **sanitized local copy**, held outside the repository.
+
+### Flow
+
+1. Drive folder, e.g. `Tantular / Approved Sources / 2026-08-13` — organisation only
+2. Select files you are authorized to use; record Drive id, owner, approval,
+   target family/kind, sensitivity, whether redaction is required, ai19 egress
+   approval
+3. Download copies to a private directory outside the repo. Google-native files
+   via **File → Download** as DOCX/XLSX/PPTX. Drive for desktop is fine if the
+   synced location is outside the repo
+4. Sanitize: names, emails, account numbers, client identifiers, confidential
+   text, **comments, hidden sheets, tracked changes, embedded images** — the
+   last four survive naive redaction and are the usual leak
+5. `shasum -a 256 <sanitized copy>` — or use `src/register_source.py`, which
+   hashes, validates and drafts the row in one step
+6. Populate `inventory/sources.yaml`. **No placeholders**: an incomplete row is
+   correct, a fake-complete row is reported ready
+7. `python3 src/inventory.py status` — every intended stratum must read ready
+8. Generate only through ai19. Local material over the SSH tunnel is still
+   egress, so `egress_ai19_approved` is required. Not the gateway, not a local
+   MLX teacher — neither is covered by this waiver
+9. Run the corpus gate; confirm every trace records the approved source class,
+   `ai19-ollama`, `muse-glimmer:30b`, Q4_K_M, and replicates for the three
+   volatile families
+
+### Kind rows versus family rows
+
+The inventory accepts either. `document:memo` covers all 10 of its families;
+`document:memo::0003` covers exactly one and overrides the kind row.
+
+Different families of a kind usually come from different documents, so
+**family-level rows are the more honest granularity**. A kind-level row asserts
+one approved document backs all ten. `inventory.py status` reports which
+granularity backs each ready family so the distinction stays visible.
+
+### `register_source.py`
+
+Automates hashing and row-drafting only. It approves nothing: every reference
+is supplied and copied verbatim. It refuses placeholder values (`<file-id>`,
+`TBD`, `TODO`) and refuses files inside the repository, then re-validates the
+drafted row before printing it.
