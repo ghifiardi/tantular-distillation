@@ -8,6 +8,9 @@
 #
 # Served by Ollama or mlx_lm rather than vLLM (no CUDA on Metal).
 
+# Data handling: local machine, nothing leaves it.
+data_egress: internal
+
 name: mac-validate
 gpu: "Apple M4 Pro 24GB unified"
 runtime: mlx

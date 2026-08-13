@@ -8,6 +8,11 @@
 # is Ampere and cannot do FP8 — it would silently force int4 and degrade every
 # trace the teacher produces.
 
+# Data handling: OFF-PREMISES, third-party hardware. Real Office source
+# material must not go here without explicit per-kind egress approval
+# (inventory/sources.yaml: egress_approved).
+data_egress: external
+
 name: rented-48gb
 gpu: "1x RTX 6000 Ada / L40S 48GB"
 tensor_parallel_size: 1

@@ -155,6 +155,26 @@ async def run(args: argparse.Namespace) -> None:
             )
         prompt["split"] = resolved_split
 
+    # Data handling. Prompts carrying real Office material must not reach an
+    # off-premises host without explicit approval. Unclassified defaults to
+    # `internal`, so forgetting to label real corpus material fails closed
+    # rather than shipping it to a rented GPU.
+    egress = resolved["HOST_DATA_EGRESS"]
+    if egress != "internal":
+        carried = {p.get("source_class", "internal") for p in prompts}
+        needs_approval = sorted(c for c in carried if c != "synthetic")
+        if needs_approval and not args.egress_approval:
+            raise SystemExit(
+                f"host '{args.host}' is off-premises (data_egress: {egress}) and "
+                f"{len(prompts)} prompt(s) are classified {needs_approval}.\n"
+                "Real or unclassified Office material must not leave the environment "
+                "without approval. Either mark prompts \"source_class\": \"synthetic\", "
+                "use an internal host (ai19), or pass --egress-approval <reference>."
+            )
+        if needs_approval:
+            print(f"EGRESS APPROVED [{args.egress_approval}]: sending "
+                  f"{needs_approval} material to off-premises host '{args.host}'")
+
     # Only now touch the network. Everything above is free and local, so a
     # malformed prompt file or an unknown family should surface immediately
     # rather than behind a connection error — or worse, an hour into a run.
@@ -292,6 +312,9 @@ def main() -> None:
                         help="hostname the teacher is served on (for a remote box)")
     parser.add_argument("--base-url", default="",
                         help="override the composed URL entirely")
+    parser.add_argument("--egress-approval", default="",
+                        help="approval reference permitting non-synthetic material "
+                             "on an off-premises host")
     parser.add_argument("--api-key", default="",
                         help="only needed behind a gateway; local vLLM needs none")
     asyncio.run(run(parser.parse_args()))

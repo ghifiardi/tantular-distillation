@@ -102,6 +102,41 @@ The 4B is trained last, from the improved 9B rather than from the 30B
 teachers directly — it learns from something that already shares its target
 behaviour and voice.
 
+## Data handling
+
+Hosts declare where data goes; prompts declare what they carry.
+
+| Host | `data_egress` | Real Office material |
+|---|---|---|
+| `ai19` | internal | ✅ on-premises |
+| `gateway` | internal | ⚠️ private cloud, but its operator sees every prompt |
+| `mac-validate` | internal | ✅ nothing leaves the machine |
+| `rented-48gb` | **external** | ❌ needs explicit `--egress-approval` |
+
+Prompts carry `source_class`. **Unclassified defaults to `internal`**, so
+forgetting to label real corpus material fails closed rather than shipping it
+to a rented GPU. Only `"source_class": "synthetic"` travels freely.
+
+## Source inventory
+
+Coverage is not a number to satisfy. It is a claim that each stratum is backed
+by real, approved, redacted source material — inventing documents to turn
+12/26 into 26/26 produces a model that scores well on a corpus describing a
+company that does not exist.
+
+```bash
+python3 src/inventory.py refresh                  # sync rows with the manifest
+python3 src/inventory.py status data/raw/*.jsonl  # what is blocked, on what
+```
+
+`inventory/sources.yaml` records per kind: the source, who approved it, whether
+it is redacted, and whether egress is approved. Kinds without that are BLOCKED,
+and **"blocked on data coverage" is the correct state to report** — not
+synthetic coverage presented as production data.
+
+Current: 12 kinds have traces (synthetic, from the canary), **14 blocked** on
+approved source material.
+
 ## Gates
 
 Every run is gated on regression evals (`train/qlora_9b.yaml`). Distillation

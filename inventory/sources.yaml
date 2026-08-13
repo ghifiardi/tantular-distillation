@@ -1,0 +1,195 @@
+# Source inventory — which approved material backs each stratum.
+#
+# Fill in `source`, `approval`, and `redacted` before writing seed
+# prompts for a kind. A kind without an approved, redacted source is
+# BLOCKED: do not invent documents to satisfy coverage.
+#
+# `egress_approved` gates sending this material to an off-premises
+# host (rented GPU, HF Jobs). Default false — approval must be
+# explicit, per kind, not assumed.
+#
+# Regenerate rows with: python3 src/inventory.py refresh
+# (human-filled fields are preserved)
+
+document:email:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+document:memo:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+document:report:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+document:slide-text:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+document:spreadsheet-text:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+edit:elaborasi:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+edit:koreksi:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+edit:perjelas:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+edit:restrukturisasi:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+edit:ringkas_bagian:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+edit:ubah_istilah:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+prose:cekAman:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+prose:draftTeks:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+prose:ringkas:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+prose:tanyaDokumen:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+prose:terjemah:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+prose:ubahNada:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+prose:umum:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:CEK_AMAN:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:DRAFT_TEKS:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:EDIT_TEKS:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:RINGKAS:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:TANYA_DOKUMEN:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:TERJEMAH:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:UBAH_NADA:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
+router:UMUM:
+  approval: null
+  egress_approved: false
+  families: 10
+  notes: ''
+  redacted: false
+  source: null
