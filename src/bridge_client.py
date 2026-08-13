@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 
 try:
@@ -49,6 +50,7 @@ class TeacherClient:
         }
         last_error = None
         for attempt in range(self.max_retries):
+            started = time.perf_counter()
             try:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
@@ -63,6 +65,7 @@ class TeacherClient:
                     return {
                         "content": (data["choices"][0]["message"]["content"] or "").strip(),
                         "completion_tokens": used,
+                        "latency_s": round(time.perf_counter() - started, 3),
                         # Within a few tokens of the ceiling means the model was
                         # still going when the budget ran out.
                         "truncated": bool(budget and used >= budget - 2),

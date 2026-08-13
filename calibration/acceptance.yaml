@@ -1,0 +1,71 @@
+# PRE-REGISTERED acceptance criteria for the int4-vs-FP8 calibration study.
+#
+# Committed BEFORE any results were generated. Thresholds chosen after seeing
+# the numbers are not thresholds, they are rationalisations — so this file is
+# the record that they were not.
+#
+# WHAT THIS STUDY IS: a measurement of how much teacher quality is lost by
+# serving Muse Glimmer at int4 (ai19/gateway, Ampere) instead of FP8 (rented
+# Ada/Hopper). It answers "how big is the gap", on synthetic prompts.
+#
+# WHAT THIS STUDY IS NOT: permission to delete the FP8 gate. A favourable
+# result licenses an explicit, recorded quality waiver for a specific run —
+# nothing more. Any int4-only training run is labelled a waiver regardless of
+# outcome.
+#
+# The prompts are synthetic BY DESIGN here, and that is legitimate: we are
+# measuring runtime behaviour, not teaching the model about a business. The
+# same synthetic prompts are not thereby approved as production training data.
+
+study:
+  name: int4-vs-fp8-teacher-calibration
+  teacher: muse-glimmer
+  # Both arms must use the same weights lineage, tokenizer, prompt template and
+  # decoding. Different serving stacks (Ollama vs vLLM) will not produce
+  # byte-identical output even at temperature 0; the comparison is behavioural,
+  # not bitwise.
+  arms:
+    baseline:
+      host: gateway          # ai19's Ollama, Ampere, int4
+      quantization: int4
+    treatment:
+      host: rented-48gb      # Ada/Hopper, fp8
+      quantization: fp8
+  decoding:
+    temperature: 0.0         # as deterministic as each runtime allows
+    top_p: 1.0
+    max_tokens: 4096         # generous: thinking tokens precede content
+  require_identical_prompts: true
+
+# Gate 1 — CRITICAL VALIDITY. int4 must be NO WORSE than fp8. These are
+# correctness properties, not preferences: a malformed trace is unusable
+# regardless of how good its prose is.
+critical:
+  # Fractions of all prompts in the arm.
+  empty_rate:              {direction: lower_better, max_regression_abs: 0.00}
+  truncation_rate:         {direction: lower_better, max_regression_abs: 0.00}
+  refusal_rate:            {direction: lower_better, max_regression_abs: 0.00}
+  router_label_accuracy:   {direction: higher_better, max_regression_abs: 0.00}
+  constraint_satisfaction: {direction: higher_better, max_regression_abs: 0.00}
+  source_preservation:     {direction: higher_better, max_regression_abs: 0.00}
+
+# Gate 2 — QUALITY MARGIN. Degradation is tolerated up to an agreed bound.
+quality:
+  indonesian_quality:      {direction: higher_better, max_regression_abs: 0.05}
+  # Blind pairwise preference, judged without knowing which arm is which.
+  # 0.50 is parity; int4 may lose, but not badly.
+  pairwise_win_rate:       {direction: higher_better, min_absolute: 0.40}
+
+# Reported, never gating. int4 will win on nothing here that matters, and
+# being faster is not a reason to accept worse traces.
+informational:
+  - median_latency_s
+  - throughput_traces_per_min
+  - mean_completion_tokens
+
+verdict:
+  # Every critical metric must pass AND every quality metric must pass.
+  # Anything else is a FAIL, which means: generate at fp8, or record a waiver.
+  rule: all_critical_pass_and_all_quality_pass
+  on_pass: "int4 acceptable for this corpus, as an explicit recorded waiver"
+  on_fail: "generate at fp8 on rented Ada/Hopper before training"
