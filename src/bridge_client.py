@@ -35,7 +35,13 @@ class TeacherClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
-    async def complete(self, client: httpx.AsyncClient, messages: list[dict]) -> str:
+    async def complete(self, client: httpx.AsyncClient, messages: list[dict]) -> dict:
+        """Returns {content, completion_tokens, truncated}.
+
+        `truncated` is inferred from token count, not finish_reason: the
+        gateway reports "stop" even when generation clearly ran out of budget
+        mid-object, so finish_reason cannot be trusted here.
+        """
         body = {
             "model": self.model,
             "messages": messages,
@@ -52,7 +58,15 @@ class TeacherClient:
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    return (data["choices"][0]["message"]["content"] or "").strip()
+                    used = (data.get("usage") or {}).get("completion_tokens", 0)
+                    budget = body.get("max_tokens", 0)
+                    return {
+                        "content": (data["choices"][0]["message"]["content"] or "").strip(),
+                        "completion_tokens": used,
+                        # Within a few tokens of the ceiling means the model was
+                        # still going when the budget ran out.
+                        "truncated": bool(budget and used >= budget - 2),
+                    }
                 # A model-access 403 or a bad-key 401 will never succeed on
                 # retry — fail immediately rather than burning the budget.
                 if response.status_code in (401, 403):
@@ -70,11 +84,11 @@ class TeacherClient:
         self,
         prompt_sets: list[list[dict]],
         concurrency: int = 16,
-    ) -> list[str | None]:
+    ) -> list[dict | None]:
         """Run prompts concurrently. A failed prompt yields None rather than
         aborting the batch — a corpus run should not lose four hours of work
         to one bad generation."""
-        results: list[str | None] = [None] * len(prompt_sets)
+        results: list[dict | None] = [None] * len(prompt_sets)
         semaphore = asyncio.Semaphore(concurrency)
 
         async with httpx.AsyncClient() as client:
@@ -93,7 +107,11 @@ class TeacherClient:
     async def health(self) -> bool:
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(f"{self.base_url}/models", timeout=10.0)
+                # Must carry auth: a gateway answers an unauthenticated /models
+                # with 401, which would look identical to "nothing is running".
+                response = await client.get(
+                    f"{self.base_url}/models", headers=self._headers(), timeout=15.0
+                )
                 return response.status_code == 200
             except httpx.TransportError:
                 return False

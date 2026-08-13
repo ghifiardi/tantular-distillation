@@ -1,22 +1,45 @@
 """Generate teacher traces for a task family.
 
-    python3 src/generate.py --teacher muse-glimmer --host ai19 \
-        --prompts prompts/office_edit.jsonl --out data/raw/muse.office_edit.jsonl
+    python3 src/generate.py --teacher muse-glimmer --host gateway \
+        --prompts prompts/office_seed.jsonl --out data/raw/muse.seed.jsonl
 
-Every record carries full provenance (teacher, repo, host, quantization) so a
-later regression can be traced to the run that caused it.
+Two things this does beyond calling the teacher:
+
+BATCHING (--batch N). A thinking model spends its reasoning budget per
+REQUEST, not per token of output. A router label costs ~300 tokens to emit
+one word, so ~95% is overhead thrown away. Asking for N labels in one call
+amortizes that thinking across N answers. Only safe for short, independent
+outputs — never for prose, where items would bleed into each other.
+
+VERIFICATION. A prompt may carry `expected`. If the teacher disagrees, the
+trace is quarantined rather than kept or dropped: sometimes the teacher is
+right and the label is wrong (verified case: "make this more formal" is
+UBAH_NADA, not EDIT_TEKS). Both need a human, so neither is silently trusted.
+
+Every record carries full provenance so a later regression can be traced to
+the run that caused it.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import os
+import re
+from collections import defaultdict
 from pathlib import Path
 
 from bridge_client import TeacherClient, write_traces
 from config import base_url, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
+
+BATCH_INSTRUCTION = (
+    "Berikut {n} permintaan independen. Jawab SETIAP permintaan pada baris "
+    "terpisah dengan format `<nomor>. <jawaban>`. Jangan menambah penjelasan, "
+    "komentar, atau baris lain."
+)
+NUMBERED_LINE = re.compile(r"^\s*(\d+)\s*[.)]\s*(.+?)\s*$")
 
 
 def load_prompts(path: Path) -> list[dict]:
@@ -34,20 +57,98 @@ def load_prompts(path: Path) -> list[dict]:
     return records
 
 
+def build_batches(prompts: list[dict], size: int) -> list[dict]:
+    """Group prompts into batched calls.
+
+    Only prompts sharing an identical system prompt may share a call — a
+    batch has ONE system message, so mixing instructions would silently apply
+    the wrong one. Indices are kept so answers map back to their prompt.
+    """
+    if size <= 1:
+        return [{"system": p.get("system", ""), "items": [(i, p)]}
+                for i, p in enumerate(prompts)]
+
+    by_system: dict[str, list] = defaultdict(list)
+    for index, prompt in enumerate(prompts):
+        by_system[prompt.get("system", "")].append((index, prompt))
+
+    batches = []
+    for system, items in by_system.items():
+        for start in range(0, len(items), size):
+            batches.append({"system": system, "items": items[start:start + size]})
+    return batches
+
+
+def batch_messages(batch: dict) -> list[dict]:
+    items = batch["items"]
+    if len(items) == 1:
+        return [
+            {"role": "system", "content": batch["system"]},
+            {"role": "user", "content": items[0][1]["user"]},
+        ]
+    numbered = "\n\n".join(f"{n}. {p['user']}" for n, (_, p) in enumerate(items, 1))
+    return [
+        {"role": "system", "content": batch["system"]},
+        {"role": "user", "content": f"{BATCH_INSTRUCTION.format(n=len(items))}\n\n{numbered}"},
+    ]
+
+
+def unpack_batch(batch: dict, content: str) -> dict[int, str]:
+    """Map a batched response back to prompt indices.
+
+    A batch that does not yield exactly one answer per item is rejected
+    wholesale — a partial parse would misalign answers against prompts and
+    silently mislabel training data, which is worse than losing the batch.
+    """
+    items = batch["items"]
+    if len(items) == 1:
+        return {items[0][0]: content}
+
+    answers: dict[int, str] = {}
+    for line in content.splitlines():
+        match = NUMBERED_LINE.match(line)
+        if match:
+            answers[int(match.group(1))] = match.group(2)
+
+    if len(answers) != len(items) or set(answers) != set(range(1, len(items) + 1)):
+        return {}
+    return {index: answers[n] for n, (index, _) in enumerate(items, 1)}
+
+
+def normalize(value: str) -> str:
+    return re.sub(r"[^A-Z_]", "", str(value or "").upper())
+
+
 async def run(args: argparse.Namespace) -> None:
     resolved = resolve(args.teacher, args.host)
+
+    # A gateway host carries its own URL and names the env var holding its
+    # key; a self-hosted one is addressed by port on localhost.
+    host_url = resolved["HOST_BASE_URL"]
+    api_key = args.api_key
+    if resolved["HOST_API_KEY_ENV"] and not api_key:
+        api_key = os.environ.get(resolved["HOST_API_KEY_ENV"], "")
+        if not api_key:
+            raise SystemExit(
+                f"host '{args.host}' needs a key in ${resolved['HOST_API_KEY_ENV']}\n"
+                f"  export {resolved['HOST_API_KEY_ENV']}=sk-..."
+            )
+
     client = TeacherClient(
-        base_url=args.base_url or base_url(resolved, args.serve_host),
-        model=resolved["TEACHER_SERVED_MODEL_NAME"],
-        api_key=args.api_key,
+        base_url=args.base_url or host_url or base_url(resolved, args.serve_host),
+        # On a gateway the served name IS the remote model id, prefix included.
+        model=resolved["TEACHER_REPO"] if host_url else resolved["TEACHER_SERVED_MODEL_NAME"],
+        api_key=api_key,
         sampling=resolved["SAMPLING"],
     )
 
     if not await client.health():
-        raise SystemExit(
-            f"no teacher answering at {client.base_url}\n"
-            f"start one:  ./scripts/serve_teacher.sh {args.teacher} {args.host}"
+        hint = (
+            "check the gateway is up and the key is valid/scoped to this model"
+            if host_url
+            else f"start one:  ./scripts/serve_teacher.sh {args.teacher} {args.host}"
         )
+        raise SystemExit(f"no teacher answering at {client.base_url}\n{hint}")
 
     prompts = load_prompts(Path(args.prompts))
 
@@ -63,40 +164,91 @@ async def run(args: argparse.Namespace) -> None:
     if limit:
         prompts = prompts[:limit]
 
-    print(f"{args.teacher} @ {args.host} ({resolved['HOST_QUANTIZATION']}) — {len(prompts)} prompts")
+    batches = build_batches(prompts, args.batch)
+    saved = len(prompts) - len(batches)
+    print(f"{args.teacher} @ {args.host} ({resolved['HOST_QUANTIZATION']}) — "
+          f"{len(prompts)} prompts in {len(batches)} calls"
+          + (f" ({saved} fewer round-trips)" if saved > 0 else ""))
 
-    message_sets = [
-        [
-            {"role": "system", "content": record.get("system", "")},
-            {"role": "user", "content": record["user"]},
-        ]
-        for record in prompts
-    ]
-    completions = await client.complete_many(message_sets, concurrency=args.concurrency)
+    concurrency = args.concurrency or int(resolved["HOST_CONCURRENCY"])
+    results = await client.complete_many(
+        [batch_messages(b) for b in batches], concurrency=concurrency
+    )
 
-    records, failed = [], 0
-    for prompt, completion in zip(prompts, completions):
-        if completion is None:
-            failed += 1
+    # Three ways a trace is unusable, all of which look like success at the
+    # HTTP layer: a thinking model that spends its whole budget reasoning
+    # returns 200 with empty content; one that runs out mid-JSON returns 200
+    # with a fragment; a batch can come back misaligned. Reject all here
+    # rather than letting judge.py sort it out later.
+    answers: dict[int, dict] = {}
+    rejected = {"failed": 0, "empty": 0, "truncated": 0, "unparsed_batch": 0}
+    for batch, result in zip(batches, results):
+        count = len(batch["items"])
+        if result is None:
+            rejected["failed"] += count
             continue
-        records.append({
+        if not result["content"]:
+            rejected["empty"] += count
+            continue
+        if result["truncated"]:
+            rejected["truncated"] += count
+            continue
+        unpacked = unpack_batch(batch, result["content"])
+        if not unpacked:
+            rejected["unparsed_batch"] += count
+            continue
+        for index, text in unpacked.items():
+            answers[index] = {"content": text, "tokens": result["completion_tokens"]}
+
+    records, mismatches = [], []
+    for index, prompt in enumerate(prompts):
+        answer = answers.get(index)
+        if not answer:
+            continue
+        record = {
             "family": prompt.get("family", "unknown"),
+            "split": prompt.get("split", "train"),
             "system": prompt.get("system", ""),
             "user": prompt["user"],
-            "completion": completion,
+            "completion": answer["content"],
             "provenance": {
                 "teacher": resolved["TEACHER_NAME"],
                 "repo": resolved["TEACHER_REPO"],
                 "license": resolved["TEACHER_LICENSE"],
                 "host": resolved["HOST_NAME"],
                 "quantization": resolved["HOST_QUANTIZATION"],
+                "completion_tokens": answer["tokens"],
+                "batched": len(batches) < len(prompts),
             },
-        })
+        }
+        expected = prompt.get("expected")
+        if expected and normalize(expected) != normalize(answer["content"]):
+            record["expected"] = expected
+            mismatches.append(record)
+            continue
+        records.append(record)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     written = write_traces(out_path, records)
-    print(f"wrote {written} traces to {out_path}" + (f" ({failed} failed)" if failed else ""))
+
+    dropped = ", ".join(f"{n} {k}" for k, n in rejected.items() if n)
+    print(f"wrote {written}/{len(prompts)} traces to {out_path}"
+          + (f" — dropped {dropped}" if dropped else ""))
+
+    if mismatches:
+        # Quarantined, not discarded: the teacher may be right and the label
+        # wrong. Either way a human decides, and neither is trusted silently.
+        quarantine = out_path.with_suffix(".mismatch.jsonl")
+        write_traces(quarantine, mismatches)
+        print(f"QUARANTINED {len(mismatches)} label mismatch(es) -> {quarantine}")
+        for record in mismatches[:5]:
+            print(f"  {record['family']}: expected {record['expected']!r}, "
+                  f"got {record['completion'][:40]!r}")
+
+    if written < len(prompts) / 2:
+        print("WARNING: over half the prompts produced nothing usable — "
+              "check max_tokens and whether prompts embed their source text")
 
 
 def main() -> None:
@@ -105,8 +257,10 @@ def main() -> None:
     parser.add_argument("--host", required=True)
     parser.add_argument("--prompts", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--concurrency", type=int, default=16)
+    parser.add_argument("--concurrency", type=int, default=0)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--batch", type=int, default=0,
+                        help="items per call; only for short outputs (router labels), never prose")
     parser.add_argument("--serve-host", default="localhost",
                         help="hostname the teacher is served on (for a remote box)")
     parser.add_argument("--base-url", default="",

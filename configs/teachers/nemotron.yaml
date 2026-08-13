@@ -1,5 +1,10 @@
 # NVIDIA Nemotron 3.5 Lightning 30B-A3B — Mixture-of-Experts.
 #
+# PARKED — not part of the active pipeline. Muse Glimmer is the sole teacher
+# for v2: one teacher keeps the corpus stylistically coherent, fits 48GB
+# comfortably, and avoids the license question below entirely. Revisit only
+# if reasoning-specific gaps survive the Muse-only run.
+#
 # LICENSE: ships under NVIDIA's own open model license, NOT Apache 2.0.
 # Confirm its synthetic-data terms permit training a derivative model you
 # intend to ship commercially BEFORE generating a corpus from it. This is the
@@ -12,6 +17,7 @@
 # tool calling.
 
 name: nemotron
+parked: true
 port: 8002
 served_model_name: nemotron
 license: nvidia-open-model-license   # VERIFY before commercial use

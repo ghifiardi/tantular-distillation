@@ -18,6 +18,9 @@ repos:
   fp8: RedHatAI/Muse-Glimmer-30B-FP8-block
   bf16: meta-models/Muse-Glimmer-30B-assistant
   int4: mlx-community/Muse-Glimmer-30B-4bit   # Metal only, validation scale
+  # Not a repo — the id the LiteLLM gateway registered this model under.
+  # The `ollama/` prefix is part of the name; plain "muse-glimmer" 403s.
+  remote: ollama/muse-glimmer-30b
 
 # NVFP4 builds exist (RedHatAI/Muse-Glimmer-30B-NVFP4) but require Blackwell.
 # Neither ai19 nor a 48GB Ada rental can load them.
@@ -25,4 +28,8 @@ repos:
 sampling:
   temperature: 0.7
   top_p: 0.95
-  max_tokens: 2048
+  # Muse Glimmer thinks before it answers, and those tokens are charged here
+  # and emitted before any content. Measured ~230 tokens of reasoning on a
+  # trivial prompt; at max_tokens 64 the response is empty, at 800 it answers.
+  # reasoning_effort: "none" does NOT suppress it. Never set this low.
+  max_tokens: 4096

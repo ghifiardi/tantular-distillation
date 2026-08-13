@@ -35,6 +35,13 @@ def resolve(teacher_name: str, host_name: str) -> dict:
     teacher = _load("teachers", teacher_name)
     host = _load("hosts", host_name)
 
+    if teacher.get("parked"):
+        sys.exit(
+            f"teacher '{teacher_name}' is parked and not part of the active "
+            "pipeline. Muse Glimmer is the sole teacher; un-park deliberately "
+            "in its config if you mean to bring it back."
+        )
+
     quant = host.get("quantization", "fp8")
     repo = (teacher.get("repos") or {}).get(quant)
     if not repo:
@@ -51,6 +58,15 @@ def resolve(teacher_name: str, host_name: str) -> dict:
             "is Ada or older — use the fp8 or bf16 repo instead."
         )
 
+    # A gateway serves someone else's weights, so `repo` is a remote model id
+    # rather than something to download. It also charges thinking tokens
+    # against max_tokens, so a small budget silently returns empty content —
+    # raise it here rather than letting a whole run come back blank.
+    sampling = dict(teacher.get("sampling", {}))
+    floor = host.get("min_max_tokens")
+    if floor and sampling.get("max_tokens", 0) < floor:
+        sampling["max_tokens"] = floor
+
     return {
         "TEACHER_NAME": teacher.get("name", teacher_name),
         "TEACHER_REPO": repo,
@@ -65,7 +81,10 @@ def resolve(teacher_name: str, host_name: str) -> dict:
         "HOST_MAX_MODEL_LEN": str(host.get("max_model_len", 32768)),
         "HOST_VALIDATE_ONLY": "1" if host.get("validate_only") else "",
         "HOST_MAX_PROMPTS": str(host.get("max_prompts", 0)),
-        "SAMPLING": teacher.get("sampling", {}),
+        "HOST_BASE_URL": host.get("base_url", ""),
+        "HOST_API_KEY_ENV": host.get("api_key_env", ""),
+        "HOST_CONCURRENCY": str(host.get("concurrency", 16)),
+        "SAMPLING": sampling,
     }
 
 

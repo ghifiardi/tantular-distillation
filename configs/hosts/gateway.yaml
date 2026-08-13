@@ -1,0 +1,27 @@
+# The private LiteLLM gateway at openai.ina17.com — someone else's GPU.
+#
+# Zero setup: no weights to pull, no vLLM to run. In exchange you get whatever
+# quantization the gateway chose (Ollama-backed, so likely Q4 rather than FP8)
+# and its latency, measured at ~40s for a trivial prompt.
+#
+# Use it to validate the pipeline end-to-end today. Move corpus-scale runs to
+# a host you control when trace quality starts to matter.
+#
+# Requires TANTULAR_GATEWAY_KEY in the environment — never commit the key.
+
+name: gateway
+runtime: gateway
+base_url: https://openai.ina17.com/v1
+api_key_env: TANTULAR_GATEWAY_KEY
+
+# No local weights, so no repo to resolve and no quantization to pick — the
+# teacher is addressed by the id the gateway registered it under.
+quantization: remote
+
+# Thinking tokens are charged against max_tokens and land BEFORE any content.
+# reasoning_effort: "none" is NOT honored here — verified. A 64-token budget
+# returns empty; ~230 tokens go to reasoning before the first content token.
+# Budget generously or every trace comes back blank.
+min_max_tokens: 800
+request_timeout_s: 300
+concurrency: 16
