@@ -173,3 +173,35 @@ sends `reasoning_effort: "none"` specifically to stop thinking from consuming
 short budgets — the intent router allots 4 tokens. Against any harmony-format
 model that field does nothing, and the control must be passed as a chat
 template kwarg instead.
+
+---
+
+## Amendment 6 — three distinct protocols, never merged
+
+Fixed **before** the diagnostic run's results were inspected.
+
+| # | Dataset | Protocol | Status | Used for |
+|---|---|---|---|---|
+| 1 | `data/calibration/int4/` | Ollama **chat endpoint**, server-side template + channel parsing | immutable | **Deployment baseline** — what the pane actually receives today |
+| 2 | `data/calibration/int4-normalized/` | raw completion, official template, **no explicit stops** | **DIAGNOSTIC ONLY** | tests the budget-exhaustion hypothesis; excluded from any verdict |
+| 3 | `data/calibration/int4-normalized-controlled/` | raw completion, official template, **explicit stops**, full termination metadata | authoritative | **Precision-comparison baseline** vs FP8 |
+
+These are three different measurements of the same weights. They are reported
+side by side and **never concatenated** — merging them would average distinct
+protocols into a number describing none of them.
+
+### Decision rule for the diagnostic (fixed in advance)
+
+- **Tokens cluster at 4096** → hypothesis confirmed; run 3 is authoritative and
+  run 2 keeps its diagnostic label permanently.
+- **Varied short completions with stop metadata** → raw-mode stops were already
+  working; inspect termination behaviour and retain run 2 only if both arms can
+  be shown to terminate equivalently.
+- **No meaningful speedup despite shorter parsed answers** → `options.stop` is
+  ignored in raw mode. Fall back to client-side truncation at the marker, which
+  preserves answer correctness but is **not** equivalent termination behaviour:
+  `completion_tokens` is then marked UNUSABLE and excluded from cost, length and
+  performance claims **for both arms**.
+
+Client-side truncation is never reported as if the runtime had stopped
+generation. The answer is valid; the length metric is not.
