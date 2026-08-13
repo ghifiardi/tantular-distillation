@@ -1,0 +1,38 @@
+### ollama_version
+ollama version is 0.32.9
+### model_digest
+muse-glimmer:30b                   de878ce33ad8    18 GB     21 hours ago    
+### model_show
+  Model
+    architecture        muse-glimmer    
+    parameters          27.9B           
+    context length      131072          
+    embedding length    6656            
+    quantization        Q4_K_M          
+    requires            0.32.8          
+
+  Capabilities
+    completion    
+    vision        
+    tools         
+    thinking      
+
+  Projector
+    architecture        clip    
+    parameters          1.9B    
+    embedding length    1536    
+    dimensions          6656    
+
+### template_and_params
+FROM /opt/raid/ollama/blobs/sha256-71b5c9c9abbc2a9e7c13550b6f9fe1f062650117a24490b15a310cbd7de03f8b
+FROM /opt/raid/ollama/blobs/sha256-f48b452316f9b213758e8659444029b961a24a07f99a1abb2a9f88b06f7c00c6
+TEMPLATE {{ .Prompt }}
+PARAMETER top_k 64
+PARAMETER top_p 0.95
+PARAMETER temperature 1
+### v1_models
+{"object":"list","data":[{"id":"nemotron-3.5-lightning:30b","object":"model","created":1786529067,"owned_by":"library"},{"id":"muse-glimmer:30b","object":"model","created":1786528128,"owned_by":"library"},{"id":"ghifidanukusumo/Tantular:latest","object":"model","created":1786057932,"owned_by":"ghifidanukusumo"},{"id":"laguna-xs-2.1:latest","object":"model","created":1785298116,"owned_by":"library"},{"id":"gemma4:31b","object":"model","created":1784906967,"owned_by":"library"},{"id":"ornith:latest","object":"model","created":1784085720,"owned_by":"library"},{"id":"nemotron-3-super:cloud","object":"model","created":1783475753,"owned_by":"library"},{"id":"qwen3.5:397b-cloud","object":"model","created":1783475734,"owned_by":"library"},{"id":"kimi-k2.7-code:cloud","object":"model","created":1783475634,"owned_by":"library"},{"id":"glm-5.2:cloud","object":"model","created":1783475603,"owned_by":"library"},{"id":"qwen3.6:35b","object":"model","created":1780920466,"owned_by":"library"},{"id":"minimax-m3:cloud","object":"model","created":1780332641,"owned_by":"library"},{"id":"nemotron3:33b","object":"model","created":1777448559,"owned_by":"library"},{"id":"kimi-k2.6:cloud","object":"model","created":1777444341,"owned_by":"library"},{"id":"deepseek-v4-pro:cloud","object":"model","created":1777438033,"owned_by":"library"},{"id":"qwen3:4b","object":"model","created":1775901458,"owned_by":"library"},{"id":"qwen3:1.7b","object":"model","created":1775901415,"owned_by":"library"},{"id":"qwen3.5:2b","object":"model","created":1775722107,"owned_by":"library"},{"id":"granite4:1b","object":"model","created":1775714693,"owned_by":"library"},{"id":"lfm2.5-thinking:latest","object":"model","created":1775713848,"owned_by":"library"},{"id":"deepseek-ocr:latest","object":"model","created":1775706286,"owned_by":"library"},{"id":"qwen3-vl:2b","object":"model","created":1775706285,"owned_by":"library"},{"id":"ministral-3:3b","object":"model","created":1775706283,"owned_by":"library"},{"id":"gemma3:1b","object":"model","created":1775706282,"owned_by":"library"},{"id":"gemma3:4b","object":"model","created":1775706281,"owned_by":"library"},{"id":"gemma3n:e4b","object":"model","created":1775706280,"owned_by":"library"},{"id":"qwen3-coder:30b","object":"model","created":1775706279,"owned_by":"library"},{"id":"gpt-oss:20b","object":"model","created":1775706278,"owned_by":"library"},{"id":"gemma3:12b","object":"model","created":1775706277,"owned_by":"library"},{"id":"llama3.2-vision:11b","object":"model","created":1775706276,"owned_by":"library"},{"id":"llava-llama3:8b","object":"model","created":1775706275,"owned_by":"library"},{"id":"llava:7b","object":"model","created":1775706274,"owned_by":"library"},{"id":"devstral:24b","object":"model","created":1775706272,"owned_by":"library"},{"id":"nomic-embed-text:latest","object":"model","created":1775706271,"owned_by":"library"}]}
+
+### gpu
+0, NVIDIA GeForce RTX 3090, 8.6, 1821 MiB, 24576 MiB
+1, NVIDIA GeForce RTX 3090, 8.6, 266 MiB, 24576 MiB

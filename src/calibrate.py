@@ -137,10 +137,27 @@ def aggregate(records: list[dict]) -> dict:
     }
 
 
-def load(path: Path) -> list[dict]:
+def load(path: Path, prompts_path: Path | None = None) -> list[dict]:
     if not path.exists():
         sys.exit(f"no such file: {path}")
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+               if line.strip()]
+    # Traces generated before checks/expected were carried through can still be
+    # scored by joining on family id, which is unique per calibration prompt.
+    if prompts_path:
+        by_family = {}
+        for line in prompts_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                prompt = json.loads(line)
+                by_family[prompt["family"]] = prompt
+        for record in records:
+            prompt = by_family.get(record.get("family"))
+            if not prompt:
+                continue
+            record.setdefault("checks", prompt.get("checks") or {})
+            if prompt.get("expected"):
+                record.setdefault("expected", prompt["expected"])
+    return records
 
 
 def print_summary(name: str, agg: dict) -> None:
@@ -194,21 +211,23 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     s = sub.add_parser("score", help="score one arm")
     s.add_argument("path", type=Path)
+    s.add_argument("--prompts", type=Path, help="join checks/expected from the prompt set")
     c = sub.add_parser("compare", help="baseline (int4) vs treatment (fp8)")
     c.add_argument("baseline", type=Path)
     c.add_argument("treatment", type=Path)
+    c.add_argument("--prompts", type=Path, help="join checks/expected from the prompt set")
     args = parser.parse_args()
 
     criteria = yaml.safe_load(ACCEPTANCE_PATH.read_text(encoding="utf-8"))
 
     if args.command == "score":
-        agg = aggregate(load(args.path))
+        agg = aggregate(load(args.path, args.prompts))
         print_summary(args.path.parent.name or "arm", agg)
         print("\nBaseline recorded. The FP8 arm cannot be measured until an "
               "Ada/Hopper host exists; no verdict is possible from one arm.")
     else:
-        base = aggregate(load(args.baseline))
-        treat = aggregate(load(args.treatment))
+        base = aggregate(load(args.baseline, args.prompts))
+        treat = aggregate(load(args.treatment, args.prompts))
         print_summary("baseline (int4)", base)
         print_summary("treatment (fp8)", treat)
         if base["n"] != treat["n"]:

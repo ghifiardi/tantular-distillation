@@ -246,7 +246,9 @@ async def run(args: argparse.Namespace) -> None:
             rejected["unparsed_batch"] += count
             continue
         for index, text in unpacked.items():
-            answers[index] = {"content": text, "tokens": result["completion_tokens"]}
+            answers[index] = {"content": text,
+                              "tokens": result["completion_tokens"],
+                              "latency_s": result.get("latency_s")}
 
     records, mismatches = [], []
     for index, prompt in enumerate(prompts):
@@ -266,6 +268,8 @@ async def run(args: argparse.Namespace) -> None:
                 "host": resolved["HOST_NAME"],
                 "quantization": resolved["HOST_QUANTIZATION"],
                 "completion_tokens": answer["tokens"],
+                "latency_s": answer.get("latency_s"),
+                "truncated": False,
                 "batched": len(batches) < len(prompts),
                 # Which partitioning produced this trace. Traces generated
                 # under different seeds must never be mixed into one training
@@ -274,7 +278,19 @@ async def run(args: argparse.Namespace) -> None:
                 "split_fingerprint": manifest["fingerprint"],
             },
         }
+        # Evaluation metadata travels with the trace. Without it a calibration
+        # run produces traces nobody can score.
+        if prompt.get("checks"):
+            record["checks"] = prompt["checks"]
         expected = prompt.get("expected")
+        if expected:
+            record["expected"] = expected
+        # A calibration study measures label accuracy, so a wrong label is a
+        # RESULT, not a reject. Quarantining it would silently remove exactly
+        # the traces the metric is about.
+        if expected and args.keep_mismatches:
+            records.append(record)
+            continue
         if expected and normalize(expected) != normalize(answer["content"]):
             record["expected"] = expected
             mismatches.append(record)
@@ -285,9 +301,27 @@ async def run(args: argparse.Namespace) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     written = write_traces(out_path, records)
 
-    dropped = ", ".join(f"{n} {k}" for k, n in rejected.items() if n)
-    print(f"wrote {written}/{len(prompts)} traces to {out_path}"
-          + (f" — dropped {dropped}" if dropped else ""))
+    # Infrastructure failures and model-quality failures are different things
+    # and must never share a denominator. A dead endpoint returning 400 for
+    # every call says nothing about the model; folding those into an "empty
+    # rate" would make a broken proxy look like a bad teacher.
+    infrastructure = rejected["failed"]
+    quality = {k: v for k, v in rejected.items() if k != "failed" and v}
+    print(f"wrote {written}/{len(prompts)} traces to {out_path}")
+    if infrastructure:
+        errors_path = out_path.with_suffix(".errors.json")
+        errors_path.write_text(json.dumps({
+            "infrastructure_failures": infrastructure,
+            "attempted": len(prompts),
+            "note": "endpoint/transport failures — excluded from quality denominators, "
+                    "not retried into the result set",
+        }, indent=2) + "\n", encoding="utf-8")
+        print(f"INFRASTRUCTURE: {infrastructure}/{len(prompts)} calls failed at the "
+              f"endpoint (recorded separately -> {errors_path.name}); "
+              "these are NOT model-quality failures")
+    if quality:
+        print("model-quality rejections: "
+              + ", ".join(f"{n} {k}" for k, n in quality.items()))
 
     if mismatches:
         # Quarantined, not discarded: the teacher may be right and the label
@@ -318,6 +352,9 @@ def main() -> None:
                         help="hostname the teacher is served on (for a remote box)")
     parser.add_argument("--base-url", default="",
                         help="override the composed URL entirely")
+    parser.add_argument("--keep-mismatches", action="store_true",
+                        help="calibration: keep label mismatches in the result set "
+                             "instead of quarantining them, since accuracy is a metric")
     parser.add_argument("--egress-approval", default="",
                         help="approval reference permitting non-synthetic material "
                              "on an off-premises host")

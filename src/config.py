@@ -103,6 +103,7 @@ def resolve(teacher_name: str, host_name: str) -> dict:
         "HOST_BASE_URL": host.get("base_url", ""),
         "HOST_API_KEY_ENV": host.get("api_key_env", ""),
         "HOST_CONCURRENCY": str(host.get("concurrency", 16)),
+        "HOST_REQUEST_TIMEOUT_S": str(host.get("request_timeout_s", 600)),
         "SAMPLING": sampling,
     }
 
