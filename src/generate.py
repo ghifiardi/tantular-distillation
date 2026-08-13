@@ -164,12 +164,18 @@ async def run(args: argparse.Namespace) -> None:
         carried = {p.get("source_class", "internal") for p in prompts}
         needs_approval = sorted(c for c in carried if c != "synthetic")
         if needs_approval and not args.egress_approval:
+            reason = {
+                "external": "runs on third-party hardware",
+                "operator_visible": "is operated by a third party who sees and "
+                                    "may retain every prompt",
+            }.get(egress, f"is classified {egress}")
             raise SystemExit(
-                f"host '{args.host}' is off-premises (data_egress: {egress}) and "
+                f"host '{args.host}' {reason} (data_egress: {egress}), and "
                 f"{len(prompts)} prompt(s) are classified {needs_approval}.\n"
-                "Real or unclassified Office material must not leave the environment "
-                "without approval. Either mark prompts \"source_class\": \"synthetic\", "
-                "use an internal host (ai19), or pass --egress-approval <reference>."
+                "Real or unclassified Office material needs explicit approval to go "
+                "there. Either mark prompts \"source_class\": \"synthetic\", use an "
+                "approved internal host (ai19), or pass --egress-approval <reference> "
+                "once that approval exists."
             )
         if needs_approval:
             print(f"EGRESS APPROVED [{args.egress_approval}]: sending "

@@ -109,7 +109,7 @@ Hosts declare where data goes; prompts declare what they carry.
 | Host | `data_egress` | Real Office material |
 |---|---|---|
 | `ai19` | internal | ✅ on-premises |
-| `gateway` | internal | ⚠️ private cloud, but its operator sees every prompt |
+| `gateway` | operator_visible | ❌ synthetic only — operator sees and may retain prompts |
 | `mac-validate` | internal | ✅ nothing leaves the machine |
 | `rented-48gb` | **external** | ❌ needs explicit `--egress-approval` |
 

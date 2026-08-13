@@ -9,10 +9,17 @@
 #
 # Requires TANTULAR_GATEWAY_KEY in the environment — never commit the key.
 
-# Data handling: the private cloud already in use. Internal, but note the
-# operator sees every prompt — confirm that is within scope for real corpus
-# material, not just for synthetic validation prompts.
-data_egress: internal
+# Data handling: private cloud, but NOT "no third-party visibility". The
+# gateway operator sees every prompt and controls its retention, so this is
+# not the same trust level as a host we run.
+#
+# Decision: synthetic material may go here freely. Real Office corpus material
+# may NOT, unless the operator formally approves prompt visibility and
+# retention — pass --egress-approval <reference> once that exists.
+#
+# `operator_visible` is anything other than `internal`, so the gate treats it
+# like an external host: synthetic passes, everything else needs approval.
+data_egress: operator_visible
 
 name: gateway
 runtime: gateway
