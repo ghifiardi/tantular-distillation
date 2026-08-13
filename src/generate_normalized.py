@@ -200,6 +200,24 @@ async def run(args: argparse.Namespace) -> None:
     for prompt in prompts:
         prompt["split"] = splits_module.split_of(prompt.get("family", ""), manifest)
 
+    # Same data-handling gate as generate.py. Omitting it here would have left
+    # a second generation path able to send real Office material off-premises
+    # while the policy appeared to be enforced.
+    egress = resolved["HOST_DATA_EGRESS"]
+    if egress != "internal":
+        carried = {p.get("source_class", "internal") for p in prompts}
+        needs_approval = sorted(c for c in carried if c != "synthetic")
+        if needs_approval and not args.egress_approval:
+            raise SystemExit(
+                f"host '{args.host}' is not internal (data_egress: {egress}) and "
+                f"{len(prompts)} prompt(s) are classified {needs_approval}.\n"
+                "Real or unclassified Office material needs explicit approval. Mark "
+                "prompts \"source_class\": \"synthetic\", use an internal host, or "
+                "pass --egress-approval <reference>."
+            )
+        if needs_approval:
+            print(f"EGRESS APPROVED [{args.egress_approval}]: {needs_approval} -> {args.host}")
+
     print(f"normalized run — {args.teacher} @ {args.host} ({resolved['HOST_QUANTIZATION']})")
     print(f"  template sha256   {template_hash[:16]}")
     print(f"  reasoning_strength {args.reasoning_strength}")
@@ -322,6 +340,9 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--egress-approval", default="",
+                        help="approval reference permitting non-synthetic material "
+                             "on a non-internal host")
     parser.add_argument("--stop", action="append", default=None,
                         help="explicit stop sequence (repeatable). Default: none — "
                              "EOS terminates generation, verified against production. "
