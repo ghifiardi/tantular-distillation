@@ -136,3 +136,64 @@ The volatile-family condition in the accepted text is checked by
 appears in the corpus with a single trace. Families are read from
 `calibration/noise_floor.<arm>.json`. The rule is: **replicated, or excluded —
 never one arbitrary sample.**
+
+---
+
+## Addendum — synthetic substitution for blocked strata (2026-08-13)
+
+The 14 strata with no approved real source may be backed by **fabricated**
+documents instead, generated via Tinker. This unblocks pipeline generation and
+behavioural training. It does **not** demonstrate performance on real Office
+documents, and does not remove the need for later real-corpus approval.
+
+### Handling rule for the external service
+
+Tinker processes inputs through its service and AI providers. Its terms state
+customer content is not used to develop or train models, but it remains an
+external boundary. So:
+
+**Only fabricated inputs.** Invented names, companies, numbers, emails and
+document contents. No real Office text, screenshots, templates, or
+descriptions containing confidential details — including as *prompts* asking
+Tinker to produce something similar.
+
+- Terms: https://thinkingmachines.ai/legal/terms/
+- Privacy: https://thinkingmachines.ai/legal/privacy/
+
+### Required record per synthetic stratum
+
+```yaml
+source_class: synthetic
+source: tinker/<project-or-session>/<artifact>
+source_sha256: "<exported-artifact-hash>"
+approval: "<internal approval for synthetic substitution>"
+redacted: true
+redaction_record: "Synthetic from scratch; no real personal or company data"
+egress_approved: true
+egress_reference: "<approval for Tinker and ai19>"
+generator:
+  service: tinker
+  model: "<model id>"
+  version: "<tinker version>"
+  prompt_template_sha256: "<hash>"
+  generated_at: "YYYY-MM-DD"
+```
+
+Enforced by `src/inventory.py`: a stratum marked `synthetic` is not ready to
+seed until every field above is present, generator sub-fields included.
+`verify_corpus.py` reports synthetic-backed strata at verification time and
+states plainly what such a corpus does and does not support.
+
+### Prompt construction for editing tasks
+
+The synthetic source document must be **embedded in the prompt**, with the
+requested transformation specified separately. A prompt that refers to a
+document without including it produces a teacher asking for the missing text —
+observed directly: 4 of 5 traces unusable in the first seed run.
+
+### What this does not change
+
+- The FP8 gate remains UNMET; this addendum concerns source material, not
+  teacher precision.
+- Gateway key rotation remains a separate production gate.
+- Real-corpus approval is deferred, not waived.

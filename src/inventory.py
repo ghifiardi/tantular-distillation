@@ -35,17 +35,41 @@ ROOT = Path(__file__).resolve().parent.parent
 INVENTORY_PATH = ROOT / "inventory" / "sources.yaml"
 
 TEMPLATE_ROW = {
-    # Where the real examples come from. A path, a ticket, a system of record —
-    # never "generated" or "synthetic" for a production corpus.
+    # "real" — drawn from actual Office documents, or
+    # "synthetic" — fabricated from scratch, no real entity anywhere in it.
+    # The distinction bounds what the trained student can be claimed to do.
+    "source_class": None,
+    # Where the examples come from. A path, a ticket, a system of record, or for
+    # synthetic material the generating artifact: tinker/<project>/<artifact>.
     "source": None,
+    # Hash of the exported source artifact, so a corpus can be traced to the
+    # exact documents that produced it.
+    "source_sha256": None,
     # Who approved this material for teacher generation, and under what scope.
+    # For synthetic material this is the approval for substituting fabricated
+    # documents in place of real ones.
     "approval": None,
     # Has identifying/confidential content been removed or replaced?
     "redacted": False,
+    # HOW. "Synthetic from scratch; no real personal or company data" is a
+    # different claim from "names replaced in a real document", and only the
+    # first survives an external service boundary safely.
+    "redaction_record": None,
     # Does the approval permit sending this material off-premises?
     "egress_approved": False,
+    "egress_reference": None,
+    # For synthetic material: what generated it. An external service is an
+    # external boundary regardless of its terms, so the artifact must be
+    # attributable.
+    "generator": None,   # {service, model, version, prompt_template_sha256, generated_at}
     "notes": "",
 }
+
+# Fields every stratum needs before seeds may be written for it.
+REQUIRED_ALWAYS = ("source_class", "source", "approval", "redaction_record")
+# Additional fields required when the material is fabricated.
+REQUIRED_SYNTHETIC = ("source_sha256", "generator")
+GENERATOR_FIELDS = ("service", "model", "version", "prompt_template_sha256", "generated_at")
 
 
 def load_inventory() -> dict:
@@ -92,8 +116,26 @@ def save(inventory: dict) -> Path:
     return INVENTORY_PATH
 
 
+def missing_fields(row: dict) -> list[str]:
+    """What this stratum still needs. Empty means ready to seed."""
+    missing = [f for f in REQUIRED_ALWAYS if not row.get(f)]
+    if not row.get("redacted"):
+        missing.append("redacted")
+    if row.get("source_class") == "synthetic":
+        missing.extend(f for f in REQUIRED_SYNTHETIC if not row.get(f))
+        generator = row.get("generator") or {}
+        missing.extend(f"generator.{f}" for f in GENERATOR_FIELDS
+                       if not generator.get(f))
+        # Fabricated material still crosses a service boundary to be made.
+        if not row.get("egress_approved"):
+            missing.append("egress_approved")
+        if not row.get("egress_reference"):
+            missing.append("egress_reference")
+    return missing
+
+
 def is_ready(row: dict) -> bool:
-    return bool(row.get("source") and row.get("approval") and row.get("redacted"))
+    return not missing_fields(row)
 
 
 def status(inventory: dict, corpus_paths: list[Path]) -> None:
@@ -116,7 +158,12 @@ def status(inventory: dict, corpus_paths: list[Path]) -> None:
         else:
             blocked.append(kind)
 
-    print(f"{len(inventory)} kinds")
+    classes = Counter(row.get("source_class") or "unset" for row in inventory.values())
+    print(f"{len(inventory)} kinds   source_class: {dict(classes)}")
+    if classes.get("synthetic"):
+        print("  NOTE: strata marked `synthetic` support pipeline generation and "
+              "behavioural\n        training, but NOT any claim about performance on "
+              "real Office documents.")
     print(f"  traces generated : {len(generated)}")
     print(f"  approved, no seeds yet : {len(ready)}")
     print(f"  BLOCKED on source/approval : {len(blocked)}")
@@ -129,10 +176,7 @@ def status(inventory: dict, corpus_paths: list[Path]) -> None:
         print("\nblocked — needs approved, redacted source material:")
         for kind in blocked:
             row = inventory[kind]
-            missing = [f for f in ("source", "approval") if not row.get(f)]
-            if not row.get("redacted"):
-                missing.append("redacted")
-            print(f"  {kind:<28} missing: {', '.join(missing)}")
+            print(f"  {kind:<28} missing: {', '.join(missing_fields(row))}")
         print("\nThis is the correct state to report. Do not write invented "
               "documents to close the gap.")
 

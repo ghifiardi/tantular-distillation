@@ -14,182 +14,312 @@
 document:email:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 document:memo:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 document:report:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 document:slide-text:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 document:spreadsheet-text:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 edit:elaborasi:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 edit:koreksi:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 edit:perjelas:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 edit:restrukturisasi:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 edit:ringkas_bagian:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 edit:ubah_istilah:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 prose:cekAman:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 prose:draftTeks:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 prose:ringkas:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 prose:tanyaDokumen:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 prose:terjemah:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 prose:ubahNada:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 prose:umum:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:CEK_AMAN:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:DRAFT_TEKS:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:EDIT_TEKS:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:RINGKAS:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:TANYA_DOKUMEN:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:TERJEMAH:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:UBAH_NADA:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null
 router:UMUM:
   approval: null
   egress_approved: false
+  egress_reference: null
   families: 10
+  generator: null
   notes: ''
   redacted: false
+  redaction_record: null
   source: null
+  source_class: null
+  source_sha256: null

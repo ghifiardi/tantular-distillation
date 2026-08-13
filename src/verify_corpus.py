@@ -287,6 +287,26 @@ def main() -> None:
             print(f"  ... and {len(errors) - 20} more")
         sys.exit(1)
 
+    # A corpus whose strata are backed by fabricated documents can support
+    # behavioural training and pipeline work. It cannot support a claim about
+    # performance on real Office documents — nothing real was ever measured.
+    try:
+        import inventory as inventory_module
+        rows = inventory_module.load_inventory()
+        kinds_present = {manifest["kinds"].get(r.get("family", ""), "") for r in records}
+        synthetic = sorted(k for k in kinds_present
+                           if (rows.get(k) or {}).get("source_class") == "synthetic")
+        if synthetic:
+            print(f"\nCORPUS PROVENANCE: {len(synthetic)}/{len(kinds_present)} strata "
+                  "are SYNTHETIC-backed")
+            print("  Supports: pipeline generation, behavioural training against the "
+                  "deployed teacher.")
+            print("  Does NOT support: any claim about performance on real Office "
+                  "documents.")
+            print("  Real-corpus approval remains required before such a claim.")
+    except Exception:
+        pass
+
     if args.gate:
         print("\nGATE PASSED — every kind covered, fp8 teacher, no leakage, "
               "provenance intact. Training may proceed.")
