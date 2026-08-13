@@ -42,6 +42,15 @@ def resolve(teacher_name: str, host_name: str) -> dict:
             "in its config if you mean to bring it back."
         )
 
+    if host.get("teacher_serving") is False:
+        sys.exit(
+            f"host '{host_name}' does not serve teachers "
+            f"({host.get('role', 'non-serving')} host).\n"
+            "Its Ollama already serves this model to the gateway, so "
+            "`--host gateway` reaches the same weights on the same cards. "
+            "Serving a second copy here would cost VRAM and change nothing."
+        )
+
     quant = host.get("quantization", "fp8")
     repo = (teacher.get("repos") or {}).get(quant)
     if not repo:
@@ -54,8 +63,17 @@ def resolve(teacher_name: str, host_name: str) -> dict:
     # A wrong-architecture build loads for a long time and then dies. Catch it here.
     if "nvfp4" in repo.lower():
         sys.exit(
-            f"{repo} is an NVFP4 build and requires Blackwell. Host '{host_name}' "
-            "is Ada or older — use the fp8 or bf16 repo instead."
+            f"{repo} is an NVFP4 build and requires Blackwell (compute capability "
+            f"10.0+). Host '{host_name}' is older — use the fp8 or bf16 repo."
+        )
+
+    # FP8 needs Ada or Hopper (>= 8.9). Ampere silently has no FP8 path, and
+    # ai19's 3090s are 8.6 — catching this here rather than after a long load.
+    if quant == "fp8" and host.get("supports_fp8") is False:
+        sys.exit(
+            f"host '{host_name}' ({host.get('gpu', '?')}, compute capability "
+            f"{host.get('compute_capability', '?')}) cannot do FP8 — that needs 8.9+. "
+            "Set quantization: int4 for this host, or use an Ada/Hopper card."
         )
 
     # A gateway serves someone else's weights, so `repo` is a remote model id

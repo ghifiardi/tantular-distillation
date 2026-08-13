@@ -10,7 +10,7 @@ a gateway key — the weights are open, so the pipeline is unblocked by default.
 
 | Stage | Runs on | Why |
 |---|---|---|
-| Teacher serving | GPU host (ai19 or rented) | 30B needs 32GB+ at FP8 |
+| Teacher serving | gateway (int4) or rented Ada/Hopper (fp8) | 30B needs 32GB+ at FP8 |
 | Trace generation | Anywhere with network to the teacher | Just HTTP |
 | Judge / dedup / promote | Anywhere | CPU work |
 | QLoRA training | Single 24GB+ GPU | 9B 4-bit + LoRA |
@@ -18,8 +18,13 @@ a gateway key — the weights are open, so the pipeline is unblocked by default.
 
 ## Hosts
 
-- `ai19` — 2×RTX 4090 24GB. Free, yours, 48GB total via tensor-parallel.
-  No NVLink, so the two cards talk over PCIe. Fine for offline batch.
+- `ai19` — 2×RTX **3090** 24GB (Ampere, cc 8.6). **Cannot do FP8** (needs 8.9+).
+  Shared production box: its Ollama backs the openai.ina17.com gateway and a
+  face_ai_service runs alongside, so ~10GB/12GB free at survey time, not 48GB.
+  **Training host, not a teacher host** — `--host gateway` already reaches this
+  machine's weights.
+- `gateway` — openai.ina17.com, i.e. ai19's Ollama. int4, ~40s/request,
+  operator-visible. The only teacher path available without renting.
 - `rented-48gb` — one RTX 6000 Ada or L40S (~$0.74–0.79/hr on RunPod
   community). Same 48GB on a single card, so no PCIe hop. Use when a run
   needs to finish fast.
@@ -108,7 +113,7 @@ Hosts declare where data goes; prompts declare what they carry.
 
 | Host | `data_egress` | Real Office material |
 |---|---|---|
-| `ai19` | internal | ✅ on-premises |
+| `ai19` | internal | ✅ on-premises (training only) |
 | `gateway` | operator_visible | ❌ synthetic only — operator sees and may retain prompts |
 | `mac-validate` | internal | ✅ nothing leaves the machine |
 | `rented-48gb` | **external** | ❌ needs explicit `--egress-approval` |

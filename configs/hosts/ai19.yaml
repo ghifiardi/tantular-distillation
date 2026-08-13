@@ -1,22 +1,45 @@
-# ai19 — 2x RTX 4090 24GB (Ada, sm_89), no NVLink.
+# ai19 — 2x RTX 3090 24GB (Ampere, sm_86, compute capability 8.6).
 #
-# 48GB total, but split across two cards, so a 30B must shard with
-# tensor-parallel. The cards talk over PCIe (no NVLink), which costs
-# wall-clock on every forward pass. That is fine for offline batch
-# generation and painful for anything interactive.
+# VERIFIED 2026-08-13 by nvidia-smi on the box. An earlier version of this file
+# said 4090/Ada/fp8; that was wrong on all three counts and would have failed
+# at model load.
 #
-# Ada supports FP8 natively. It does NOT support NVFP4 (Blackwell only) —
-# do not point this host at an NVFP4 build, it will fail to load.
+# FP8 REQUIRES COMPUTE CAPABILITY >= 8.9 (Ada/Hopper). These cards are 8.6, so
+# FP8 IS IMPOSSIBLE HERE. The best available precision for a 30B on this box is
+# int4 — which is what the gateway's Ollama already serves, from these very
+# same cards. Generating here instead of via the gateway therefore buys no
+# trace quality at all; it is the same model on the same hardware.
+#
+# This box is SHARED and in production: it backs the openai.ina17.com gateway
+# (Ollama holds muse-glimmer:30b and nemotron-3.5-lightning:30b) and also runs
+# a face_ai_service. At survey time ~14.5GB of GPU0 and ~12.3GB of GPU1 were
+# already committed, leaving roughly 10GB and 12GB free. Do not assume 48GB.
+#
+# Training IS viable here: Ampere does bf16 fine, and QLoRA on a 9B fits a
+# single 3090 — but only once enough VRAM is free. Stopping Ollama to make room
+# would take the gateway down.
 
 # Data handling: on-premises, inside the existing environment. Approved for
 # real Office source material.
 data_egress: internal
 
 name: ai19
-gpu: "2x RTX 4090 24GB"
+gpu: "2x RTX 3090 24GB (Ampere sm_86)"
+compute_capability: 8.6
+supports_fp8: false
+shared_host: true
+
+# NOT a teacher-serving host. Its Ollama already serves muse-glimmer:30b to
+# the openai.ina17.com gateway, so `--host gateway` IS this machine. Standing
+# up a second copy under vLLM on these same busy cards would consume VRAM to
+# produce identical int4 traces. Use the gateway for generation.
+#
+# ai19's role is TRAINING: QLoRA on a 9B fits one 3090 in bf16 once enough
+# VRAM is free. See train/qlora_9b.yaml.
+teacher_serving: false
+role: training
+
 tensor_parallel_size: 2
-quantization: fp8
-# Two 24GB cards holding ~32GB of FP8 weights leaves little headroom; keep
-# some back for KV cache or long-context requests will OOM mid-run.
+quantization: int4
 gpu_memory_utilization: 0.90
 max_model_len: 32768
