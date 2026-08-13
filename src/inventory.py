@@ -55,8 +55,16 @@ TEMPLATE_ROW = {
     # different claim from "names replaced in a real document", and only the
     # first survives an external service boundary safely.
     "redaction_record": None,
-    # Does the approval permit sending this material off-premises?
-    "egress_approved": False,
+    # Who owns the source material, and under what authority it is used.
+    # Unknown ownership is a blocker, not a formality.
+    "owner": None,
+    # Where the ORIGINALS live. Must be outside Git and outside data/raw/.
+    # Recorded so a sanitized artifact can be traced back under supervision,
+    # never so the originals get copied into the repo.
+    "originals_location": None,
+    # Sending sanitized local material to ai19 over the SSH tunnel is still an
+    # egress event and needs its own authorization.
+    "egress_ai19_approved": False,
     "egress_reference": None,
     # For synthetic material: what generated it. An external service is an
     # external boundary regardless of its terms, so the artifact must be
@@ -66,10 +74,16 @@ TEMPLATE_ROW = {
 }
 
 # Fields every stratum needs before seeds may be written for it.
-REQUIRED_ALWAYS = ("source_class", "source", "approval", "redaction_record")
-# Additional fields required when the material is fabricated.
-REQUIRED_SYNTHETIC = ("source_sha256", "generator")
+REQUIRED_ALWAYS = ("source_class", "source", "source_sha256", "approval",
+                   "redaction_record")
+# Real material additionally needs an owner, actual redaction, and egress
+# authorization — the SSH tunnel to ai19 is an external boundary crossing.
+REQUIRED_REAL = ("owner", "originals_location")
+# Fabricated material needs attributable provenance, but no redaction: there is
+# nothing real in it to redact.
+REQUIRED_SYNTHETIC = ("generator",)
 GENERATOR_FIELDS = ("service", "model", "version", "prompt_template_sha256", "generated_at")
+VALID_SOURCE_CLASSES = ("real", "synthetic")
 
 
 def load_inventory() -> dict:
@@ -119,19 +133,44 @@ def save(inventory: dict) -> Path:
 def missing_fields(row: dict) -> list[str]:
     """What this stratum still needs. Empty means ready to seed."""
     missing = [f for f in REQUIRED_ALWAYS if not row.get(f)]
-    if not row.get("redacted"):
-        missing.append("redacted")
-    if row.get("source_class") == "synthetic":
+
+    source_class = row.get("source_class")
+    if source_class and source_class not in VALID_SOURCE_CLASSES:
+        missing.append(f"source_class(invalid:{source_class})")
+
+    if source_class == "real":
+        missing.extend(f for f in REQUIRED_REAL if not row.get(f))
+        # Real material must actually be sanitized, and the sanitized artifact
+        # still crosses a boundary when it reaches ai19.
+        if not row.get("redacted"):
+            missing.append("redacted")
+        if not row.get("egress_ai19_approved"):
+            missing.append("egress_ai19_approved")
+        if not row.get("egress_reference"):
+            missing.append("egress_reference")
+        # Originals in the repo defeat the point of keeping them out of Git.
+        location = str(row.get("originals_location") or "")
+        if location and not location.startswith("<") and _inside_repo(location):
+            missing.append("originals_location(INSIDE REPO — move them out)")
+    elif source_class == "synthetic":
         missing.extend(f for f in REQUIRED_SYNTHETIC if not row.get(f))
         generator = row.get("generator") or {}
         missing.extend(f"generator.{f}" for f in GENERATOR_FIELDS
                        if not generator.get(f))
-        # Fabricated material still crosses a service boundary to be made.
-        if not row.get("egress_approved"):
-            missing.append("egress_approved")
-        if not row.get("egress_reference"):
-            missing.append("egress_reference")
+        # Nothing real to redact, but if generation crossed a service boundary
+        # that still needed authorizing.
+        if (generator.get("service") or "").lower() not in ("", "local", "handwritten"):
+            if not row.get("egress_reference"):
+                missing.append("egress_reference")
     return missing
+
+
+def _inside_repo(location: str) -> bool:
+    try:
+        Path(location).expanduser().resolve().relative_to(ROOT)
+        return True
+    except (ValueError, OSError):
+        return False
 
 
 def is_ready(row: dict) -> bool:

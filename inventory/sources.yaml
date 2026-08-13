@@ -13,11 +13,13 @@
 
 document:email:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -25,11 +27,13 @@ document:email:
   source_sha256: null
 document:memo:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -37,11 +41,13 @@ document:memo:
   source_sha256: null
 document:report:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -49,11 +55,13 @@ document:report:
   source_sha256: null
 document:slide-text:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -61,11 +69,13 @@ document:slide-text:
   source_sha256: null
 document:spreadsheet-text:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -73,11 +83,13 @@ document:spreadsheet-text:
   source_sha256: null
 edit:elaborasi:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -85,11 +97,13 @@ edit:elaborasi:
   source_sha256: null
 edit:koreksi:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -97,11 +111,13 @@ edit:koreksi:
   source_sha256: null
 edit:perjelas:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -109,11 +125,13 @@ edit:perjelas:
   source_sha256: null
 edit:restrukturisasi:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -121,11 +139,13 @@ edit:restrukturisasi:
   source_sha256: null
 edit:ringkas_bagian:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -133,11 +153,13 @@ edit:ringkas_bagian:
   source_sha256: null
 edit:ubah_istilah:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -145,11 +167,13 @@ edit:ubah_istilah:
   source_sha256: null
 prose:cekAman:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -157,11 +181,13 @@ prose:cekAman:
   source_sha256: null
 prose:draftTeks:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -169,11 +195,13 @@ prose:draftTeks:
   source_sha256: null
 prose:ringkas:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -181,11 +209,13 @@ prose:ringkas:
   source_sha256: null
 prose:tanyaDokumen:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -193,11 +223,13 @@ prose:tanyaDokumen:
   source_sha256: null
 prose:terjemah:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -205,11 +237,13 @@ prose:terjemah:
   source_sha256: null
 prose:ubahNada:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -217,11 +251,13 @@ prose:ubahNada:
   source_sha256: null
 prose:umum:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -229,11 +265,13 @@ prose:umum:
   source_sha256: null
 router:CEK_AMAN:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -241,11 +279,13 @@ router:CEK_AMAN:
   source_sha256: null
 router:DRAFT_TEKS:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -253,11 +293,13 @@ router:DRAFT_TEKS:
   source_sha256: null
 router:EDIT_TEKS:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -265,11 +307,13 @@ router:EDIT_TEKS:
   source_sha256: null
 router:RINGKAS:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -277,11 +321,13 @@ router:RINGKAS:
   source_sha256: null
 router:TANYA_DOKUMEN:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -289,11 +335,13 @@ router:TANYA_DOKUMEN:
   source_sha256: null
 router:TERJEMAH:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -301,11 +349,13 @@ router:TERJEMAH:
   source_sha256: null
 router:UBAH_NADA:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null
@@ -313,11 +363,13 @@ router:UBAH_NADA:
   source_sha256: null
 router:UMUM:
   approval: null
-  egress_approved: false
+  egress_ai19_approved: false
   egress_reference: null
   families: 10
   generator: null
   notes: ''
+  originals_location: null
+  owner: null
   redacted: false
   redaction_record: null
   source: null

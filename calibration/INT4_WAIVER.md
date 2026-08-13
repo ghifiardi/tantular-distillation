@@ -191,9 +191,50 @@ requested transformation specified separately. A prompt that refers to a
 document without including it produces a teacher asking for the missing text —
 observed directly: 4 of 5 traces unusable in the first seed run.
 
+## Addendum 2 — local source material (preferred over Tinker)
+
+Local files are preferable to an external generator on privacy grounds,
+**provided use is authorized**. The route is: inventory local sources, approve
+and redact them, then send only the sanitized artifacts to ai19.
+
+### Rules, enforced by `src/inventory.py`
+
+| Requirement | Field |
+|---|---|
+| Originals stay outside Git and outside `data/raw/` | `originals_location` — a path inside the repo is rejected |
+| Source path or document ID | `source` |
+| Content hash | `source_sha256` |
+| Owner and approval reference | `owner`, `approval` |
+| Names, account numbers, emails, client identifiers removed | `redacted: true` + `redaction_record` |
+| Sanitized artifact may go to ai19 | `egress_ai19_approved` + `egress_reference` |
+
+### Three distinctions that are easy to lose
+
+**Sending sanitized local material to ai19 over the SSH tunnel is still an
+egress event.** The tunnel reduces the number of observers; it does not make
+the transfer internal-by-definition. It needs its own authorization, recorded
+in `egress_ai19_approved`, separate from the approval to *use* the document.
+
+**A local MLX/int4 teacher is a different teacher path** and is NOT covered by
+this waiver. Verified: `("int4_mlx", "mac-validate")` is absent from
+`WAIVER_COVERED`, so such traces fail the gate as unauthorised. Adding that
+path requires amending this waiver explicitly.
+
+**Unknown ownership, provenance, or sensitivity remains blocked.** A file found
+on disk without those answers is not a source; it is an unknown. The schema
+makes this mechanical rather than a judgment call.
+
+### Fully fabricated local documents
+
+May be marked `source_class: synthetic` with no real-document redaction —
+there is nothing real in them to redact. They still require provenance
+(`generator`, including handwritten authorship) and synthetic-substitution
+approval. Where generation stayed local, no egress reference is required for
+the generation step itself.
+
 ### What this does not change
 
-- The FP8 gate remains UNMET; this addendum concerns source material, not
+- The FP8 gate remains UNMET; these addenda concern source material, not
   teacher precision.
 - Gateway key rotation remains a separate production gate.
 - Real-corpus approval is deferred, not waived.
