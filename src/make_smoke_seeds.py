@@ -102,6 +102,8 @@ def main() -> None:
                         choices=("pipeline_smoke", "synthetic_candidate"),
                         help="corpus_role stamped on every record. Neither is "
                              "production-ready training data.")
+    parser.add_argument("--all-families", action="store_true",
+                        help="emit every family assignment, not one instance per kind")
     parser.add_argument("--only", default="",
                         help="comma-separated family ids, for volatile-family replicates")
     parser.add_argument("--instance", type=int, default=0,
@@ -112,14 +114,17 @@ def main() -> None:
     manifest = splits_module.load()
 
     only = {f.strip() for f in args.only.split(",") if f.strip()}
+    # --all-families emits every family assignment; otherwise one instance per kind.
+    keys = sorted(rows) if not args.all_families else sorted(
+        f for f in manifest["assignments"] if f in rows or f.split("::")[0] in rows)
     records, skipped = [], []
-    for kind in sorted(rows):
-        row = rows[kind]
+    for kind in keys:
+        row = rows.get(kind) or rows.get(kind.split("::")[0])
         missing = inventory_module.missing_fields(row)
         if missing:
             skipped.append((kind, missing))
             continue
-        family_id = f"{kind}::{args.instance:04d}"
+        family_id = kind if "::" in kind else f"{kind}::{args.instance:04d}"
         if only and family_id not in only:
             continue
         if family_id not in manifest["assignments"]:
@@ -127,7 +132,7 @@ def main() -> None:
             continue
         source_path = Path(str(row["source"]).replace("local-synthetic:", "")).expanduser()
         source_text = source_path.read_text(encoding="utf-8").strip()
-        prompt = build_prompt(kind, source_text)
+        prompt = build_prompt(family_id.split("::")[0], source_text)
         records.append({
             "family": family_id,
             "source_class": "synthetic",

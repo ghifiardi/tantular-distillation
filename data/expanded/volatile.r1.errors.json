@@ -1,0 +1,19 @@
+{
+  "infrastructure_failures": [
+    {
+      "index": 1,
+      "family": "prose:tanyaDokumen::0001",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 0,
+      "family": "prose:cekAman::0001",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 2,
+      "family": "prose:umum::0000",
+      "error": "ConnectError('All connection attempts failed')"
+    }
+  ]
+}
