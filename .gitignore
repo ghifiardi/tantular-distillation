@@ -11,3 +11,10 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+# Secrets never belong in the repo. The gateway key is read from
+# TANTULAR_GATEWAY_KEY at runtime; if you keep it in a file, keep it here.
+.env
+.env.*
+*.key
+secrets/
