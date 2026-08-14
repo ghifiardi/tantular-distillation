@@ -123,6 +123,24 @@ def check(records: list[dict], manifest: dict, gate: bool = False) -> list[str]:
         if len(seen) > 1:
             errors.append(f"family {family_id} straddles splits: {sorted(seen)}")
 
+    # SOURCE-level leakage. The family-level check above is necessary but not
+    # sufficient: families are partitioned, sources are not. One document
+    # backing families in both train and eval means eval measures memorisation
+    # of training material, while every family-level invariant still passes.
+    source_splits = defaultdict(set)
+    for record in records:
+        digest = (record.get("source_sha256")
+                  or record.get("provenance", {}).get("source_sha256"))
+        if digest:
+            source_splits[digest].add(record.get("split"))
+    straddling = {d: sorted(s) for d, s in source_splits.items() if len(s) > 1}
+    if straddling:
+        errors.append(
+            f"{len(straddling)} source document(s) appear in MORE THAN ONE split — "
+            "eval would measure memorisation of training material: "
+            + "; ".join(f"{d[:12]}...{s}" for d, s in list(straddling.items())[:4])
+        )
+
     # Splits must still agree with the manifest — a trace could carry a split
     # that was correct under an older assignment.
     for record in records:

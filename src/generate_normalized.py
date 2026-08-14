@@ -42,6 +42,11 @@ ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = ROOT / "calibration" / "parity" / "chat_template.jinja"
 
 # The model's answer channel. Everything before it is private reasoning.
+# Prompt-set fields that must survive into every trace. A field missing here
+# does not fail loudly — it disables whatever downstream check reads it, while
+# that check keeps reporting success.
+CARRY_FROM_PROMPT = ("source_class", "corpus_role", "source_sha256")
+
 FINAL_MARKER = "<|start|>assistant to=user<|message|>"
 STOP_TOKENS = ("<|eot|>", "<|end|>", "<|return|>")
 
@@ -257,11 +262,12 @@ async def run(args: argparse.Namespace) -> None:
         record = {
             "family": prompt["family"],
             "split": prompt["split"],
-            # Labels travel from the prompt set into every trace. Without this
-            # a candidate corpus is indistinguishable from training data on
-            # disk, and the label lives only in a filename.
-            "source_class": prompt.get("source_class", "unknown"),
-            "corpus_role": prompt.get("corpus_role", "unlabelled"),
+            # Everything the prompt set knows that the corpus needs travels
+            # with the trace. Carried as a declared list rather than
+            # field-by-field: source_class, corpus_role and source_sha256 were
+            # each lost in turn, and each loss silently disabled a downstream
+            # check that looked like it was running.
+            **{field: prompt[field] for field in CARRY_FROM_PROMPT if field in prompt},
             "system": prompt.get("system", ""),
             "user": prompt["user"],
             # The answer channel only. Reasoning is recorded separately and
