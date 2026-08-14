@@ -200,6 +200,21 @@ async def run(args: argparse.Namespace) -> None:
     prompts = [json.loads(l) for l in
                Path(args.prompts).read_text(encoding="utf-8").splitlines() if l.strip()]
 
+    # Resume. A long run over an SSH forward WILL be interrupted — it has been
+    # twice this session — and without this each interruption costs the whole
+    # elapsed time. Families already written are skipped, so a resumed run
+    # completes the same corpus rather than starting a second one.
+    out_path = Path(args.out)
+    already = set()
+    if args.resume and out_path.exists():
+        for line in out_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                already.add(json.loads(line)["family"])
+        before = len(prompts)
+        prompts = [p for p in prompts if p["family"] not in already]
+        print(f"resuming: {len(already)} families already present, "
+              f"{len(prompts)} of {before} remaining")
+
     manifest = splits_module.load()
     splits_module.verify(manifest)
     for prompt in prompts:
@@ -222,6 +237,9 @@ async def run(args: argparse.Namespace) -> None:
             )
         if needs_approval:
             print(f"EGRESS APPROVED [{args.egress_approval}]: {needs_approval} -> {args.host}")
+
+    if args.limit:
+        prompts = prompts[:args.limit]
 
     print(f"normalized run — {args.teacher} @ {args.host} ({resolved['HOST_QUANTIZATION']})")
     print(f"  template sha256   {template_hash[:16]}")
@@ -319,12 +337,14 @@ async def run(args: argparse.Namespace) -> None:
             continue
         records.append(record)
 
-    out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", encoding="utf-8") as handle:
+    mode = "a" if (args.resume and already) else "w"
+    with out_path.open(mode, encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-    print(f"wrote {len(records)}/{len(prompts)} traces -> {out_path}")
+    total = len(records) + len(already)
+    print(f"wrote {len(records)}/{len(prompts)} traces -> {out_path}"
+          + (f"  (corpus now {total})" if already else ""))
 
     if malformed:
         path = out_path.with_suffix(".malformed.jsonl")
@@ -358,6 +378,12 @@ def main() -> None:
                         help="explicit stop sequence (repeatable). Default: none — "
                              "EOS terminates generation, verified against production. "
                              "Must be identical on both arms.")
+    parser.add_argument("--limit", type=int, default=0,
+                        help="cap prompts this invocation; with --resume, chunks a "
+                             "long run so an interruption costs one chunk")
+    parser.add_argument("--resume", action="store_true",
+                        help="skip families already in --out and append; makes an "
+                             "interrupted run cheap to finish")
     parser.add_argument("--concurrency", type=int, default=0)
     asyncio.run(run(parser.parse_args()))
 
