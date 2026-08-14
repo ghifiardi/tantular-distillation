@@ -257,6 +257,11 @@ async def run(args: argparse.Namespace) -> None:
         record = {
             "family": prompt["family"],
             "split": prompt["split"],
+            # Labels travel from the prompt set into every trace. Without this
+            # a candidate corpus is indistinguishable from training data on
+            # disk, and the label lives only in a filename.
+            "source_class": prompt.get("source_class", "unknown"),
+            "corpus_role": prompt.get("corpus_role", "unlabelled"),
             "system": prompt.get("system", ""),
             "user": prompt["user"],
             # The answer channel only. Reasoning is recorded separately and
