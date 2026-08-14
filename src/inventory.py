@@ -164,6 +164,23 @@ def inspect_artifact(source: str) -> str | None:
     return None
 
 
+def _artifact_path(source: str) -> pathlib.Path:
+    raw = str(source)
+    for prefix in ("local-synthetic:", "local:", "drive:"):
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+            break
+    return pathlib.Path(raw).expanduser()
+
+
+def hash_artifact(source: str) -> str | None:
+    path = _artifact_path(source)
+    if not path.is_file():
+        return None
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def missing_fields(row: dict) -> list[str]:
     """What this stratum still needs. Empty means ready to seed."""
     missing = [f for f in REQUIRED_ALWAYS if not row.get(f)]
@@ -206,6 +223,16 @@ def missing_fields(row: dict) -> list[str]:
         problem = inspect_artifact(source)
         if problem:
             missing.append(f"source(ARTIFACT: {problem})")
+        # A recorded hash that no longer matches its file means the artifact
+        # changed after approval. The row then attests to content that is no
+        # longer there — silently, since every other field still looks fine.
+        recorded = row.get("source_sha256")
+        if recorded and not problem:
+            actual = hash_artifact(source)
+            if actual and actual != recorded:
+                missing.append(
+                    f"source_sha256(STALE: recorded {recorded[:12]}..., "
+                    f"file is {actual[:12]}... — artifact changed after approval)")
     return missing
 
 

@@ -1,3 +1,7 @@
+# Source inventory — which approved material backs each stratum.
+# Regenerate rows with: python3 src/inventory.py refresh
+# (human-filled fields are preserved)
+
 document:email:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -16,7 +20,7 @@ document:email:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:email/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
+  source_sha256: 1e5d83bc7c8c6ea144b58b9cd7e6e9d0b873066b0d043fe61848cb18075df585
 document:memo:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -54,7 +58,7 @@ document:report:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:report/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
+  source_sha256: e237608c47f0a4c7f305b793ef907b772c736762732111db4f3fad37851bf63d
 document:slide-text:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -73,7 +77,7 @@ document:slide-text:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:slide-text/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
+  source_sha256: 1a5193a1fba982001b6cbdbc1da7e40cc16e08c4a146820192ace0e2159b0bef
 document:spreadsheet-text:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -92,7 +96,7 @@ document:spreadsheet-text:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:spreadsheet-text/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
+  source_sha256: c22c648df9dffe960456ebc7872a8f52d23846f67e07aea21e0671bcd2d78b3e
 edit:elaborasi:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -111,7 +115,7 @@ edit:elaborasi:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:elaborasi/synthetic-id.txt
   source_class: synthetic
-  source_sha256: d5b036573ad99dc30e1998b9d5d8db97503ea846120f3d9dc78c2a4709007aa8
+  source_sha256: 015a54404d1a9a9406019068f702e9d195658152257fcb5c0d1395be5bd1e1d9
 edit:koreksi:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -149,7 +153,7 @@ edit:perjelas:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:perjelas/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 12a7f89e44650dbde4805e5359bc8dde5a02d54c2318b568ab0bacff79c1573a
+  source_sha256: 313c79c458eab395f88d3c45bd2d9596b7aae9ba175ff3cacc2aa2d94628ff9e
 edit:restrukturisasi:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -168,7 +172,7 @@ edit:restrukturisasi:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:restrukturisasi/synthetic-id.txt
   source_class: synthetic
-  source_sha256: ccae245a6e8add05047ef743df1c730f4a3c63ce259001504723f4ca1d935556
+  source_sha256: 478b81a4336df0af1d3469498008c37ee9eaf409dba97d27821ef02c65ff0eae
 edit:ringkas_bagian:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -187,7 +191,7 @@ edit:ringkas_bagian:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:ringkas_bagian/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 4f4541116c97365583e1b5fa16100a2ee1ab70dcfe7b2f050b077d9090fe0d4c
+  source_sha256: 9017d9af03318e5544a7bc30d70a46ee27b09e75c71fbe33f7242980df18fa55
 edit:ubah_istilah:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -206,7 +210,7 @@ edit:ubah_istilah:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:ubah_istilah/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 960614e8d4b5d7d818819931230e4c833c0cb20ec042cfd7c0e10ab2da8ee48b
+  source_sha256: f11b4b78549f2549f088a9cbeb9d9203851636ae9e0d4941dca53c571a7cd669
 prose:cekAman:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -358,7 +362,7 @@ router:CEK_AMAN:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:CEK_AMAN/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 463d8adf839e8d207d4a6418f054c7f80dcafe313cd3c8802ca7a161a853d72e
+  source_sha256: 8a6c446145e26a07fcf15cc922549347d59051ae1b044420fbb651b7a1551dc4
 router:DRAFT_TEKS:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -377,7 +381,7 @@ router:DRAFT_TEKS:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:DRAFT_TEKS/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 4eb5550ea51e9a3fc60f8d513e6a92faadc59ca889ba821cc0dc31d16164dbe3
+  source_sha256: 653b4b110184a4e8d2e57ff8ef150b63d2faf67fa8fb9bc01ec74dfbe92f56d6
 router:EDIT_TEKS:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -396,7 +400,7 @@ router:EDIT_TEKS:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:EDIT_TEKS/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 5a10c035e0fd419d0f6c1ee4460219c09dccb3badac9e524a9cc1f8318816dd0
+  source_sha256: 7af345281152eca42d2cdaaf348282aca7855caf93bb0cfc14aaafb405be2407
 router:RINGKAS:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -415,7 +419,7 @@ router:RINGKAS:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:RINGKAS/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 37e55da413399e7edfe1344283dfa48f04e4450076f87cbe83333838e00ef0a6
+  source_sha256: 516155cb96286afa54a76185f49724338bff8d7a8977f636888d95eea31a6f7b
 router:TANYA_DOKUMEN:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -434,7 +438,7 @@ router:TANYA_DOKUMEN:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:TANYA_DOKUMEN/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 1133d77f3cd7ef68530ad415d1e849b03321f50c9368c0fcfe25934e56d4fb1f
+  source_sha256: 21df323339c5ac2f5d5643dba9018b8dddb48bdb29cb59bedf71ebb68069441b
 router:TERJEMAH:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -453,7 +457,7 @@ router:TERJEMAH:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:TERJEMAH/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 6495740ee6c9af7a51b719f80344cbf1012eb959e7f3296643f0cfd8ce15ab85
+  source_sha256: 4601040d52336de3fa2cf268899172ee2a479ea6e5d72ce1f3a4a1187705ea91
 router:UBAH_NADA:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -472,7 +476,7 @@ router:UBAH_NADA:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:UBAH_NADA/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 3360b949ae47ad7ce0e6615924abb9b9f0c32c5b51b6668671e8523c1728d175
+  source_sha256: 77b80f19512311c260cd64814759e210358a24870d394871ae0f2592bbcb33f6
 router:UMUM:
   approval: SYNTHETIC-SOURCE-PACK-2026-08-14
   egress_ai19_approved: true
@@ -491,4 +495,4 @@ router:UMUM:
   redaction_record: not_applicable_synthetic_from_scratch
   source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:UMUM/synthetic-id.txt
   source_class: synthetic
-  source_sha256: 061c2c9e486c9b0b632a7a52752615b398e7d189b7bc84b60aa0e8243da10906
+  source_sha256: 47b74be9ac96908e88725cc779bc025cf3ba2f120ed5e62179e22c4631d076fa

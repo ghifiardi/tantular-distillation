@@ -98,6 +98,12 @@ def build_prompt(kind: str, source_text: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--role", default="pipeline_smoke",
+                        choices=("pipeline_smoke", "synthetic_candidate"),
+                        help="corpus_role stamped on every record. Neither is "
+                             "production-ready training data.")
+    parser.add_argument("--only", default="",
+                        help="comma-separated family ids, for volatile-family replicates")
     parser.add_argument("--instance", type=int, default=0,
                         help="which family instance per kind (default ::0000)")
     args = parser.parse_args()
@@ -105,6 +111,7 @@ def main() -> None:
     rows = inventory_module.load_inventory()
     manifest = splits_module.load()
 
+    only = {f.strip() for f in args.only.split(",") if f.strip()}
     records, skipped = [], []
     for kind in sorted(rows):
         row = rows[kind]
@@ -113,6 +120,8 @@ def main() -> None:
             skipped.append((kind, missing))
             continue
         family_id = f"{kind}::{args.instance:04d}"
+        if only and family_id not in only:
+            continue
         if family_id not in manifest["assignments"]:
             skipped.append((kind, [f"{family_id} not in split manifest"]))
             continue
@@ -122,7 +131,7 @@ def main() -> None:
         records.append({
             "family": family_id,
             "source_class": "synthetic",
-            "corpus_role": "pipeline_smoke",
+            "corpus_role": args.role,
             "source_sha256": row["source_sha256"],
             **prompt,
         })
@@ -132,7 +141,7 @@ def main() -> None:
         "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
         encoding="utf-8")
     print(f"wrote {len(records)} prompts -> {args.out}")
-    print("  corpus_role: pipeline_smoke  (NOT a training corpus)")
+    print(f"  corpus_role: {args.role}  (NOT production-ready training data)")
     if skipped:
         print(f"  skipped {len(skipped)} kind(s):")
         for kind, why in skipped:
