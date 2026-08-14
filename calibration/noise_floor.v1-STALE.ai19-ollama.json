@@ -1,4 +1,8 @@
 {
+  "_STALE": true,
+  "_stale_reason": "Measured on source-pack v1 prompts. Source pack v2 replaced every artifact, and volatility is a property of a PROMPT, not a family id — two families volatile here are stable under v2. Do NOT quote these figures against any v2 corpus.",
+  "_superseded_by": "calibration/noise_floor.v2.ai19-ollama.json",
+  "_source_pack": "v1",
   "arm": "ai19-ollama",
   "replicates": 3,
   "prompts": 52,

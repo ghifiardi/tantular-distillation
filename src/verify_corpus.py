@@ -77,6 +77,11 @@ def volatile_families() -> dict[str, list[str]]:
     flipping = {}
     for path in sorted((ROOT / "calibration").glob("noise_floor.*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
+        # A floor measured on retired prompts must not gate a current corpus.
+        # Volatility is a property of a PROMPT, not a family id: families that
+        # flipped under source-pack v1 are stable under v2.
+        if payload.get("_STALE"):
+            continue
         for family, detail in (payload.get("volatile_families") or {}).items():
             metrics = sorted(detail.get("metric_flips") or {})
             if metrics:

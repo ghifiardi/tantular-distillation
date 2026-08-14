@@ -1,0 +1,19 @@
+{
+  "_source_pack": "v2",
+  "_measured_from": "data/expanded/traces.r0.jsonl repeat groups",
+  "_note": "Repeat groups arise because 260 families share 78 prompts; each group is independent calls at identical settings, so it measures runtime variance.",
+  "groups": 49,
+  "answer_varies": 22,
+  "floors": {
+    "constraints_ok": 0.0,
+    "router_correct": 0.0,
+    "indonesian": 0.0,
+    "refusal": 0.0,
+    "empty": 0.0,
+    "truncated": 0.0
+  },
+  "kinds_with_flips": {},
+  "_LIMITATION_within_run_only": "These 49 groups are repeats WITHIN a single generation pass. The v1 floor was measured ACROSS separate runs (r0/r1/r2). They are not directly comparable: within-run repeats share session and batching conditions, and the v1 evidence showed variance is bimodal with mode selection plausibly tied to batching. A within-run floor can therefore understate across-run variance.",
+  "_across_run_v2_evidence": "Limited: volatile.r1/r2 give across-run observations for 3 families only. prose:cekAman::0001 and prose:tanyaDokumen::0001 were stable across 3 runs; prose:umum::0000 showed 2 modes. So across-run variance is NOT zero under v2, even though the within-run metric floor is.",
+  "_use": "Do not treat 0.0 as the across-run floor. A true v2 across-run floor requires re-running the expanded set and comparing passes."
+}
