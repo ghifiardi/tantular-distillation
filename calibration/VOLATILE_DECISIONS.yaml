@@ -1,0 +1,27 @@
+# Recorded decisions for families whose output varies across runs.
+#
+# The control arm's variance is BIMODAL, not diffuse: identical settings and
+# identical prompt bytes produce one of a small number of stable answers. A
+# single trace from such a family records whichever mode that run landed in,
+# so each one needs an explicit decision before it can enter training.
+#
+#   include_all  - modes are all valid teacher output; keep every replicate,
+#                  grouped so they count as ONE family's variation
+#   include_one  - one mode is correct and the others are not; keep it and say why
+#   exclude      - no single trace represents the family faithfully
+
+"prose:umum::0000":
+  decision: include_all
+  decided_by: ghifiardi
+  decided_on: 2026-08-14
+  observations: 3
+  distinct_modes: 2
+  rationale: >-
+    Both answers are reasonable summaries of the same source, differing in
+    structure and phrasing rather than in correctness. Excluding either would
+    discard valid teacher variation.
+  handling: >-
+    Preserve all three traces with their replicate_group and mode_id. They are
+    repeated observations of ONE family, not three independent source families,
+    and must not be collapsed into a single trace nor counted as three separate
+    training examples.

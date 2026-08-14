@@ -32,6 +32,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import calibrate
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+DECISIONS_PATH = Path(__file__).resolve().parent.parent / "calibration" / "VOLATILE_DECISIONS.yaml"
+
 
 def read(path: Path) -> list[dict]:
     if not path.exists():
@@ -58,6 +65,12 @@ def main() -> None:
               "records whichever mode that run landed in.")
         sys.exit(1)
 
+    recorded_decisions = {}
+    if yaml and DECISIONS_PATH.exists():
+        recorded_decisions = yaml.safe_load(DECISIONS_PATH.read_text(encoding="utf-8")) or {}
+        print(f"recorded decisions: {DECISIONS_PATH.name} "
+              f"({len(recorded_decisions)} family/families)\n")
+
     decisions = {}
     for family, records in sorted(replicated.items()):
         answers = [r.get("completion", "").strip() for r in records]
@@ -80,8 +93,26 @@ def main() -> None:
             if values and len(set(map(str, values))) > 1:
                 print(f"  METRIC FLIP  {metric}: {values}")
 
+        recorded = (recorded_decisions.get(family) or {})
         if len(modes) == 1:
             decisions[family] = "stable across observations — safe to include"
+        elif recorded.get("decision"):
+            decisions[family] = (f"{recorded['decision'].upper()} "
+                                 f"(recorded {recorded.get('decided_on','?')} "
+                                 f"by {recorded.get('decided_by','?')})")
+            print(f"  DECISION: {recorded['decision']} — {recorded.get('rationale','').strip()}")
+            # include_all means these are ONE family's repeated observations.
+            # Counting them as separate examples would triple this family's
+            # weight and teach the model that variation is three facts.
+            grouped = [r for r in records if r.get("replicate_group") == family]
+            if recorded["decision"] == "include_all" and len(grouped) != len(records):
+                print(f"  WARNING: {len(records) - len(grouped)} trace(s) lack "
+                      "replicate_group — they would count as independent examples")
+                decisions[family] = "MULTI-MODE — replicate_group missing on some traces"
+            else:
+                mode_ids = Counter(r.get("mode_id") for r in grouped)
+                print(f"  grouped as ONE family, {len(grouped)} observations "
+                      f"{dict(mode_ids)}")
         else:
             decisions[family] = "MULTI-MODE — decide INCLUDE ALL / INCLUDE ONE / EXCLUDE"
         print()
@@ -94,7 +125,19 @@ def main() -> None:
         print(f"\n{len(unresolved)} family/families need an explicit, recorded decision.")
         print("Until then this corpus is NOT promoted to training.")
         sys.exit(2)
-    print("\nAll replicated families stable across observations.")
+    # "Stable" would be false for a multi-mode family carrying a decision:
+    # it is resolved, not stable, and saying otherwise would erase the reason
+    # the replicates exist.
+    resolved = [f for f, d in decisions.items() if "(recorded" in d]
+    stable = [f for f in decisions if f not in resolved]
+    print()
+    if stable:
+        print(f"{len(stable)} family/families stable across observations.")
+    if resolved:
+        print(f"{len(resolved)} family/families MULTI-MODE with a recorded decision — "
+              "resolved, not stable.")
+        print("Their replicates must stay grouped: repeated observations of one "
+              "family, not independent examples.")
 
 
 if __name__ == "__main__":
