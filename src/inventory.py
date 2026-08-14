@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import sys
 from collections import Counter
 from pathlib import Path
@@ -132,6 +133,37 @@ def save(inventory: dict) -> Path:
     return INVENTORY_PATH
 
 
+MIN_SOURCE_BYTES = 120
+SHELL_ARTIFACT_MARKERS = ("pbpaste", "pbcopy", "cat >", "cat <<", "echo >", "EOF")
+
+
+def inspect_artifact(source: str) -> str | None:
+    """Return a problem description, or None if the artifact looks like content."""
+    raw = str(source)
+    for prefix in ("local-synthetic:", "local:", "drive:"):
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+            break
+    if raw.startswith("drive/"):
+        return None  # a Drive reference, not a local artifact to inspect
+    path = pathlib.Path(raw).expanduser()
+    if not path.exists():
+        return "artifact missing on disk"
+    if path.is_dir():
+        return None
+    size = path.stat().st_size
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace")[:400]
+    except OSError as error:
+        return f"unreadable ({error})"
+    if any(m in head for m in SHELL_ARTIFACT_MARKERS) and size < 400:
+        return (f"captured shell command, not a document "
+                f"({size}B: {head.strip()[:52]!r})")
+    if size < MIN_SOURCE_BYTES:
+        return f"implausibly small for a source document ({size}B)"
+    return None
+
+
 def missing_fields(row: dict) -> list[str]:
     """What this stratum still needs. Empty means ready to seed."""
     missing = [f for f in REQUIRED_ALWAYS if not row.get(f)]
@@ -164,6 +196,16 @@ def missing_fields(row: dict) -> list[str]:
         if (generator.get("service") or "").lower() not in ("", "local", "handwritten"):
             if not row.get("egress_reference"):
                 missing.append("egress_reference")
+
+    # Content sanity. Metadata completeness says nothing about content: a
+    # 37-byte file containing the shell command that was meant to create it
+    # passes existence, hashing and every required field, and would be
+    # reported READY.
+    source = row.get("source")
+    if source:
+        problem = inspect_artifact(source)
+        if problem:
+            missing.append(f"source(ARTIFACT: {problem})")
     return missing
 
 

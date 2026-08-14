@@ -1,377 +1,494 @@
-# Source inventory — which approved material backs each stratum.
-#
-# Fill in `source`, `approval`, and `redacted` before writing seed
-# prompts for a kind. A kind without an approved, redacted source is
-# BLOCKED: do not invent documents to satisfy coverage.
-#
-# `egress_approved` gates sending this material to an off-premises
-# host (rented GPU, HF Jobs). Default false — approval must be
-# explicit, per kind, not assumed.
-#
-# Regenerate rows with: python3 src/inventory.py refresh
-# (human-filled fields are preserved)
-
 document:email:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:email/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
 document:memo:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:memo/memo-id.txt
+  source_class: synthetic
+  source_sha256: 7b85519677892302b8c86982db6a92be11cfa92b5a357781ed61150325c834fa
 document:report:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:report/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
 document:slide-text:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:slide-text/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
 document:spreadsheet-text:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/document:spreadsheet-text/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 156d3c12a68b33ffe399755259821e435b9399c4d0a60da67c3daa1b3e6782a1
 edit:elaborasi:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:elaborasi/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: d5b036573ad99dc30e1998b9d5d8db97503ea846120f3d9dc78c2a4709007aa8
 edit:koreksi:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:koreksi/source-koreksi-id.txt
+  source_class: synthetic
+  source_sha256: f7c70152a3d24b37cb97bef159141687368fd99983e9732d57592eb81ccc4f91
 edit:perjelas:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:perjelas/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 12a7f89e44650dbde4805e5359bc8dde5a02d54c2318b568ab0bacff79c1573a
 edit:restrukturisasi:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:restrukturisasi/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: ccae245a6e8add05047ef743df1c730f4a3c63ce259001504723f4ca1d935556
 edit:ringkas_bagian:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:ringkas_bagian/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 4f4541116c97365583e1b5fa16100a2ee1ab70dcfe7b2f050b077d9090fe0d4c
 edit:ubah_istilah:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/edit:ubah_istilah/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 960614e8d4b5d7d818819931230e4c833c0cb20ec042cfd7c0e10ab2da8ee48b
 prose:cekAman:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/prose:cekAman/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 53fd0aa394209028e02b8b4457509a74ecc37f65aa498e45586c66c6c1b0f15c
 prose:draftTeks:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/prose:draftTeks/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: ada1e2e77fc83e9e80eb6b56e1791f7dea5041b1e05f9f72d0745d75b7d38aa0
 prose:ringkas:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/prose:ringkas/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 9da93fdd7a047379d81d3ce43c01762595c64a8b7639d8d76a6c85dcd05dace4
 prose:tanyaDokumen:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/prose:tanyaDokumen/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 79d9c89cfa7b77ebec66bacc124b145b2f21295097069a75ef0bab10ca12e108
 prose:terjemah:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/prose:terjemah/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 3013449556dddbf972a2479e09b886c7e02debac42cc39ca5820bb3bc0476128
 prose:ubahNada:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/prose:ubahNada/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 2197b82f9f468a4479da9355ef939a74c57874e46455de8d0a67d933ee6e9c05
 prose:umum:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/prose:umum/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 73ed5bee16525a64329f09af313427e63066b9deb69656e7ecc049a79380d3e5
 router:CEK_AMAN:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:CEK_AMAN/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 463d8adf839e8d207d4a6418f054c7f80dcafe313cd3c8802ca7a161a853d72e
 router:DRAFT_TEKS:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:DRAFT_TEKS/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 4eb5550ea51e9a3fc60f8d513e6a92faadc59ca889ba821cc0dc31d16164dbe3
 router:EDIT_TEKS:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:EDIT_TEKS/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 5a10c035e0fd419d0f6c1ee4460219c09dccb3badac9e524a9cc1f8318816dd0
 router:RINGKAS:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:RINGKAS/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 37e55da413399e7edfe1344283dfa48f04e4450076f87cbe83333838e00ef0a6
 router:TANYA_DOKUMEN:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:TANYA_DOKUMEN/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 1133d77f3cd7ef68530ad415d1e849b03321f50c9368c0fcfe25934e56d4fb1f
 router:TERJEMAH:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:TERJEMAH/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 6495740ee6c9af7a51b719f80344cbf1012eb959e7f3296643f0cfd8ce15ab85
 router:UBAH_NADA:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:UBAH_NADA/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 3360b949ae47ad7ce0e6615924abb9b9f0c32c5b51b6668671e8523c1728d175
 router:UMUM:
-  approval: null
-  egress_ai19_approved: false
-  egress_reference: null
+  approval: SYNTHETIC-SOURCE-PACK-2026-08-14
+  egress_ai19_approved: true
+  egress_reference: AI19-SYNTHETIC-EGRESS-2026-08-14
   families: 10
-  generator: null
+  generator:
+    service: local-script
+    model: none
+    version: tantular-source-pack-v1
+    prompt_template_sha256: b143895dd6cc5b73a39ff090407a20023993705c09971710195c2123432776af
+    generated_at: '2026-08-14T10:23:18+07:00'
   notes: ''
-  originals_location: null
-  owner: null
+  originals_location: /Users/raditio.ghifiardigmail.com/tantular-source-pack
+  owner: Raditio Ghifiardi
   redacted: false
-  redaction_record: null
-  source: null
-  source_class: null
-  source_sha256: null
+  redaction_record: not_applicable_synthetic_from_scratch
+  source: local-synthetic:/Users/raditio.ghifiardigmail.com/tantular-source-pack/router:UMUM/synthetic-id.txt
+  source_class: synthetic
+  source_sha256: 061c2c9e486c9b0b632a7a52752615b398e7d189b7bc84b60aa0e8243da10906
