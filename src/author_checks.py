@@ -74,10 +74,19 @@ def figures(*texts: str) -> list[str]:
     return found
 
 
-def checks_for(kind: str, scenario: dict) -> dict:
+def checks_for(kind: str, scenario: dict, task_variant: str = "") -> dict:
     """The checks a stratum's own instruction entails. Nothing more."""
     s = scenario
     finding_figures = figures(*s["findings"])
+
+    # Prompt set v2 asks for the table back, so cell values become checkable.
+    # Keyed on the task variant, not the kind: both variants are
+    # document:spreadsheet-text over the same source, and only the instruction
+    # tells them apart. `table_rows` requires a row's cells to appear together
+    # on one line, which a flat preserve list cannot express — see calibrate.
+    if task_variant == "table-reproduction":
+        return {"table_rows": [[row[0], str(row[1]), str(row[2]), str(row[3]),
+                                row[4], row[5]] for row in s["items"]]}
 
     # --- document ---------------------------------------------------------
     if kind == "document:email":
@@ -169,6 +178,10 @@ def unsatisfiable(checks: dict, source: str) -> list[str]:
     for token in checks.get("preserve", []):
         if str(token).lower() not in source.lower():
             problems.append(f"preserve {token!r} does not occur in the source")
+    for row in checks.get("table_rows", []):
+        for cell in row:
+            if str(cell).lower() not in source.lower():
+                problems.append(f"table_rows cell {cell!r} does not occur in the source")
     for term in checks.get("must_not_contain", []):
         if term.lower() not in source.lower():
             problems.append(f"must_not_contain {term!r} is already absent — vacuous")
@@ -210,7 +223,8 @@ def main() -> None:
         if kind.startswith("router:") and row.get("checks"):
             new = row["checks"]
         else:
-            new = checks_for(kind, author_sources.SCENARIOS[split])
+            new = checks_for(kind, author_sources.SCENARIOS[split],
+                             row.get("task_variant", ""))
         problems.extend(f"{row['family']}: {p}" for p in unsatisfiable(new, row["user"]))
         row = {**row, "checks": new}
         per_kind.setdefault(kind, set()).update(new)
@@ -249,8 +263,14 @@ def main() -> None:
     args.prompts.write_text(
         "\n".join(json.dumps(r, ensure_ascii=False) for r in updated) + "\n",
         encoding="utf-8")
-    print(f"\nwrote {args.prompts} — system/user byte-identical, "
-          f"so traces already on disk stay valid and only need re-scoring")
+    # Scoped claim: this tool did not move system/user, so traces generated
+    # against THIS prompt file stay valid. It says nothing about traces
+    # generated against a different prompt file — v2 revised the spreadsheet
+    # instruction, and no amount of care here makes a v1 trace an observation
+    # of a v2 prompt.
+    print(f"\nwrote {args.prompts} — this tool changed only `checks`; "
+          f"system/user are byte-identical,\nso traces generated against THIS "
+          f"prompt file stay valid and need only re-scoring")
 
 
 if __name__ == "__main__":

@@ -135,6 +135,18 @@ def score_trace(record: dict) -> dict:
         kept = [token for token in checks["preserve"] if token.lower() in text.lower()]
         result["source_preserved"] = len(kept) / len(checks["preserve"])
 
+    # Table fidelity: a row counts only if all of its cells appear TOGETHER on
+    # one line. A flat `preserve` list cannot express this — cell values like
+    # "1" or "8" match somewhere in almost any prose, so a table could score as
+    # fully preserved while its rows were shuffled, merged, or invented. The
+    # co-occurrence requirement is what makes the digit mean the right row.
+    if "table_rows" in checks:
+        lines = [l.lower() for l in text.splitlines()]
+        intact = sum(1 for row in checks["table_rows"]
+                     if any(all(str(cell).lower() in line for cell in row)
+                            for line in lines))
+        result["source_preserved"] = intact / len(checks["table_rows"])
+
     # Language integrity — only meaningful on substantial prose, and skipped
     # for translation tasks, where English is the correct output.
     if len(text.split()) >= 20 and "terjemah" not in result["family"].lower() \
