@@ -1,5 +1,7 @@
 {
   "_source_pack": "v2",
+  "_NAMING": "The 'v2' in this filename is the SOURCE PACK version. There is now also a PROMPT SET v2 (prompts/expanded.v2.jsonl) — a different axis entirely. Everything in this file was measured against prompt set v1 (prompts/expanded.jsonl) over source pack v2. Prompt set v2 revised the 10 document:spreadsheet-text prompts, so its 10 new digests have no traces here and its floor is recorded separately in noise_floor.promptset-v2.ai19-ollama.json. Do not read the two as versions of one series.",
+  "_prompt_set": "v1 (prompts/expanded.jsonl)",
   "_measured_from": "data/expanded/traces.r0.jsonl repeat groups",
   "_note": "Repeat groups arise because 260 families share 78 prompts; each group is independent calls at identical settings, so it measures runtime variance.",
   "groups": 49,
