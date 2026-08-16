@@ -47,16 +47,27 @@
       "refusal": 0.0,
       "empty": 0.0,
       "truncated": 0.0,
-      "source_preserved": null
+      "source_preserved": 0.0
     },
     "_metric_coverage_unique_prompt": {
-      "constraints_ok": "24/78",
+      "constraints_ok": "48/78",
       "router_correct": "24/78",
       "indonesian": "51/78",
       "refusal": "78/78",
       "empty": "78/78",
       "truncated": "78/78",
-      "source_preserved": "0/78 — NO COVERAGE, no prompt carries a preserve list"
+      "source_preserved": "39/78"
+    },
+    "_rescored_at_wider_coverage": {
+      "_what": "The floor above was FIRST measured when only the 8 router strata carried checks (constraints_ok 24/78, source_preserved 0/78). src/author_checks.py then derived checks for 13 further strata, taking coverage to 21/26. Both passes were RE-SCORED, not regenerated: checks are scoring metadata and are not rendered into the prompt, so all 520 traces still hash to the prompt_sha256 recorded at generation time (verified, 0 mismatches).",
+      "constraints_ok_coverage": "24/78 -> 48/78",
+      "source_preserved_coverage": "0/78 -> 39/78",
+      "result": "Every across-pass delta remained 0.0 at the wider coverage. The floor now rests on twice the constraint evidence and on figure-preservation evidence that did not exist before.",
+      "_two_scorer_defects_found_by_doing_this": [
+        "calibrate.bullets() counted a Markdown bold heading ('**Ringkasan**') as a bullet, because the pattern accepted a bare leading asterisk. A compliant 5-bullet slide scored as 6 and failed max_bullets=5, which presented as a model failure (constraints_ok 0.98) that did not exist. Fixed: a marker must be followed by whitespace, and '**' is excluded. Re-checked the committed int4 calibration baseline under both counters — constraint_satisfaction is 0.9706 either way, so no recorded result needed revision.",
+        "The first spreadsheet check demanded all 16 cell values and the 75,0 threshold, scoring the stratum at 0.264. The completions were correct: the instruction asks only for status and owner, which they gave in full. An over-broad check reads exactly like a model failure. Narrowed to row labels, statuses and owner."
+      ],
+      "_still_unmeasured": "Table-value fidelity. Checking that cell values survive requires a prompt that asks for the table back; this stratum's prompt asks for status and owner. That is a new prompt, therefore a new generation — not a check that can be attached to the traces on disk."
     },
     "_finding": "The across-run METRIC floor is 0.0, same as the within-run floor — so the within-run measurement did not understate the metric floor after all. But answer TEXT is not equally stable: 2 of 78 prompts (2.6%) produced a mode in one pass that was absent from the other. Textual variance across runs is real and non-zero; it simply did not move any metric.",
     "_mode_shift_groups": [
@@ -73,9 +84,14 @@
         "stratum_has_checks": false
       }
     ],
-    "_LIMITATION_coverage": "This 0.0 floor is not a statement about the whole corpus. constraints_ok and router_correct are decidable only on the 8 router strata (closed_set is the only check kind in use anywhere); the 18 document/edit/prose strata carry no checks and no expected label, so they contribute to the answer-agreement counts but to no metric mean. Both mode-shift groups fall in unchecked strata — which is where a shift would be invisible to the metrics by construction. Read the 0.0 as: no metric moved among the metrics that can move.",
-    "_use": "ROUTER-STRATA FLOOR ONLY. Usable as the across-run floor for the 8 router strata. Two prohibitions, standing until the non-router strata carry checks and this comparison is re-run: (1) do NOT cite this 0.0 as evidence of corpus-wide reproducibility — 18 of 26 strata contributed to no metric in it; (2) do NOT promote this corpus to training. A pass whose 18 unchecked strata were never mechanically verified is not cleared for training merely because the checked 8 held steady."
+    "_LIMITATION_coverage": "Still not a whole-corpus statement, though the gap is much smaller. 21 of 26 strata now carry a check; 5 remain without one (prose:cekAman, prose:draftTeks, prose:tanyaDokumen, prose:ubahNada, prose:umum). Those are open-ended — explain, draft, re-register, assess — and entail no countable structure or figure that must survive, so they are deliberately left empty rather than given an invented constraint. They contribute to the answer-agreement counts and to refusal/empty/truncated/indonesian, but to neither constraints_ok nor source_preserved. Note also that both mode-shift groups (document:memo, edit:ubah_istilah) now DO sit in checked strata, and their metrics agreed across passes — the differing text was two acceptable answers, not one right and one wrong.",
+    "_use": "Usable as the across-run floor for the 21 checked strata, which is most of the corpus but not all of it. Standing constraints: (1) do NOT cite this 0.0 as unqualified corpus-wide reproducibility — 5 prose strata still contribute to no constraint or preservation metric, and table-value fidelity is unmeasured everywhere; (2) the bar on promoting this corpus to training was set while 18 strata were unchecked. It is now 5. Whether that clears the bar is a judgement for the corpus owner, not something this file should assert on its own — the measurement is here, the decision is not."
   },
 
-  "_next": "18 of 26 strata have no mechanical check. The edit strata are the sharpest gap: their prompts instruct 'Pertahankan angka persis seperti sumber' (preserve figures exactly as in source) and nothing verifies it — score_trace supports a `preserve` check that zero prompts populate. Add preserve lists to the edit strata and structural checks (max_sentences / max_bullets / must_contain) to the document and prose strata, then re-run this comparison so the floor covers more than the router."
+  "_next": [
+    "DONE — the edit strata now carry preserve lists, and 'Pertahankan angka persis seperti sumber' is verified rather than merely instructed. Coverage went 8/26 -> 21/26 via src/author_checks.py, and the floor was re-measured on the same bytes.",
+    "Table-value fidelity is unmeasured. document:spreadsheet-text asks only for status and owner, so no check on this prompt can test whether cell values survive. Needs a prompt that asks for the table back — a new prompt, hence a new generation.",
+    "5 open-ended prose strata (cekAman, draftTeks, tanyaDokumen, ubahNada, umum) remain uncheckable by mechanical means. If they need coverage, it is blind pairwise review, not another derived check — calibrate.py's own docstring reserves anything subjective for exactly that.",
+    "The 2/78 across-run text shift is characterised but not explained. Both groups sit in checked strata and both passes scored equally, so it is answer-selection variance under identical settings, plausibly batching-related as the v1 evidence suggested. Not blocking; worth knowing before anyone reads a small metric delta in a future run as signal."
+  ]
 }

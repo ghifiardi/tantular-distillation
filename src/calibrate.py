@@ -54,7 +54,37 @@ def sentences(text: str) -> int:
 
 
 def bullets(text: str) -> int:
-    return len([l for l in text.splitlines() if re.match(r"^\s*[-*•]|^\s*\d+[.)]\s", l)])
+    """Lines that are list items.
+
+    A bullet marker must be followed by whitespace, and a doubled asterisk is
+    excluded: the old pattern accepted a bare leading `*`, so a Markdown bold
+    heading like `**Ringkasan**` counted as a bullet. That charged outputs an
+    extra item they never emitted — a compliant 5-bullet slide scored as 6 and
+    failed a max_bullets of 5.
+    """
+    return len([l for l in text.splitlines()
+                if re.match(r"^\s*(?:[-•]|\*(?!\*))\s|^\s*\d+[.)]\s", l)])
+
+
+def paragraphs(text: str) -> int:
+    """Blank-line-separated blocks. 'Satu paragraf' is a real instruction in the
+    summarisation strata, and max_bullets cannot express it: it requires at
+    least one bullet, so it can never assert that prose stayed unbroken."""
+    return len([b for b in re.split(r"\n\s*\n", text.strip()) if b.strip()])
+
+
+def absent(text: str, terms: list[str]) -> list[str]:
+    """Terms that must NOT survive, matched on word boundaries.
+
+    The terminology and spelling-correction tasks are defined by what has to
+    disappear, not by what has to remain — 'replace setting, hacker, backup,
+    user, di-disable with standard Indonesian' is only satisfied if those words
+    are gone. must_contain cannot state that, so an unedited copy of the source
+    scored as a perfect edit. Word boundaries keep 'user' from matching inside
+    an unrelated word while still catching the plural.
+    """
+    return [t for t in terms
+            if re.search(rf"(?<!\w){re.escape(t)}(?!\w)", text, re.IGNORECASE)]
 
 
 def score_trace(record: dict) -> dict:
@@ -93,6 +123,10 @@ def score_trace(record: dict) -> dict:
         applicable.append(any(s.lower() in text.lower() for s in checks["must_contain_any"]))
     if "closed_set" in checks:
         applicable.append(re.sub(r"[^A-Z_]", "", text.upper()) in checks["closed_set"])
+    if "max_paragraphs" in checks:
+        applicable.append(paragraphs(text) <= checks["max_paragraphs"])
+    if "must_not_contain" in checks:
+        applicable.append(not absent(text, checks["must_not_contain"]))
     if applicable:
         result["constraints_ok"] = all(applicable)
 
