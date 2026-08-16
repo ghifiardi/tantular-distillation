@@ -14,6 +14,68 @@
   },
   "kinds_with_flips": {},
   "_LIMITATION_within_run_only": "These 49 groups are repeats WITHIN a single generation pass. The v1 floor was measured ACROSS separate runs (r0/r1/r2). They are not directly comparable: within-run repeats share session and batching conditions, and the v1 evidence showed variance is bimodal with mode selection plausibly tied to batching. A within-run floor can therefore understate across-run variance.",
-  "_across_run_v2_evidence": "Limited: volatile.r1/r2 give across-run observations for 3 families only. prose:cekAman::0001 and prose:tanyaDokumen::0001 were stable across 3 runs; prose:umum::0000 showed 2 modes. So across-run variance is NOT zero under v2, even though the within-run metric floor is.",
-  "_use": "Do not treat 0.0 as the across-run floor. A true v2 across-run floor requires re-running the expanded set and comparing passes."
+  "_across_run_v2_evidence": "Superseded by across_run below, which measures the full expanded set instead of the 3 volatile families. Retained for history: prose:cekAman::0001 and prose:tanyaDokumen::0001 were stable across 3 runs; prose:umum::0000 showed 2 modes.",
+
+  "across_run": {
+    "_measured_from": [
+      {
+        "pass": "A",
+        "path": "data/expanded/traces.r0.jsonl",
+        "sha256": "aedf54f0588f2a0a346f8db497ce642755c101b1a263e56b3cbdd99218015462",
+        "traces": 260
+      },
+      {
+        "pass": "B",
+        "path": "data/expanded-r2/traces.r0.jsonl",
+        "sha256": "ca0631ec72038cb6bb3c064c52898e30fb15d93dbf72802ff342d51f5affcf3f",
+        "traces": 260
+      }
+    ],
+    "_traces_are_gitignored": "Both files are excluded by .gitignore (*.jsonl). The digests above, plus data/<pass>/MANIFEST.json, are the committed record of which bytes this measurement read. Regenerating a pass produces different bytes and a different digest — that invalidates this result rather than reproducing it.",
+    "_tool": "src/cross_pass_report.py",
+    "_plan_consistency": "All 9 pinned fields identical across passes (split_fingerprint ccb5ff683228c4c9, template_sha256 114f55eb…, muse-glimmer:30b, int4_ollama, ai19-ollama, reasoning high, temperature 0.0, seed 0). The two passes are two observations of one configuration.",
+    "matched_prompt_digests": 78,
+    "answer_agreement": {
+      "single_answer_identical_in_both": 55,
+      "several_answers_same_set_in_both": 21,
+      "answer_set_differs_across_passes": 2
+    },
+    "metric_floors": {
+      "constraints_ok": 0.0,
+      "router_correct": 0.0,
+      "indonesian": 0.0,
+      "refusal": 0.0,
+      "empty": 0.0,
+      "truncated": 0.0,
+      "source_preserved": null
+    },
+    "_metric_coverage_unique_prompt": {
+      "constraints_ok": "24/78",
+      "router_correct": "24/78",
+      "indonesian": "51/78",
+      "refusal": "78/78",
+      "empty": "78/78",
+      "truncated": "78/78",
+      "source_preserved": "0/78 — NO COVERAGE, no prompt carries a preserve list"
+    },
+    "_finding": "The across-run METRIC floor is 0.0, same as the within-run floor — so the within-run measurement did not understate the metric floor after all. But answer TEXT is not equally stable: 2 of 78 prompts (2.6%) produced a mode in one pass that was absent from the other. Textual variance across runs is real and non-zero; it simply did not move any metric.",
+    "_mode_shift_groups": [
+      {
+        "digest": "5575fa7279f95c5e",
+        "families": ["document:memo::0000", "document:memo::0006", "document:memo::0007"],
+        "shape": "1 mode in A, 2 in B — B added a variant that answers the question in the negative ('the memo does not state implementation provisions')",
+        "stratum_has_checks": false
+      },
+      {
+        "digest": "8716cf1436c5be93",
+        "families": ["edit:ubah_istilah::0000", "edit:ubah_istilah::0001", "edit:ubah_istilah::0002", "edit:ubah_istilah::0005", "edit:ubah_istilah::0008"],
+        "shape": "2 modes in A, 1 in B — the mode missing from B preserved the source figures (346 bit, 5 jam) correctly; both modes are plausible edits",
+        "stratum_has_checks": false
+      }
+    ],
+    "_LIMITATION_coverage": "This 0.0 floor is not a statement about the whole corpus. constraints_ok and router_correct are decidable only on the 8 router strata (closed_set is the only check kind in use anywhere); the 18 document/edit/prose strata carry no checks and no expected label, so they contribute to the answer-agreement counts but to no metric mean. Both mode-shift groups fall in unchecked strata — which is where a shift would be invisible to the metrics by construction. Read the 0.0 as: no metric moved among the metrics that can move.",
+    "_use": "ROUTER-STRATA FLOOR ONLY. Usable as the across-run floor for the 8 router strata. Two prohibitions, standing until the non-router strata carry checks and this comparison is re-run: (1) do NOT cite this 0.0 as evidence of corpus-wide reproducibility — 18 of 26 strata contributed to no metric in it; (2) do NOT promote this corpus to training. A pass whose 18 unchecked strata were never mechanically verified is not cleared for training merely because the checked 8 held steady."
+  },
+
+  "_next": "18 of 26 strata have no mechanical check. The edit strata are the sharpest gap: their prompts instruct 'Pertahankan angka persis seperti sumber' (preserve figures exactly as in source) and nothing verifies it — score_trace supports a `preserve` check that zero prompts populate. Add preserve lists to the edit strata and structural checks (max_sentences / max_bullets / must_contain) to the document and prose strata, then re-run this comparison so the floor covers more than the router."
 }

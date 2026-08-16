@@ -1,0 +1,114 @@
+{
+  "infrastructure_failures": [
+    {
+      "index": 21,
+      "family": "edit:ubah_istilah::0001",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 19,
+      "family": "edit:ringkas_bagian::0009",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 18,
+      "family": "edit:ringkas_bagian::0008",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 20,
+      "family": "edit:ubah_istilah::0000",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 22,
+      "family": "edit:ubah_istilah::0002",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 23,
+      "family": "edit:ubah_istilah::0003",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 24,
+      "family": "edit:ubah_istilah::0004",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 25,
+      "family": "edit:ubah_istilah::0005",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 26,
+      "family": "edit:ubah_istilah::0006",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 27,
+      "family": "edit:ubah_istilah::0007",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 28,
+      "family": "edit:ubah_istilah::0008",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 29,
+      "family": "edit:ubah_istilah::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 30,
+      "family": "prose:cekAman::0000",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 31,
+      "family": "prose:cekAman::0001",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 32,
+      "family": "prose:cekAman::0002",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 33,
+      "family": "prose:cekAman::0003",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 34,
+      "family": "prose:cekAman::0004",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 35,
+      "family": "prose:cekAman::0005",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 36,
+      "family": "prose:cekAman::0006",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 37,
+      "family": "prose:cekAman::0007",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 38,
+      "family": "prose:cekAman::0008",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 39,
+      "family": "prose:cekAman::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    }
+  ]
+}

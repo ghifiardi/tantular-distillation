@@ -1,0 +1,64 @@
+{
+  "_what": "Digests of an on-disk generation pass. The traces themselves are gitignored (see .gitignore: *.jsonl); this pins which bytes a measurement referred to.",
+  "_note": "Pass B: independent re-run of the expanded set, same pinned configuration as pass A. Generated via the resumable runner after tunnel drops (see traces.r0.errors.json).",
+  "location": "data/expanded-r2",
+  "files": {
+    "traces.r0.jsonl": {
+      "sha256": "ca0631ec72038cb6bb3c064c52898e30fb15d93dbf72802ff342d51f5affcf3f",
+      "bytes": 511056,
+      "traces": 260,
+      "distinct_prompt_digests": 78,
+      "families": 260,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    },
+    "volatile.r1.jsonl": {
+      "sha256": "074ee3da7fc74feb206a667ed3c76accc143bad97aa5e16f9b3a228e6a3f0308",
+      "bytes": 6731,
+      "traces": 3,
+      "distinct_prompt_digests": 3,
+      "families": 3,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    },
+    "volatile.r2.jsonl": {
+      "sha256": "7b366cf83d0bebabff40b1a5d1a58f70b31d413c1dbd4114843effc103c0bd66",
+      "bytes": 6735,
+      "traces": 3,
+      "distinct_prompt_digests": 3,
+      "families": 3,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    }
+  },
+  "_errors_recorded_in": [
+    "traces.r0.errors.json"
+  ]
+}

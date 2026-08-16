@@ -1,0 +1,61 @@
+{
+  "_what": "Digests of an on-disk generation pass. The traces themselves are gitignored (see .gitignore: *.jsonl); this pins which bytes a measurement referred to.",
+  "_note": "Pass A of the across-run floor comparison (expanded set, first pass).",
+  "location": "data/expanded",
+  "files": {
+    "traces.r0.jsonl": {
+      "sha256": "aedf54f0588f2a0a346f8db497ce642755c101b1a263e56b3cbdd99218015462",
+      "bytes": 511180,
+      "traces": 260,
+      "distinct_prompt_digests": 78,
+      "families": 260,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    },
+    "volatile.r1.jsonl": {
+      "sha256": "e5d54145b846e6aa2b7449794b6f738c6afdc31f3bb4edd4b15b4a1630193fcc",
+      "bytes": 6785,
+      "traces": 3,
+      "distinct_prompt_digests": 3,
+      "families": 3,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    },
+    "volatile.r2.jsonl": {
+      "sha256": "2083e58471ba9f036c66e70c065628a73894086ef07a1f2808c0e32328128f79",
+      "bytes": 6781,
+      "traces": 3,
+      "distinct_prompt_digests": 3,
+      "families": 3,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    }
+  }
+}
