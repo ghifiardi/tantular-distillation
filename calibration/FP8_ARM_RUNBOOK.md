@@ -1,0 +1,181 @@
+# Running the FP8 treatment arm
+
+The pre-registered study in `acceptance.yaml` has two arms. Only the baseline
+(int4) was ever generated, so the study has **never been run** — not failed, not
+inconclusive. This runbook produces the missing arm and the verdict.
+
+Everything below is prepared and tested. The blind-review harness was exercised
+end to end against a simulated treatment arm before this was written.
+
+**Scope:** 52 synthetic calibration prompts. Not the 260-prompt corpus — the
+study measures runtime quality loss, and the calibration set is where the
+baseline still has headroom to move (`refusal` 0.0192, `constraints_ok` 0.9706;
+the v3 corpus sits at ceiling and would compare vacuously).
+
+---
+
+## Before you start
+
+**Use the normalized baseline.** `data/calibration/int4/traces.jsonl` predates
+the normalized protocol: it has no `prompt_sha256`, and its prompts were
+rendered by the server. Comparing it against a vLLM arm compares two differently
+worded questions. The correct baseline is:
+
+    data/calibration/int4-normalized/traces.jsonl
+
+`blind_review.py` refuses the old arm by name rather than letting it through.
+
+**Card choice is load-bearing.** Rent an **RTX 6000 Ada** or **L40S** (48GB,
+~$0.74–0.79/hr). Do **not** take an RTX A6000 at $0.33/hr: it is Ampere, has no
+FP8 path, and would silently serve int4 — producing a "treatment arm" identical
+to the baseline. `blind_review.py prepare` aborts if both arms report the same
+quantization, but catching it after an hour of rental is the expensive way.
+
+**No egress approval needed.** All 52 calibration prompts are
+`source_class: synthetic`, so the external-host gate passes without
+`--egress-approval`. Do not point this at real Office material.
+
+---
+
+## Step 1 — serve the teacher at FP8 (on the rented box)
+
+```bash
+git clone <this repo> && cd tantular-distillation
+pip install -r requirements.txt
+./scripts/serve_teacher.sh muse-glimmer rented-48gb
+```
+
+Serves on port 8001 via vLLM, `--quantization fp8`, `tensor-parallel-size 1`.
+Serve one teacher only — two 30B models do not co-resident in 48GB at FP8, and
+dropping both to int4 to fit defeats the entire purpose of the run.
+
+Expect a long first load while weights download.
+
+## Step 2 — preflight, and pin the signature
+
+```bash
+./.venv/bin/python src/preflight.py \
+    --teacher muse-glimmer --host rented-48gb \
+    --record data/calibration/fp8/signature.json
+```
+
+`--record`, not `--verify`: this arm has no signature yet. It pins which weights
+answered, so a later re-run cannot silently compare different weights. A model
+was already swapped out from under this study once.
+
+Confirm the output says `fp8`. If it says int4, stop — you are on an Ampere card
+and the run is worthless.
+
+## Step 3 — generate the treatment arm
+
+```bash
+./.venv/bin/python src/generate_normalized.py \
+    --teacher muse-glimmer --host rented-48gb \
+    --prompts prompts/calibration.jsonl \
+    --out data/calibration/fp8/traces.jsonl \
+    --resume
+```
+
+52 prompts. `--resume` makes it restartable if the pod drops. Decoding matches
+the pre-registered plan (temperature 0.0, max_tokens 4096) from the host and
+teacher configs — do not override them on the command line.
+
+## Step 4 — check the arm before trusting it
+
+```bash
+./.venv/bin/python src/calibrate.py score data/calibration/fp8/traces.jsonl
+```
+
+Sanity checks: 52 traces, `quantization: fp8`, no empties. If `empty_rate` or
+`truncation_rate` is non-zero, investigate before comparing — a broken arm will
+look like a quality difference.
+
+## Step 5 — gate 1, the critical metrics
+
+```bash
+./.venv/bin/python src/calibrate.py compare \
+    data/calibration/int4-normalized/traces.jsonl \
+    data/calibration/fp8/traces.jsonl \
+    --prompts prompts/calibration.jsonl
+```
+
+Scores both arms against `acceptance.yaml` `critical` (all at
+`max_regression_abs: 0.00` — int4 must be no worse) and `quality.indonesian`
+(0.05 tolerance).
+
+**Expect this half to be weakly informative.** The baseline is already at or
+near ceiling on most critical metrics, so they cannot separate the arms. Only
+`refusal` (0.0192) and `constraints_ok` (0.9706) have room to move. This is why
+step 6 is not optional.
+
+## Step 6 — gate 2, blind pairwise review
+
+The only metric that can see what the mechanical ones cannot. Quantization
+damage shows up as weaker inference, blander drafts, shallower summaries — none
+of which move a constraint check or a router label.
+
+```bash
+./.venv/bin/python src/blind_review.py prepare \
+    --baseline data/calibration/int4-normalized/traces.jsonl \
+    --treatment data/calibration/fp8/traces.jsonl \
+    --prompts prompts/calibration.jsonl \
+    --out data/calibration/_review \
+    --salt "<any string you choose>" --write
+```
+
+Produces three files:
+
+| file | purpose |
+|---|---|
+| `REVIEW.md` | 52 items, each with the task and two answers as A / B |
+| `VERDICTS.csv` | one row per item — fill in `A`, `B`, or `tie` |
+| `KEY.json` | which answer was which arm. **Do not open until verdicts are complete.** |
+
+Blinding is by salted hash *rank*, giving an exact 26/26 split of which arm sits
+in slot A, scattered through the item order. Hash parity was tried first and
+rejected: it is balanced only in expectation and put the baseline in slot A for
+nine consecutive items, which is long enough for a reviewer to start recognising
+a house style and partially unblind themselves.
+
+**Who reviews:** someone who did not generate the arms. Judge overall usefulness
+— correct reasoning, faithfulness to the source, usable as written. `tie` is a
+legitimate and expected verdict; most answers to an easy task genuinely are
+equivalent, and forcing a preference manufactures signal.
+
+Then:
+
+```bash
+./.venv/bin/python src/blind_review.py score --dir data/calibration/_review
+```
+
+Ties count as half a win. Scores `pairwise_win_rate` for the baseline against
+`acceptance.yaml` (`min_absolute: 0.40`). The scorer refuses to run if
+`REVIEW.md` changed after preparation, so verdicts cannot be matched against an
+edited packet.
+
+## Step 7 — record the verdict
+
+`acceptance.yaml`: **all critical pass AND all quality pass**, else FAIL.
+
+- **PASS** → "int4 acceptable for this corpus, as an explicit recorded waiver."
+  The waiver still stands; a pass does not delete the FP8 gate, and
+  `verify_corpus.py --gate` still fails on int4 traces. What changes is that the
+  gap is now *measured* instead of unbounded.
+- **FAIL** → `acceptance.yaml` says generate at FP8 before training. The corpus
+  would need regenerating on rented hardware.
+
+Either way, update `calibration/INT4_WAIVER.md`, whose current text says the
+magnitude of quantization loss is "unknown and unmeasurable without the
+treatment arm" and that "no number in this repository bounds it." After this run,
+one does.
+
+---
+
+## What this does not settle
+
+- **The 260-prompt corpus is not covered.** The study measures the teacher on 52
+  calibration prompts. A pass licenses a waiver; it does not certify v3.
+- **Nothing here concerns real Office documents.** All prompts are synthetic;
+  that claim still needs approved, redacted real sources.
+- **The corpus stays `synthetic_candidate`** until someone decides otherwise on
+  the evidence.

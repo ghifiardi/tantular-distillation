@@ -1,0 +1,139 @@
+{
+  "infrastructure_failures": [
+    {
+      "index": 15,
+      "family": "prose:ringkas::0005",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 13,
+      "family": "prose:ringkas::0003",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 14,
+      "family": "prose:ringkas::0004",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 16,
+      "family": "prose:ringkas::0006",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 17,
+      "family": "prose:ringkas::0007",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 18,
+      "family": "prose:ringkas::0008",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 19,
+      "family": "prose:ringkas::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 20,
+      "family": "prose:tanyaDokumen::0000",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 21,
+      "family": "prose:tanyaDokumen::0001",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 22,
+      "family": "prose:tanyaDokumen::0002",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 23,
+      "family": "prose:tanyaDokumen::0003",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 24,
+      "family": "prose:tanyaDokumen::0004",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 25,
+      "family": "prose:tanyaDokumen::0005",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 26,
+      "family": "prose:tanyaDokumen::0006",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 28,
+      "family": "prose:tanyaDokumen::0008",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 27,
+      "family": "prose:tanyaDokumen::0007",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 29,
+      "family": "prose:tanyaDokumen::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 30,
+      "family": "prose:terjemah::0000",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 31,
+      "family": "prose:terjemah::0001",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 32,
+      "family": "prose:terjemah::0002",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 33,
+      "family": "prose:terjemah::0003",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 34,
+      "family": "prose:terjemah::0004",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 35,
+      "family": "prose:terjemah::0005",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 36,
+      "family": "prose:terjemah::0006",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 37,
+      "family": "prose:terjemah::0007",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 38,
+      "family": "prose:terjemah::0008",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 39,
+      "family": "prose:terjemah::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    }
+  ]
+}

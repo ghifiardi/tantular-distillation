@@ -1,0 +1,129 @@
+{
+  "infrastructure_failures": [
+    {
+      "index": 15,
+      "family": "edit:elaborasi::0005",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 18,
+      "family": "edit:elaborasi::0008",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 16,
+      "family": "edit:elaborasi::0006",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 17,
+      "family": "edit:elaborasi::0007",
+      "error": "RemoteProtocolError('Server disconnected without sending a response.')"
+    },
+    {
+      "index": 19,
+      "family": "edit:elaborasi::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 21,
+      "family": "edit:koreksi::0001",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 20,
+      "family": "edit:koreksi::0000",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 22,
+      "family": "edit:koreksi::0002",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 23,
+      "family": "edit:koreksi::0003",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 24,
+      "family": "edit:koreksi::0004",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 25,
+      "family": "edit:koreksi::0005",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 26,
+      "family": "edit:koreksi::0006",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 27,
+      "family": "edit:koreksi::0007",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 28,
+      "family": "edit:koreksi::0008",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 29,
+      "family": "edit:koreksi::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 30,
+      "family": "edit:perjelas::0000",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 31,
+      "family": "edit:perjelas::0001",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 32,
+      "family": "edit:perjelas::0002",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 33,
+      "family": "edit:perjelas::0003",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 34,
+      "family": "edit:perjelas::0004",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 35,
+      "family": "edit:perjelas::0005",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 36,
+      "family": "edit:perjelas::0006",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 37,
+      "family": "edit:perjelas::0007",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 38,
+      "family": "edit:perjelas::0008",
+      "error": "ConnectError('All connection attempts failed')"
+    },
+    {
+      "index": 39,
+      "family": "edit:perjelas::0009",
+      "error": "ConnectError('All connection attempts failed')"
+    }
+  ]
+}
