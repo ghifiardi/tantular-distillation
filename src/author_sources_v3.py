@@ -225,6 +225,38 @@ def main() -> None:
         digests[family] = hashlib.sha256(text.encode()).hexdigest()
         written += 1
 
+    # --- pool headroom, which only this module can compute ----------------
+    # Router artifacts are one sentence parameterised by TOPIC ALONE — no unit,
+    # owner or figure appears in them. So a router kind with as many families in
+    # a split as that split has topics is distinct only because the index
+    # spacing happened to land on every topic. It is currently exactly that
+    # tight: 8 train topics against a router kind with 8 train families, margin
+    # 0. It passes, and it would stop passing if instances_per_kind rose, splits
+    # were reshuffled, or a topic pool were trimmed.
+    #
+    # Reported at generation because the pack cannot show it: once written,
+    # every group reads as "n families, n distinct documents" whether the margin
+    # was 0 or 40.
+    from collections import Counter
+    router_load = Counter((kinds[f].split(":", 1)[0], assignments[f])
+                          for f in assignments if kinds[f].startswith("router:"))
+    per_kind_split = Counter((kinds[f], assignments[f])
+                             for f in assignments if kinds[f].startswith("router:"))
+    print("\nrouter topic headroom (router documents vary by topic only):")
+    worst = []
+    for (kind, split), n in sorted(per_kind_split.items()):
+        pool = len(WORLDS[split]["topics"])
+        worst.append((pool - n, kind, split, n, pool))
+    worst.sort()
+    for margin, kind, split, n, pool in worst[:3]:
+        flag = "  <-- NO MARGIN" if margin <= 0 else ""
+        print(f"  {kind:<22} {split:<10} {n} families vs {pool} topics, "
+              f"margin {margin}{flag}")
+    if worst and worst[0][0] <= 0:
+        print("  Distinctness here rests on index spacing, not on pool size. "
+              "Widen the\n  topic pool before raising instances_per_kind or "
+              "reshuffling splits.")
+
     (out / "digests.json").write_text(json.dumps(digests, indent=2, sort_keys=True) + "\n",
                                       encoding="utf-8")
     print(f"wrote {written} artifacts -> {out}")

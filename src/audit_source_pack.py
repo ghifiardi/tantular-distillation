@@ -167,6 +167,13 @@ def main() -> None:
         print(f"  {split:<10} mean pairwise overlap {mean:.3f} "
               f"over {pairs} pairs{flag}")
 
+    # Headroom — how much room remains before distinctness breaks — is NOT
+    # auditable from a pack alone. Every group trivially shows "n families, n
+    # distinct documents" whenever the pack passes at all, so counting observed
+    # variety measures nothing. The quantity that matters is the size of the
+    # generating pool against the families drawing from it, which only the
+    # generator knows. author_sources_v3.py checks it at generation time.
+
     print()
     if failures:
         for f in failures:
