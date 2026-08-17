@@ -26,10 +26,31 @@ worded questions. The correct baseline is:
 `blind_review.py` refuses the old arm by name rather than letting it through.
 
 **Card choice is load-bearing.** Rent an **RTX 6000 Ada** or **L40S** (48GB,
-~$0.74–0.79/hr). Do **not** take an RTX A6000 at $0.33/hr: it is Ampere, has no
+~$0.74–1.00/hr). Do **not** take an RTX A6000 at $0.33/hr: it is Ampere, has no
 FP8 path, and would silently serve int4 — producing a "treatment arm" identical
 to the baseline. `blind_review.py prepare` aborts if both arms report the same
 quantization, but catching it after an hour of rental is the expensive way.
+
+**DRIVER >= 580 IS A HARD PREREQUISITE — check it before renting.** This is the
+constraint that cost a whole rental on 2026-08-17. Compute capability 8.9 says
+the *silicon* can do FP8; it says nothing about whether the *driver* can run
+current vLLM, whose kernels are built against CUDA 13.
+
+An L40S — correct card, cc 8.9, every hardware check green — on driver
+**570.124.06** got all the way through setup, a clean vLLM install and the model
+download, then died at engine init with:
+
+```
+cudaHostGetDevicePointer failed: CUDA driver version is insufficient for CUDA runtime version
+```
+
+Torch was fine throughout (uv resolved cu129; CUDA 12.x minor-version
+compatibility covers it), so torch imported, allocated GPU tensors and named the
+device correctly. Only vLLM's own extension failed, and only at the last step.
+
+**Filter pods on the template reporting CUDA 13 / driver 580+.** `nvidia-smi`
+shows both. `verify_fp8_host.sh` now refuses anything below 580 in seconds,
+before a single byte of model is downloaded.
 
 **No egress approval needed.** All 52 calibration prompts are
 `source_class: synthetic`, so the external-host gate passes without
@@ -61,23 +82,63 @@ A6000 / 3090 / A100 / V100 / T4 are refused by name. Verified against each:
 | L40S | 8.9 | accepted |
 | H100 | 9.0 | accepted |
 
+## Step 0.5 — build the environment, and prove it works
+
+Measured on 2026-08-17: both of these bit, and both cost more than the checks do.
+
+```bash
+cd /workspace/tantular-distillation
+
+# Clean venv. NEVER --system-site-packages: it mixes the container's torch with
+# the installed one and yields "undefined symbol: ncclCommResume", an NCCL ABI
+# mismatch that no package pinning repairs.
+python3 -m venv .venv
+./.venv/bin/pip install --upgrade pip uv
+
+# Let uv pick the torch backend from the detected driver. Do not pin torch by
+# hand and do not reuse the container's.
+VIRTUAL_ENV=$PWD/.venv ./.venv/bin/uv pip install vllm --torch-backend=auto
+
+./scripts/verify_stack.sh
+```
+
+`verify_stack.sh` checks venv isolation, a **real GPU allocation** (not just
+`is_available()`, which returns True on a driver that then refuses work), the
+vLLM import, `pip check`, and — the step that actually failed — whether vLLM's
+**compiled CUDA extension** loads. It prints the `LD_LIBRARY_PATH` to export.
+
+Also note the repo transfer: `rsync` the working tree rather than cloning, or
+the pod gets whatever is on `origin/main` instead of your local work.
+
 ## Step 1 — TERMINAL A: serve the teacher at FP8
 
 `serve_teacher.sh` ends in `exec vllm serve`. **It blocks and never returns.**
-Give it its own terminal and leave it open for the whole run — closing it kills
-the server mid-generation.
+Give it its own terminal and leave it open for the whole run — or start it
+detached with `setsid nohup`, which survives the browser terminal closing.
 
 ```bash
-git clone <this repo> && cd tantular-distillation
-pip install -r requirements.txt
+cd /workspace/tantular-distillation
+source .venv/bin/activate
+export HF_HOME=/workspace/hf-cache
+export LD_LIBRARY_PATH=$PWD/.venv/lib/python3.12/site-packages/nvidia/cu13/lib:$PWD/.venv/lib/python3.12/site-packages/nvidia/cuda_runtime/lib
 ./scripts/serve_teacher.sh muse-glimmer rented-48gb 2>&1 | tee /tmp/vllm.log
 ```
+
+**Port:** the RunPod PyTorch template runs **nginx on 8001**, the repo's default.
+It even answers `HTTP 200` on `/v1/models` with an HTML page. `configs/teachers/
+muse-glimmer.yaml` must use a free port — **8010** works.
+
+**Quantization:** do **not** pass `--quantization fp8`. This checkpoint declares
+`compressed-tensors` / `FP8_BLOCK`, and forcing the flag makes vLLM refuse:
+*"Quantization method specified in the model config (compressed-tensors) does not
+match the quantization argument (fp8)"*. Letting the checkpoint decide is also
+better evidence — gate 2 then verifies what vLLM independently selected rather
+than echoing our own argument.
 
 Keep the log. It is the only evidence of what vLLM actually selected, and gate 2
 refuses to proceed without it.
 
-Serves on port 8001, `--quantization fp8`, `tensor-parallel-size 1`. Serve one
-teacher only — two 30B models do not co-resident in 48GB at FP8, and dropping
+Serves on port 8010, `tensor-parallel-size 1`. Serve one teacher only — two 30B models do not co-resident in 48GB at FP8, and dropping
 both to int4 to fit defeats the entire purpose of the run.
 
 Expect a long first load while weights download. Wait until the server reports
@@ -98,9 +159,27 @@ export RUNPOD_POD_ID="<your-pod-id>"
     --stop-check "./scripts/stop_pod.sh --check"
 ```
 
-**Export `RUNPOD_POD_ID` first.** The calling shell expands `--on-finish`, so an
-unset variable becomes `runpodctl stop pod ` with a missing argument — and that
-only fails at the end, from inside the EXIT trap, with the pod still billing.
+**`runpodctl` on a RunPod pod is UNAUTHENTICATED by default.** Measured
+2026-08-17: the binary is at `/usr/bin/runpodctl`, the pod ID is right, and
+`stop_pod.sh --check` still fails with *"runpodctl cannot see pod"* — the
+container carries no RunPod credentials. Authenticating it means putting an
+account-wide API key on a rented third-party box.
+
+If you decline that (recommended for an attended run), drop both flags and stop
+the pod from the console yourself:
+
+```bash
+./scripts/run_fp8_arm.sh --vllm-log /tmp/vllm.log --budget-min 90 --rate 1.00
+```
+
+The budget watchdog still applies; only the unattended auto-stop is given up.
+The script says plainly that the instance keeps billing. This also removes the
+retrieval race, since nothing stops the pod out from under the `scp`.
+
+**Export `RUNPOD_POD_ID` first** if you do use the auto-stop. The calling shell
+expands `--on-finish`, so an unset variable becomes `runpodctl stop pod ` with a
+missing argument — and that only fails at the end, from inside the EXIT trap,
+with the pod still billing.
 
 Gate 0 catches this before anything runs: it aborts if the stop command's binary
 is not on `PATH`, or if the command ends with or contains an empty argument.

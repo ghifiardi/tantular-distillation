@@ -26,9 +26,12 @@ NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | xargs)"
 CAP="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | xargs)"
 COUNT="$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l | xargs)"
 MEM="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader | head -1 | xargs)"
+DRIVER="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | xargs)"
+MAXCUDA="$(nvidia-smi 2>/dev/null | grep -oE 'CUDA Version: [0-9]+\.[0-9]+' | head -1 | awk '{print $3}')"
 
 echo "GPU        : $NAME"
 echo "compute cap: ${CAP:-unknown}"
+echo "driver     : ${DRIVER:-unknown}   (max CUDA ${MAXCUDA:-unknown})"
 echo "count      : $COUNT"
 echo "memory     : $MEM"
 echo
@@ -57,19 +60,54 @@ fi
 
 echo "OK — compute capability $CAP supports FP8 (8.9+ required)"
 
-python3 - "$OUT" "$NAME" "$CAP" "$COUNT" "$MEM" <<'PY'
+# --- driver gate: the constraint that actually killed the 2026-08-17 rental ---
+# Compute capability 8.9 says the SILICON can do FP8. It says nothing about
+# whether the DRIVER can run current vLLM. An L40S (cc 8.9, correct card) on
+# driver 570.124.06 passed every hardware check, downloaded the stack, and then
+# died inside the engine with:
+#
+#   cudaHostGetDevicePointer failed: CUDA driver version is insufficient
+#   for CUDA runtime version
+#
+# because vLLM's compiled kernels are built against CUDA 13, which needs driver
+# >= 580. Torch itself was fine — uv resolved cu129 and CUDA 12.x minor-version
+# compatibility covered it — so torch imported, allocated tensors, and reported
+# the GPU correctly. Only vLLM's own extension failed, and only at engine init,
+# which is AFTER the point where a 32GB model download would have started.
+#
+# Checked here so a mismatched pod is rejected in seconds rather than after an
+# hour of setup and download.
+DRIVER_MAJOR="${DRIVER%%.*}"
+MIN_DRIVER=580
+if [[ -z "$DRIVER_MAJOR" ]]; then
+  fail "could not read the driver version; refusing to guess"
+fi
+if (( DRIVER_MAJOR < MIN_DRIVER )); then
+  fail "driver $DRIVER (major $DRIVER_MAJOR) is below $MIN_DRIVER.
+         Current vLLM ships CUDA 13 kernels and needs driver >= $MIN_DRIVER.
+         This card's silicon is fine — the DRIVER is the blocker, and it cannot
+         be upgraded from inside a rented container.
+         Rent a pod whose template reports CUDA 13 / driver 580+, then re-run.
+         Measured on 2026-08-17: L40S + driver 570.124.06 fails at engine init,
+         after the model download, with 'CUDA driver version is insufficient'."
+fi
+echo "OK — driver $DRIVER (>= $MIN_DRIVER) can run CUDA 13 kernels"
+
+python3 - "$OUT" "$NAME" "$CAP" "$COUNT" "$MEM" "$DRIVER" "$MAXCUDA" <<'PY'
 import json, sys
-path, name, cap, count, mem = sys.argv[1:6]
+path, name, cap, count, mem, driver, maxcuda = sys.argv[1:8]
 json.dump({
     "_what": "Measured hardware of the FP8 treatment host. Recorded because "
              "preflight.py reports quantization from host CONFIG, not from the "
              "device — this file is the evidence the silicon could do it.",
     "gpu_name": name,
     "compute_capability": cap,
+    "driver_version": driver,
+    "driver_max_cuda": maxcuda,
     "gpu_count": int(count),
     "memory_total": mem,
     "fp8_capable": True,
-    "_checked": "compute capability >= 8.9, and not an Ampere card by name",
+    "_checked": "compute capability >= 8.9, not an Ampere card by name, and driver major >= 580 (vLLM ships CUDA 13 kernels)",
     "_still_unverified": "That vLLM actually SERVED at fp8. Confirm from the "
                          "server log with: scripts/verify_fp8_host.sh --serving <logfile>",
 }, open(path, "w"), indent=2)
