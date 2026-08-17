@@ -135,27 +135,49 @@ completed prompts. Decoding comes from the host and teacher configs — do not
 override temperature or max_tokens on the command line, or gate 5 will reject
 the arm.
 
-## Step 4.5 — confirm the pod actually stopped, and retrieve the arm
+## Step 4.5 — retrieve the arm, THEN confirm the pod stopped
 
-Do this whether the run succeeded or aborted, and before any analysis. The trap
-*attempts* the stop and prints a warning if the command fails, but a warning in
-scrollback is not confirmation.
+**Order matters, and it is the opposite of what seems natural.** A stopped pod
+runs no sshd, so `scp` to it fails. But `--on-finish` stops the pod from inside
+the EXIT trap — meaning by the time the run returns, the pod is already stopped
+and the arm is stranded on a box you cannot reach.
 
-```bash
-runpodctl get pod $RUNPOD_POD_ID        # expect EXITED / STOPPED, not RUNNING
-```
+That tension is deliberate: the auto-stop must survive a crash or an abort, so
+it cannot wait for a human to copy files first. Resolve it one of two ways.
 
-If it is still running, stop it now. Nothing downstream needs the GPU.
-
-Then copy the arm off the pod before terminating it — the traces live only on
-that box:
+**Option A — pull it before the stop lands.** Open a third terminal while the
+generation is still running and copy as soon as gate 4 passes:
 
 ```bash
 scp -r <pod>:tantular-distillation/data/calibration/fp8 data/calibration/
 ```
 
-You need `traces.jsonl`, `signature.json` and `hardware.json`. Terminating the
-pod with the arm still on it means renting again.
+**Option B — restart briefly to retrieve.** A *stopped* RunPod pod keeps its
+volume (a *terminated* one does not). Restart, copy, stop again:
+
+```bash
+runpodctl start pod $RUNPOD_POD_ID
+scp -r <pod>:tantular-distillation/data/calibration/fp8 data/calibration/
+runpodctl stop pod $RUNPOD_POD_ID
+```
+
+Costs a few minutes of billing. Reliable, and the safer default if you are not
+watching the run.
+
+You need all three files: `traces.jsonl`, `signature.json`, and
+`hardware.json` — that last one is the only evidence the silicon could do FP8,
+and it exists nowhere else.
+
+Then confirm the pod is stopped. The trap *attempts* the stop and warns if the
+command fails, but a warning in scrollback is not confirmation:
+
+```bash
+runpodctl get pod $RUNPOD_POD_ID        # expect EXITED / STOPPED, not RUNNING
+```
+
+**Do not terminate until the three files are on your machine and verified.**
+Terminating destroys the volume; the arm would have to be regenerated, at full
+rental cost.
 
 Everything from here runs on any machine, with no GPU.
 
