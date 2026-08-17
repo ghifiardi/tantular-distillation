@@ -139,8 +139,15 @@ it is redacted, and whether egress is approved. Kinds without that are BLOCKED,
 and **"blocked on data coverage" is the correct state to report** — not
 synthetic coverage presented as production data.
 
-Current: 12 kinds have traces (synthetic, from the canary), **14 blocked** on
-approved source material.
+Current: **26/26 kinds covered, 0 blocked** — but every stratum is
+`source_class: synthetic`, and the inventory's own note is the point: synthetic
+material supports pipeline generation and behavioural training, and supports
+**no claim about performance on real Office documents**.
+
+Read `260/260 families ready` carefully. It counts resolution, not
+distinctness: 260 families share **78** source documents (mean 3.33, max 8 per
+document). Per-family artifacts do not exist yet. See
+`calibration/SOURCE_COVERAGE.md`.
 
 ## Corpus status
 
@@ -148,20 +155,35 @@ approved source material.
 2026-08-13). The FP8 gate is UNMET, not passed — `verify_corpus.py --gate`
 still fails and still exits 1. No FP8 claim may be made.
 
+int4 calibration is **closed with limited claims** —
+`calibration/INT4_CLOSURE.md`. Every metric with coverage shows an across-pass
+delta of `0.0` and table fidelity measures `1.0`, but the result is labelled
+**across-pass variance with resumed session boundary** and is not evidence of
+single-session reproducibility.
+
 | Path | Contents |
 |---|---|
 | `data/raw/` | authoritative corpus — **empty**, awaiting approved sources |
+| `data/expanded/`, `data/expanded-r2/` | prompt set v1, two passes |
+| `data/v2-pass-a/`, `data/v2-pass-b/` | prompt set v2, two passes (B resumed) |
 | `data/validation/` | pipeline-validation artifacts, never corpus |
 | `data/crossover/control/` | 3 int4 replicates, control noise floor |
 | `data/calibration/` | deployment baseline + parity validation |
 
+Traces are gitignored; each pass directory carries a `MANIFEST.json` pinning
+its digests, session structure and provenance.
+
 Remaining sequence:
 
-1. Approve and redact sources for the **14 blocked strata** (`src/inventory.py status`)
-2. Write seeds only for approved kinds
-3. Generate through ai19 under the waiver, **with replicates for the 3 volatile families**
+1. ~~Approve and redact sources for the 14 blocked strata~~ — 0 blocked, but
+   all 26 strata are synthetic; real Office claims still need approved material
+2. **Per-family artifacts** — 260 families currently share 78 documents
+   (`calibration/SOURCE_COVERAGE.md`)
+3. ~~Generate through ai19 under the waiver~~ — done for prompt sets v1 and v2
 4. ~~Exclude the gateway canaries~~ — done, preserved in `data/validation/`
 5. **Rotate the gateway key** before production use
+
+Everything generated so far is `synthetic_candidate`. **Not training-ready.**
 
 ## Gates
 
