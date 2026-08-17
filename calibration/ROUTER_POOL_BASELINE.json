@@ -1,0 +1,183 @@
+{
+  "_what": "Router topic pool vs families drawing on it, per (kind, split). Router documents vary by TOPIC ALONE, so pool size is the ceiling on how many distinct router documents a split can yield for one kind. margin = topics - families; margin 0 means distinctness rests on index spacing rather than on having room.",
+  "_invalidated_by": "A change to either input below, or to WORLDS[split]['topics']. tests/test_router_pool_regression.py fails when they move.",
+  "split_fingerprint": "ccb5ff683228c4c9",
+  "split_seed": "tantular-office-v2",
+  "instances_per_kind": 10,
+  "topics_per_split": {
+    "challenge": 5,
+    "eval": 6,
+    "train": 8
+  },
+  "tightest_margin": 0,
+  "groups": [
+    {
+      "kind": "router:CEK_AMAN",
+      "split": "train",
+      "families": 8,
+      "topics": 8,
+      "margin": 0
+    },
+    {
+      "kind": "router:DRAFT_TEKS",
+      "split": "train",
+      "families": 7,
+      "topics": 8,
+      "margin": 1
+    },
+    {
+      "kind": "router:TANYA_DOKUMEN",
+      "split": "train",
+      "families": 7,
+      "topics": 8,
+      "margin": 1
+    },
+    {
+      "kind": "router:TERJEMAH",
+      "split": "train",
+      "families": 7,
+      "topics": 8,
+      "margin": 1
+    },
+    {
+      "kind": "router:EDIT_TEKS",
+      "split": "eval",
+      "families": 4,
+      "topics": 6,
+      "margin": 2
+    },
+    {
+      "kind": "router:RINGKAS",
+      "split": "eval",
+      "families": 4,
+      "topics": 6,
+      "margin": 2
+    },
+    {
+      "kind": "router:UBAH_NADA",
+      "split": "train",
+      "families": 6,
+      "topics": 8,
+      "margin": 2
+    },
+    {
+      "kind": "router:UMUM",
+      "split": "train",
+      "families": 6,
+      "topics": 8,
+      "margin": 2
+    },
+    {
+      "kind": "router:EDIT_TEKS",
+      "split": "train",
+      "families": 5,
+      "topics": 8,
+      "margin": 3
+    },
+    {
+      "kind": "router:RINGKAS",
+      "split": "train",
+      "families": 5,
+      "topics": 8,
+      "margin": 3
+    },
+    {
+      "kind": "router:TANYA_DOKUMEN",
+      "split": "challenge",
+      "families": 2,
+      "topics": 5,
+      "margin": 3
+    },
+    {
+      "kind": "router:UBAH_NADA",
+      "split": "eval",
+      "families": 3,
+      "topics": 6,
+      "margin": 3
+    },
+    {
+      "kind": "router:UMUM",
+      "split": "challenge",
+      "families": 2,
+      "topics": 5,
+      "margin": 3
+    },
+    {
+      "kind": "router:CEK_AMAN",
+      "split": "challenge",
+      "families": 1,
+      "topics": 5,
+      "margin": 4
+    },
+    {
+      "kind": "router:DRAFT_TEKS",
+      "split": "challenge",
+      "families": 1,
+      "topics": 5,
+      "margin": 4
+    },
+    {
+      "kind": "router:DRAFT_TEKS",
+      "split": "eval",
+      "families": 2,
+      "topics": 6,
+      "margin": 4
+    },
+    {
+      "kind": "router:EDIT_TEKS",
+      "split": "challenge",
+      "families": 1,
+      "topics": 5,
+      "margin": 4
+    },
+    {
+      "kind": "router:RINGKAS",
+      "split": "challenge",
+      "families": 1,
+      "topics": 5,
+      "margin": 4
+    },
+    {
+      "kind": "router:TERJEMAH",
+      "split": "challenge",
+      "families": 1,
+      "topics": 5,
+      "margin": 4
+    },
+    {
+      "kind": "router:TERJEMAH",
+      "split": "eval",
+      "families": 2,
+      "topics": 6,
+      "margin": 4
+    },
+    {
+      "kind": "router:UBAH_NADA",
+      "split": "challenge",
+      "families": 1,
+      "topics": 5,
+      "margin": 4
+    },
+    {
+      "kind": "router:UMUM",
+      "split": "eval",
+      "families": 2,
+      "topics": 6,
+      "margin": 4
+    },
+    {
+      "kind": "router:CEK_AMAN",
+      "split": "eval",
+      "families": 1,
+      "topics": 6,
+      "margin": 5
+    },
+    {
+      "kind": "router:TANYA_DOKUMEN",
+      "split": "eval",
+      "families": 1,
+      "topics": 6,
+      "margin": 5
+    }
+  ]
+}

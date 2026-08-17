@@ -171,6 +171,33 @@ def scenario_for(index: int, split: str) -> dict:
     }
 
 
+def router_pool_report(manifest: dict) -> list[dict]:
+    """Families drawing on each split's topic pool, per router kind.
+
+    Router artifacts are one sentence parameterised by TOPIC ALONE — no unit,
+    owner or figure reaches them. So for a router kind, the number of distinct
+    documents obtainable in a split is exactly the size of that split's topic
+    pool, and a kind with as many families as topics is distinct only because
+    index spacing happened to land on every topic.
+
+    A written pack cannot show this: every group reads as "n families, n
+    distinct documents" whether the margin was 0 or 40. Computed here, where the
+    pool sizes are, and persisted as a baseline so a later change to
+    instances_per_kind or the split seed fails a test instead of silently
+    producing two identical documents.
+    """
+    from collections import Counter
+    load = Counter((manifest["kinds"][f], manifest["assignments"][f])
+                   for f in manifest["assignments"]
+                   if manifest["kinds"][f].startswith("router:"))
+    rows = []
+    for (kind, split), families in sorted(load.items()):
+        pool = len(WORLDS[split]["topics"])
+        rows.append({"kind": kind, "split": split, "families": families,
+                     "topics": pool, "margin": pool - families})
+    return sorted(rows, key=lambda r: (r["margin"], r["kind"], r["split"]))
+
+
 def family_index(manifest: dict) -> dict[str, int]:
     """family -> its index within its split, in sorted family order.
 
@@ -237,25 +264,18 @@ def main() -> None:
     # Reported at generation because the pack cannot show it: once written,
     # every group reads as "n families, n distinct documents" whether the margin
     # was 0 or 40.
-    from collections import Counter
-    router_load = Counter((kinds[f].split(":", 1)[0], assignments[f])
-                          for f in assignments if kinds[f].startswith("router:"))
-    per_kind_split = Counter((kinds[f], assignments[f])
-                             for f in assignments if kinds[f].startswith("router:"))
+    report = router_pool_report(manifest)
     print("\nrouter topic headroom (router documents vary by topic only):")
-    worst = []
-    for (kind, split), n in sorted(per_kind_split.items()):
-        pool = len(WORLDS[split]["topics"])
-        worst.append((pool - n, kind, split, n, pool))
-    worst.sort()
-    for margin, kind, split, n, pool in worst[:3]:
-        flag = "  <-- NO MARGIN" if margin <= 0 else ""
-        print(f"  {kind:<22} {split:<10} {n} families vs {pool} topics, "
-              f"margin {margin}{flag}")
-    if worst and worst[0][0] <= 0:
+    for row in report[:3]:
+        flag = "  <-- NO MARGIN" if row["margin"] <= 0 else ""
+        print(f"  {row['kind']:<22} {row['split']:<10} {row['families']} families "
+              f"vs {row['topics']} topics, margin {row['margin']}{flag}")
+    if report and report[0]["margin"] <= 0:
         print("  Distinctness here rests on index spacing, not on pool size. "
               "Widen the\n  topic pool before raising instances_per_kind or "
               "reshuffling splits.")
+    print("  baseline: calibration/ROUTER_POOL_BASELINE.json "
+          "(regression-tested in tests/)")
 
     (out / "digests.json").write_text(json.dumps(digests, indent=2, sort_keys=True) + "\n",
                                       encoding="utf-8")
