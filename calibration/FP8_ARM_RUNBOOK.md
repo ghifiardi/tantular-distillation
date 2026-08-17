@@ -88,11 +88,14 @@ it is ready before starting Terminal B.
 ```bash
 export RUNPOD_POD_ID="<your-pod-id>"
 
+./scripts/stop_pod.sh --check          # fail now, not from the exit trap
+
 ./scripts/run_fp8_arm.sh \
     --vllm-log /tmp/vllm.log \
     --budget-min 90 \
     --rate 0.79 \
-    --on-finish "runpodctl stop pod $RUNPOD_POD_ID"
+    --on-finish  "./scripts/stop_pod.sh --delay 600" \
+    --stop-check "./scripts/stop_pod.sh --check"
 ```
 
 **Export `RUNPOD_POD_ID` first.** The calling shell expands `--on-finish`, so an
@@ -110,7 +113,7 @@ uninterpretable number:
 
 | gate | aborts if |
 |---|---|
-| 0 stop command | `--on-finish` binary is missing, or has an empty argument |
+| 0 stop command | `--on-finish` binary is missing or has an empty argument, or `--stop-check` fails |
 | 1 hardware | `hardware.json` does not show cc 8.9+ |
 | 2 server | the vLLM log shows a fallback, a non-fp8 method, or never mentions fp8 |
 | 3 signature | model differs from the study's, server reports a different model than requested, or **quantization equals the baseline's** |
@@ -157,11 +160,33 @@ together, which decides how to do this safely:
 Gates 4 and 5 take about a second each, so the gap between `traces.jsonl`
 appearing and the pod stopping is a few seconds. Too short to copy reliably.
 
-Widen it by delaying the stop, which keeps the crash protection intact:
+Widen it by delaying the stop, which keeps the crash protection intact. Use the
+wrapper rather than a raw compound command:
 
 ```bash
---on-finish "sleep 600 && runpodctl stop pod $RUNPOD_POD_ID"
+export RUNPOD_POD_ID="<your-pod-id>"
+./scripts/stop_pod.sh --check          # validate BEFORE anything bills
 ```
+
+then run the arm with:
+
+```bash
+--on-finish  "./scripts/stop_pod.sh --delay 600" \
+--stop-check "./scripts/stop_pod.sh --check"
+```
+
+**Why the wrapper.** Gate 0 validates only the FIRST binary of `--on-finish`.
+Given `sleep 600 && runpodctl stop pod $ID` it checks `sleep` — the delay hides
+the binary that matters, and an unset id inside a compound command is invisible
+to it. Making the script the first binary means the thing gate 0 checks is the
+thing that knows how to check everything else. `--stop-check` then runs that
+validation during gate 0, while aborting is still free.
+
+`stop_pod.sh` refuses on: `runpodctl` missing, `RUNPOD_POD_ID` unset or empty,
+an id that is not a plausible id, and — the case no string check can catch — a
+well-formed id the API cannot see. Each verified. After stopping it polls up to
+three times and, if the pod never reports a stopped state, says so loudly rather
+than exiting quietly on an unverified stop.
 
 Then from Terminal C: copy `hardware.json` and `signature.json` early, and
 `traces.jsonl` as soon as the run prints `FP8 ARM COMPLETE`, with ten minutes of
@@ -171,13 +196,9 @@ margin.
 scp -r <pod>:tantular-distillation/data/calibration/fp8 data/calibration/
 ```
 
-Two consequences of the delay, both worth accepting knowingly:
-
-- **Gate 0 only validates the first binary in the command.** With `sleep …&&…`
-  it checks `sleep`, not `runpodctl`. Verify it yourself on the pod before
-  starting: `command -v runpodctl`.
-- **The delay also applies on abort** — a failed gate waits ten minutes before
-  stopping. About $0.13 at $0.79/hr. Cheap insurance against a stranded arm.
+One consequence of the delay, worth accepting knowingly: **it also applies on
+abort**, so a failed gate idles ten minutes before stopping. About $0.13 at
+$0.79/hr — cheap insurance against a stranded arm.
 
 Verify locally before letting the pod stop:
 

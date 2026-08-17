@@ -25,7 +25,7 @@
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-VLLM_LOG=""; BUDGET_MIN=90; RATE=""; ON_FINISH=""
+VLLM_LOG=""; BUDGET_MIN=90; RATE=""; ON_FINISH=""; STOP_CHECK=""
 HW_JSON="data/calibration/fp8/hardware.json"
 OUT="data/calibration/fp8/traces.jsonl"
 BASELINE="data/calibration/int4-normalized/traces.jsonl"
@@ -38,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --budget-min) BUDGET_MIN="$2"; shift 2;;
     --rate)       RATE="$2"; shift 2;;
     --on-finish)  ON_FINISH="$2"; shift 2;;
+    --stop-check) STOP_CHECK="$2"; shift 2;;
     --hardware)   HW_JSON="$2"; shift 2;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
@@ -84,6 +85,20 @@ if [[ -n "$ON_FINISH" ]]; then
     && abort "--on-finish contains an empty argument: '$ON_FINISH'
        A variable expanded to nothing. Check RUNPOD_POD_ID."
   echo "  $ON_FINISH"
+  # The binary check above is structural and shallow: for a compound command
+  # like `sleep 600 && runpodctl stop pod $ID` it validates `sleep`, so the
+  # delay hides the binary that matters and an unset id stays invisible.
+  # --stop-check runs the stop path's own validator now, while aborting is
+  # still free. scripts/stop_pod.sh --check is the intended argument.
+  if [[ -n "$STOP_CHECK" ]]; then
+    echo "  running stop-command pre-check: $STOP_CHECK"
+    eval "$STOP_CHECK" || abort "the stop command failed its own pre-check.
+       Fix it now — at trap time the run is over and the pod keeps billing."
+  else
+    echo "  NOTE no --stop-check given; only the first binary was validated.
+       If --on-finish is a compound command, the binary that actually stops the
+       pod has NOT been checked."
+  fi
   echo "  OK"
 else
   echo "WARNING: no --on-finish. The instance will keep billing after this run."
