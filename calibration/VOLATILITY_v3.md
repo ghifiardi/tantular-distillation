@@ -100,6 +100,26 @@ completions.** Only the first 40 shared a window.
 That is real evidence of stability under the one variable v1 implicated. It is
 still two observations per family, which is why the status does not move.
 
+### The two pass files are byte-identical
+
+`sha256 1d16204ddc384fce…` for both. Checked rather than assumed, because
+identical files are exactly what a copied or mis-pathed run would produce:
+
+- written 84 minutes apart (10:42 and 12:06);
+- each runner log shows its own distinct chunk progression;
+- provenance records **no wall-clock or timing field** — `latency_s` is not
+  captured — so a fully deterministic generation has nothing left to differ on.
+
+Byte-identity is not automatic. The v2 passes over the same host and settings
+have different digests (`55b0503a…`, `f21386aa…`) because 6 of 78 prompts
+genuinely disagreed. v3 reproduced exactly where v2 did not.
+
+**Hypothesis, unverified:** v2's 260 families shared 78 prompts, so a batch
+could contain the same prompt several times; v3's prompts are all distinct. If
+mode selection is tied to batching, repeated identical prompts within a batch
+are the more likely trigger. Recorded as a lead, not a finding — nothing here
+tests it.
+
 ### What would move it
 
 A third observation per family, ideally at a deliberately different chunk size
