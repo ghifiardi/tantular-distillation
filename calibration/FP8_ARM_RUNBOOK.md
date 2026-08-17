@@ -61,7 +61,11 @@ A6000 / 3090 / A100 / V100 / T4 are refused by name. Verified against each:
 | L40S | 8.9 | accepted |
 | H100 | 9.0 | accepted |
 
-## Step 1 — serve the teacher at FP8 (on the rented box)
+## Step 1 — TERMINAL A: serve the teacher at FP8
+
+`serve_teacher.sh` ends in `exec vllm serve`. **It blocks and never returns.**
+Give it its own terminal and leave it open for the whole run — closing it kills
+the server mid-generation.
 
 ```bash
 git clone <this repo> && cd tantular-distillation
@@ -69,18 +73,21 @@ pip install -r requirements.txt
 ./scripts/serve_teacher.sh muse-glimmer rented-48gb 2>&1 | tee /tmp/vllm.log
 ```
 
-Keep that log — it is the only evidence of what vLLM actually selected, and
-step 2 refuses to proceed without it.
+Keep the log. It is the only evidence of what vLLM actually selected, and gate 2
+refuses to proceed without it.
 
-Serves on port 8001 via vLLM, `--quantization fp8`, `tensor-parallel-size 1`.
-Serve one teacher only — two 30B models do not co-resident in 48GB at FP8, and
-dropping both to int4 to fit defeats the entire purpose of the run.
+Serves on port 8001, `--quantization fp8`, `tensor-parallel-size 1`. Serve one
+teacher only — two 30B models do not co-resident in 48GB at FP8, and dropping
+both to int4 to fit defeats the entire purpose of the run.
 
-Expect a long first load while weights download.
+Expect a long first load while weights download. Wait until the server reports
+it is ready before starting Terminal B.
 
-## Steps 2–4 — one gated command
+## Steps 2–4 — TERMINAL B: the gated run
 
 ```bash
+export RUNPOD_POD_ID="<your-pod-id>"
+
 ./scripts/run_fp8_arm.sh \
     --vllm-log /tmp/vllm.log \
     --budget-min 90 \
@@ -88,12 +95,22 @@ Expect a long first load while weights download.
     --on-finish "runpodctl stop pod $RUNPOD_POD_ID"
 ```
 
+**Export `RUNPOD_POD_ID` first.** The calling shell expands `--on-finish`, so an
+unset variable becomes `runpodctl stop pod ` with a missing argument — and that
+only fails at the end, from inside the EXIT trap, with the pod still billing.
+
+Gate 0 catches this before anything runs: it aborts if the stop command's binary
+is not on `PATH`, or if the command ends with or contains an empty argument.
+Verified against an unset `RUNPOD_POD_ID`, a missing binary, and a valid
+command.
+
 Runs preflight, generation and the health checks behind five gates, failing
 cheapest-first. Each is one of the ways this can silently produce an
 uninterpretable number:
 
 | gate | aborts if |
 |---|---|
+| 0 stop command | `--on-finish` binary is missing, or has an empty argument |
 | 1 hardware | `hardware.json` does not show cc 8.9+ |
 | 2 server | the vLLM log shows a fallback, a non-fp8 method, or never mentions fp8 |
 | 3 signature | model differs from the study's, server reports a different model than requested, or **quantization equals the baseline's** |
@@ -117,6 +134,30 @@ Generation uses `--resume`, so a dropped pod can be restarted without repeating
 completed prompts. Decoding comes from the host and teacher configs — do not
 override temperature or max_tokens on the command line, or gate 5 will reject
 the arm.
+
+## Step 4.5 — confirm the pod actually stopped, and retrieve the arm
+
+Do this whether the run succeeded or aborted, and before any analysis. The trap
+*attempts* the stop and prints a warning if the command fails, but a warning in
+scrollback is not confirmation.
+
+```bash
+runpodctl get pod $RUNPOD_POD_ID        # expect EXITED / STOPPED, not RUNNING
+```
+
+If it is still running, stop it now. Nothing downstream needs the GPU.
+
+Then copy the arm off the pod before terminating it — the traces live only on
+that box:
+
+```bash
+scp -r <pod>:tantular-distillation/data/calibration/fp8 data/calibration/
+```
+
+You need `traces.jsonl`, `signature.json` and `hardware.json`. Terminating the
+pod with the arm still on it means renting again.
+
+Everything from here runs on any machine, with no GPU.
 
 ## Step 5 — study gate 1, the critical metrics
 

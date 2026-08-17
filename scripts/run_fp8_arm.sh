@@ -63,6 +63,32 @@ trap finish EXIT INT TERM
 
 abort() { echo; echo "ABORT: $*" >&2; exit 1; }
 
+# --- gate 0: is the stop command actually usable? ----------------------------
+# Checked FIRST, before anything bills. --on-finish is expanded by the calling
+# shell, so an unset RUNPOD_POD_ID silently becomes `runpodctl stop pod ` with a
+# missing argument. That failure surfaces at the worst possible moment: after
+# the run, from inside the EXIT trap, with the pod still billing and the script
+# already on its way out. Cheap to catch now, expensive to discover later.
+if [[ -n "$ON_FINISH" ]]; then
+  echo "=== gate 0: stop command ==="
+  bin="${ON_FINISH%% *}"
+  command -v "$bin" >/dev/null 2>&1 \
+    || abort "--on-finish starts with '$bin', which is not on PATH here.
+       The pod would keep billing after the run. Install it or pass a
+       command that works on this box."
+  [[ "$ON_FINISH" =~ [[:space:]]$ ]] \
+    && abort "--on-finish ends with an empty argument: '$ON_FINISH'
+       An unset variable (RUNPOD_POD_ID?) expanded to nothing. Export it and
+       re-run: export RUNPOD_POD_ID=<id>"
+  [[ "$ON_FINISH" =~ [[:space:]][[:space:]] ]] \
+    && abort "--on-finish contains an empty argument: '$ON_FINISH'
+       A variable expanded to nothing. Check RUNPOD_POD_ID."
+  echo "  $ON_FINISH"
+  echo "  OK"
+else
+  echo "WARNING: no --on-finish. The instance will keep billing after this run."
+fi
+
 # Budget watchdog. Kills the run rather than letting a stalled load bill all
 # night; the EXIT trap then stops the instance.
 #
