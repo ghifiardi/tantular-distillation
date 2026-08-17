@@ -61,3 +61,51 @@ than vacuous.
 
 Until then this file is the answer to "are v3's volatile families replicated?":
 **unknown, because none have been identified.**
+
+---
+
+## Probe round 1 — 2026-08-17: 0 candidates, and why that is not an answer
+
+`volatile_probe.py` over the two completed v3 passes:
+
+| | |
+|---|---|
+| passes | `data/v3-candidate/traces.r0.jsonl`, `data/v3-pass-a/traces.r0.jsonl` |
+| plan consistency | all 9 pinned fields identical |
+| prompt digests | identical for all 260 shared families |
+| **families that varied** | **0 / 260** |
+
+No candidates, so there is nothing to replicate under the selection rule, and
+**the status stays `UNMEASURED`.** Two observations cannot separate a stable
+family from one whose modes happen to agree twice.
+
+### The result is not a batching artifact
+
+Worth checking, because the v1 evidence tied mode selection to batching: if both
+passes had processed every prompt in the same batch window, identical output
+would be near-guaranteed and would say nothing about stability.
+
+They did not. The resumable runner chunks at 40 with retries, and the two passes
+landed on different boundaries:
+
+```
+r0     (0,40) (40,55) (55,95) (95,135) (135,175) (175,215) (215,255) (255,260)
+passA  (0,40) (40,80) (80,120) (120,133) (133,173) (173,213) (213,253) (253,260)
+```
+
+**220 of 260 families were generated in a different batch window across the two
+passes, with different co-resident prompts, and still produced byte-identical
+completions.** Only the first 40 shared a window.
+
+That is real evidence of stability under the one variable v1 implicated. It is
+still two observations per family, which is why the status does not move.
+
+### What would move it
+
+A third observation per family, ideally at a deliberately different chunk size
+and concurrency to vary batching on purpose rather than by accident of retries.
+Three samples let `volatile_review.py` report modes instead of a bare
+agree/disagree, which is the whole point of that tool.
+
+Absent that, the honest statement is: **no v3 family has been shown to vary, and
+no v3 family has been shown to be stable.**
