@@ -145,11 +145,46 @@ and the arm is stranded on a box you cannot reach.
 That tension is deliberate: the auto-stop must survive a crash or an abort, so
 it cannot wait for a human to copy files first. Resolve it one of two ways.
 
-**Option A — pull it before the stop lands.** Open a third terminal while the
-generation is still running and copy as soon as gate 4 passes:
+**Option A — pull it before the stop lands.** The three artifacts do not appear
+together, which decides how to do this safely:
+
+| artifact | written at | race? |
+|---|---|---|
+| `hardware.json` | step 0, before serving | no — copy any time |
+| `signature.json` | gate 3, before generation | no — copy any time |
+| `traces.jsonl` | **all at once after all 52 finish** (`generate_normalized.py`) | **yes** |
+
+Gates 4 and 5 take about a second each, so the gap between `traces.jsonl`
+appearing and the pod stopping is a few seconds. Too short to copy reliably.
+
+Widen it by delaying the stop, which keeps the crash protection intact:
+
+```bash
+--on-finish "sleep 600 && runpodctl stop pod $RUNPOD_POD_ID"
+```
+
+Then from Terminal C: copy `hardware.json` and `signature.json` early, and
+`traces.jsonl` as soon as the run prints `FP8 ARM COMPLETE`, with ten minutes of
+margin.
 
 ```bash
 scp -r <pod>:tantular-distillation/data/calibration/fp8 data/calibration/
+```
+
+Two consequences of the delay, both worth accepting knowingly:
+
+- **Gate 0 only validates the first binary in the command.** With `sleep …&&…`
+  it checks `sleep`, not `runpodctl`. Verify it yourself on the pod before
+  starting: `command -v runpodctl`.
+- **The delay also applies on abort** — a failed gate waits ten minutes before
+  stopping. About $0.13 at $0.79/hr. Cheap insurance against a stranded arm.
+
+Verify locally before letting the pod stop:
+
+```bash
+wc -l < data/calibration/fp8/traces.jsonl                 # expect 52
+./.venv/bin/python -c "import json;d=json.load(open('data/calibration/fp8/hardware.json'));print(d['gpu_name'],d['compute_capability'])"
+./.venv/bin/python -c "import json;d=json.load(open('data/calibration/fp8/signature.json'));print(d['reported_model'],d['quantization'])"
 ```
 
 **Option B — restart briefly to retrieve.** A *stopped* RunPod pod keeps its
