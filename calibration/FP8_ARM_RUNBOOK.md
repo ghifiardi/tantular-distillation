@@ -37,13 +37,40 @@ quantization, but catching it after an hour of rental is the expensive way.
 
 ---
 
+## Step 0 — prove the card can do FP8 (before serving anything)
+
+```bash
+./scripts/verify_fp8_host.sh data/calibration/fp8/hardware.json
+```
+
+**`preflight.py` cannot do this.** It reports `quantization` from
+`configs/hosts/<host>.yaml` — the config's claim, not a measurement. Point it at
+an A6000 while using the `rented-48gb` config and it prints `fp8` for a card with
+no FP8 silicon. The run completes, the numbers look plausible, and the
+"treatment arm" is int4 compared against itself.
+
+This reads the hardware: compute capability must be **8.9+** (Ada / Hopper), and
+A6000 / 3090 / A100 / V100 / T4 are refused by name. Verified against each:
+
+| card | cc | result |
+|---|---|---|
+| RTX A6000 | 8.6 | refused |
+| RTX 3090 | 8.6 | refused |
+| A100 | 8.0 | refused |
+| RTX 6000 Ada | 8.9 | accepted |
+| L40S | 8.9 | accepted |
+| H100 | 9.0 | accepted |
+
 ## Step 1 — serve the teacher at FP8 (on the rented box)
 
 ```bash
 git clone <this repo> && cd tantular-distillation
 pip install -r requirements.txt
-./scripts/serve_teacher.sh muse-glimmer rented-48gb
+./scripts/serve_teacher.sh muse-glimmer rented-48gb 2>&1 | tee /tmp/vllm.log
 ```
+
+Keep that log — it is the only evidence of what vLLM actually selected, and
+step 2 refuses to proceed without it.
 
 Serves on port 8001 via vLLM, `--quantization fp8`, `tensor-parallel-size 1`.
 Serve one teacher only — two 30B models do not co-resident in 48GB at FP8, and
@@ -51,46 +78,47 @@ dropping both to int4 to fit defeats the entire purpose of the run.
 
 Expect a long first load while weights download.
 
-## Step 2 — preflight, and pin the signature
+## Steps 2–4 — one gated command
 
 ```bash
-./.venv/bin/python src/preflight.py \
-    --teacher muse-glimmer --host rented-48gb \
-    --record data/calibration/fp8/signature.json
+./scripts/run_fp8_arm.sh \
+    --vllm-log /tmp/vllm.log \
+    --budget-min 90 \
+    --rate 0.79 \
+    --on-finish "runpodctl stop pod $RUNPOD_POD_ID"
 ```
 
-`--record`, not `--verify`: this arm has no signature yet. It pins which weights
-answered, so a later re-run cannot silently compare different weights. A model
-was already swapped out from under this study once.
+Runs preflight, generation and the health checks behind five gates, failing
+cheapest-first. Each is one of the ways this can silently produce an
+uninterpretable number:
 
-Confirm the output says `fp8`. If it says int4, stop — you are on an Ampere card
-and the run is worthless.
+| gate | aborts if |
+|---|---|
+| 1 hardware | `hardware.json` does not show cc 8.9+ |
+| 2 server | the vLLM log shows a fallback, a non-fp8 method, or never mentions fp8 |
+| 3 signature | model differs from the study's, server reports a different model than requested, or **quantization equals the baseline's** |
+| 4 arm health | not 52 traces, or any empty or truncated |
+| 5 comparability | any prompt digest differs from the baseline, or template / temperature / seed / reasoning_strength differ |
 
-## Step 3 — generate the treatment arm
+Gate 3's quantization check is the backstop for the A6000 case: an arm that
+reports the same quantization as the baseline is int4 compared with itself, and
+cannot fail the study no matter what it produces.
 
-```bash
-./.venv/bin/python src/generate_normalized.py \
-    --teacher muse-glimmer --host rented-48gb \
-    --prompts prompts/calibration.jsonl \
-    --out data/calibration/fp8/traces.jsonl \
-    --resume
-```
+**Cost control.** `--budget-min` arms a watchdog that terminates the run and its
+children at the cap — it kills the child process first, because signalling only
+the shell leaves a stalled preflight or a wedged generation billing until it
+returns on its own. `--on-finish` runs from an EXIT trap, so the instance is
+stopped on success, on any abort, on the budget timeout, and on Ctrl-C. Without
+it the script says plainly that the pod is still billing.
 
-52 prompts. `--resume` makes it restartable if the pod drops. Decoding matches
-the pre-registered plan (temperature 0.0, max_tokens 4096) from the host and
-teacher configs — do not override them on the command line.
+`--rate` is only for the closing cost estimate; it controls nothing.
 
-## Step 4 — check the arm before trusting it
+Generation uses `--resume`, so a dropped pod can be restarted without repeating
+completed prompts. Decoding comes from the host and teacher configs — do not
+override temperature or max_tokens on the command line, or gate 5 will reject
+the arm.
 
-```bash
-./.venv/bin/python src/calibrate.py score data/calibration/fp8/traces.jsonl
-```
-
-Sanity checks: 52 traces, `quantization: fp8`, no empties. If `empty_rate` or
-`truncation_rate` is non-zero, investigate before comparing — a broken arm will
-look like a quality difference.
-
-## Step 5 — gate 1, the critical metrics
+## Step 5 — study gate 1, the critical metrics
 
 ```bash
 ./.venv/bin/python src/calibrate.py compare \
@@ -108,7 +136,7 @@ near ceiling on most critical metrics, so they cannot separate the arms. Only
 `refusal` (0.0192) and `constraints_ok` (0.9706) have room to move. This is why
 step 6 is not optional.
 
-## Step 6 — gate 2, blind pairwise review
+## Step 6 — study gate 2, blind pairwise review
 
 The only metric that can see what the mechanical ones cannot. Quantization
 damage shows up as weaker inference, blander drafts, shallower summaries — none
