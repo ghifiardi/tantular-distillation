@@ -58,7 +58,44 @@ before a single byte of model is downloaded.
 
 ---
 
-## Step 0 — prove the card can do FP8 (before serving anything)
+## Order of operations
+
+Each gate is placed so the cheapest rejection happens first.
+
+| # | step | needs | rejects |
+|---|---|---|---|
+| 0a | `nvidia-smi` over SSH | nothing | wrong card or driver, in seconds |
+| — | rsync the working tree | SSH key | — |
+| 0b | `verify_fp8_host.sh` | repo | writes `hardware.json` |
+| 0.5 | clean venv + `verify_stack.sh` | repo | broken stack, before any model bytes |
+| 1 | serve | working stack | fp8 fallback |
+| 2-4 | `run_fp8_arm.sh` | ready server | five further gates |
+
+**Do not download the model until 0.5 passes.** Every failure in the 2026-08-17
+rental was detectable before that point.
+
+---
+
+## Step 0a — reject a wrong pod before transferring anything
+
+`verify_fp8_host.sh` is the full gate, but it arrives with the rsync — so it
+cannot be the first check. This one needs nothing on the pod and takes seconds:
+
+```bash
+ssh -p <port> -i <key> root@<host> \
+  "nvidia-smi --query-gpu=name,compute_cap,driver_version,memory.total --format=csv"
+```
+
+Require **cc 8.9+ AND driver major ≥ 580**. If either fails, destroy the pod and
+pick another — before the SSH key setup, before the rsync, before anything.
+
+Expected good output:
+
+```
+NVIDIA L40S, 8.9, 580.65.06, 46068 MiB
+```
+
+## Step 0b — prove the card can do FP8 (after the rsync)
 
 ```bash
 ./scripts/verify_fp8_host.sh data/calibration/fp8/hardware.json
