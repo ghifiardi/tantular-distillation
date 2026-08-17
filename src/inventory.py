@@ -275,6 +275,7 @@ def family_coverage(inventory: dict, manifest: dict) -> dict:
             "granularity": ("family" if key == family_id else
                             "kind" if key else None),
             "missing": missing_fields(row) if row else ["no inventory row"],
+            "source": (row or {}).get("source"),
         }
     return out
 
@@ -338,6 +339,29 @@ def status(inventory: dict, corpus_paths: list[Path]) -> None:
         print("  NOTE: families backed by a KIND-level row all inherit one source. "
               "If different\n        families of that kind come from different "
               "documents, add family-level rows.")
+
+    # Readiness is not distinctness, and reporting only the former is how a pack
+    # of 78 documents behind 260 families read as "260/260 ready". Family-level
+    # ROWS do not imply distinct DOCUMENTS: v2 had 260 family rows whose source
+    # pointers resolved to 78 files, so the granularity note above stayed silent
+    # while every document was inherited 3.33x. Count the pointers.
+    sources = [coverage[f]["source"] for f in ready if coverage[f].get("source")]
+    if sources:
+        distinct = len(set(sources))
+        shared = Counter(sources)
+        reused = {s: n for s, n in shared.items() if n > 1}
+        print(f"  distinct source documents : {distinct}/{len(sources)}")
+        if reused:
+            worst = max(reused.values())
+            print(f"  REUSED: {len(reused)} document(s) back more than one family "
+                  f"(max {worst} families share one)")
+            print(f"          mean {len(sources) / distinct:.2f} families per document — "
+                  f"a training set\n          inherits each document that many times "
+                  f"behind an identical prompt.")
+            print("          Per-family artifacts are NOT in place despite the "
+                  "readiness count above.")
+        else:
+            print("  every ready family has its own document — no reuse")
 
 
 def main() -> None:

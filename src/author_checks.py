@@ -47,6 +47,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import author_sources
+import author_sources_v3
+import splits as splits_module
 
 SOURCE_PACK = Path.home() / "tantular-source-pack-v2"
 
@@ -74,10 +76,22 @@ def figures(*texts: str) -> list[str]:
     return found
 
 
-def checks_for(kind: str, scenario: dict, task_variant: str = "") -> dict:
+def checks_for(kind: str, scenario: dict, task_variant: str = "",
+               router_intents: tuple[str, ...] = ()) -> dict:
     """The checks a stratum's own instruction entails. Nothing more."""
     s = scenario
     finding_figures = figures(*s["findings"])
+
+    # Router: the answer must be one of the known intents. v2 carried this as a
+    # hand-authored closed_set that this tool preserved rather than derived,
+    # which silently dropped it for any prompt set built without one. Derived
+    # now from the manifest's own router kinds, so a new prompt set gets it
+    # automatically and cannot quietly lose router_correct coverage.
+    if kind.startswith("router:"):
+        if not router_intents:
+            raise ValueError("router intents not supplied — refusing to write an "
+                             "empty closed_set that would score every answer correct")
+        return {"closed_set": list(router_intents)}
 
     # Prompt set v2 asks for the table back, so cell values become checkable.
     # Keyed on the task variant, not the kind: both variants are
@@ -202,6 +216,12 @@ def main() -> None:
 
     rows = [json.loads(l) for l in
             args.prompts.read_text(encoding="utf-8").splitlines() if l.strip()]
+    split_manifest = splits_module.load()
+    # The router intents, taken from the family enumeration rather than
+    # hardcoded, so the closed_set follows the taxonomy instead of a copy of it.
+    router_intents = tuple(sorted({k.split(":", 1)[1]
+                                   for k in split_manifest["kinds"].values()
+                                   if k.startswith("router:")}))
 
     updated, unmapped, per_kind, problems = [], [], {}, []
     for row in rows:
@@ -210,7 +230,19 @@ def main() -> None:
             unmapped.append(row["family"])
             updated.append(row)
             continue
-        kind, split = key.split("|")
+        # Two pack layouts. v2 keyed artifacts by "<kind>|<split>" and shared
+        # one scenario across a split; v3 keys them by family and gives each its
+        # own. Detected from the key shape rather than a flag, so the wrong
+        # scenario can never be silently paired with a prompt.
+        if "|" in key:
+            kind, split = key.split("|")
+            scenario = author_sources.SCENARIOS[split]
+        else:
+            if key != row["family"]:
+                sys.exit(f"{row['family']} carries the source digest of {key} — "
+                         "refusing to derive checks from another family's document")
+            kind = row["family"].split("::")[0]
+            scenario = author_sources_v3.scenario_for_family(key, split_manifest)
         if kind != row["family"].split("::")[0]:
             sys.exit(f"{row['family']} maps to source of kind {kind} — refusing to guess")
 
@@ -223,8 +255,8 @@ def main() -> None:
         if kind.startswith("router:") and row.get("checks"):
             new = row["checks"]
         else:
-            new = checks_for(kind, author_sources.SCENARIOS[split],
-                             row.get("task_variant", ""))
+            new = checks_for(kind, scenario, row.get("task_variant", ""),
+                             router_intents)
         problems.extend(f"{row['family']}: {p}" for p in unsatisfiable(new, row["user"]))
         row = {**row, "checks": new}
         per_kind.setdefault(kind, set()).update(new)
