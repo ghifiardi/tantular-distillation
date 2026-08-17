@@ -142,8 +142,27 @@ def main() -> None:
             notes.append(f"other pack {other.name} has no digests.json; skipped")
             continue
         other_digests = set(json.loads(other_file.read_text(encoding="utf-8")).values())
-        bleed = [t.get("family") for t in traces if t.get("source_sha256") in other_digests]
-        print(f"  traces originating from {other.name}: {len(bleed)}")
+        # Digests are content-addressed, so a document that exists identically in
+        # both packs has one digest and membership in the other pack proves
+        # nothing about where a trace came from. Two v3 router artifacts are
+        # byte-identical to v2 ones — router requests are parameterised by topic
+        # alone, and the topic pools overlap — so a naive membership test called
+        # a clean corpus "mixed".
+        #
+        # What actually identifies a foreign trace: a digest that is NOT this
+        # family's own document in this pack. That is already required above;
+        # here it is applied specifically against the other pack.
+        bleed = [t.get("family") for t in traces
+                 if t.get("source_sha256") in other_digests
+                 and digests.get(t.get("family")) != t.get("source_sha256")]
+        coincident = sum(1 for t in traces
+                         if t.get("source_sha256") in other_digests
+                         and digests.get(t.get("family")) == t.get("source_sha256"))
+        print(f"  traces foreign to this pack but present in {other.name}: {len(bleed)}")
+        if coincident:
+            print(f"  ({coincident} traces carry their own {pack.name} document, which "
+                  f"happens to be\n   byte-identical to a {other.name} document — "
+                  f"identical content, not mixed provenance)")
         if bleed:
             failures.append(f"{len(bleed)} traces come from {other.name} — corpora mixed")
 

@@ -1,0 +1,36 @@
+{
+  "_what": "Digests of an on-disk generation pass. The traces themselves are gitignored (see .gitignore: *.jsonl); this pins which bytes a measurement referred to.",
+  "_note": "Prompt set v3 over source pack v3, candidate corpus r0. One artifact per family.",
+  "location": "data/v3-candidate",
+  "files": {
+    "traces.r0.jsonl": {
+      "sha256": "1d16204ddc384fce1904a075c2dca2e5a9d50c5262f6fb1f56755a3280a757f2",
+      "bytes": 534017,
+      "traces": 260,
+      "distinct_prompt_digests": 260,
+      "families": 260,
+      "duplicate_families": null,
+      "all_traces_unique": true,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    }
+  },
+  "sessions": {
+    "count": 1,
+    "resumed_at_trace": null,
+    "resume_reason": null,
+    "_continuous": true
+  },
+  "_errors_recorded_in": [
+    "traces.r0.errors.json"
+  ]
+}
