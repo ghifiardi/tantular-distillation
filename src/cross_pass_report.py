@@ -111,12 +111,43 @@ def main() -> None:
                 multi_same += 1
         else:
             mode_shift.append((digest, len(set_a - set_b), len(set_b - set_a)))
+    # Set membership alone is not enough. A prompt whose two modes appear 4:1 in
+    # one pass and 1:4 in the other has an IDENTICAL mode set, so the counters
+    # above call it "same set" and report nothing — while the mixture the
+    # training corpus would inherit has inverted. Drift is the total-variation
+    # distance between the two passes' mode frequencies, per prompt.
+    drift = []
+    for digest in shared:
+        count_a = Counter(t["completion"].strip() for t in ga[digest])
+        count_b = Counter(t["completion"].strip() for t in gb[digest])
+        n_a, n_b = sum(count_a.values()), sum(count_b.values())
+        if n_a and n_b:
+            modes = set(count_a) | set(count_b)
+            tv = sum(abs(count_a[m] / n_a - count_b[m] / n_b) for m in modes) / 2
+            if tv:
+                drift.append((tv, digest, sorted({t["family"] for t in ga[digest]})))
+
     print(f"  one answer, identical in both passes      : {single_same}/{len(shared)}")
     print(f"  several answers, SAME set in both passes  : {multi_same}/{len(shared)}")
     print(f"  answer set DIFFERS between passes         : {len(mode_shift)}/{len(shared)}")
     if mode_shift:
         print("    (a mode absent from one pass is across-run variance the "
               "within-run\n     measurement could not see)")
+
+    print(f"\n=== MODE-FREQUENCY DRIFT ===")
+    print(f"  prompts whose mode MIXTURE moved : {len(drift)}/{len(shared)}")
+    if drift:
+        drift.sort(reverse=True)
+        print(f"  max total-variation distance     : {round(drift[0][0], 4)}")
+        print(f"  mean over drifting prompts       : "
+              f"{round(statistics.mean(d[0] for d in drift), 4)}")
+        for tv, digest, fams in drift[:5]:
+            print(f"    {round(tv, 3):<7} {digest[:16]}  {fams[0]}"
+                  + (f" (+{len(fams) - 1} more)" if len(fams) > 1 else ""))
+        print("  Drift is invisible to the set comparison above: a prompt can keep\n"
+              "  the same mode set while the mixture a corpus inherits inverts.")
+    else:
+        print("  No prompt changed its mode mixture between passes.")
 
     # --- metric deltas, two views ----------------------------------------
     # Every metric prints its own denominator. A metric is None whenever the

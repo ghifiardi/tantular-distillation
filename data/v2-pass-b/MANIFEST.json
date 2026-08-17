@@ -1,0 +1,35 @@
+{
+  "_what": "Digests of an on-disk generation pass. The traces themselves are gitignored (see .gitignore: *.jsonl); this pins which bytes a measurement referred to.",
+  "_note": "Prompt set v2, pass B. TWO sessions with a resume boundary at trace 80 \u2014 not a continuous single-session run.",
+  "location": "data/v2-pass-b",
+  "files": {
+    "traces.r0.jsonl": {
+      "sha256": "f21386aac57fb19b92c6f3d163fe039fa1a50a0006317489e69d550ece51c4f6",
+      "bytes": 530731,
+      "traces": 260,
+      "distinct_prompt_digests": 78,
+      "families": 260,
+      "duplicate_families": null,
+      "all_traces_unique": true,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    }
+  },
+  "sessions": {
+    "count": 2,
+    "resumed_at_trace": [
+      80
+    ],
+    "resume_reason": "Session 1 was stopped externally at trace 80 by a harness task-stop, not by an infrastructure fault: the ai19 tunnel was still serving HTTP 200 and preflight still matched the int4 signature. Session 2 resumed via scripts/run_expanded.sh --resume, which appends only missing families.",
+    "_continuous": false
+  }
+}

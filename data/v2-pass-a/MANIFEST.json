@@ -1,0 +1,33 @@
+{
+  "_what": "Digests of an on-disk generation pass. The traces themselves are gitignored (see .gitignore: *.jsonl); this pins which bytes a measurement referred to.",
+  "_note": "Prompt set v2, pass A. Continuous single-session generation over prompts/expanded.v2.jsonl.",
+  "location": "data/v2-pass-a",
+  "files": {
+    "traces.r0.jsonl": {
+      "sha256": "55b0503a0839f6f53067b01dd4604325a33ac5e7d7b75284d0a01583bb52083e",
+      "bytes": 530905,
+      "traces": 260,
+      "distinct_prompt_digests": 78,
+      "families": 260,
+      "duplicate_families": null,
+      "all_traces_unique": true,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    }
+  },
+  "sessions": {
+    "count": 1,
+    "resumed_at_trace": null,
+    "resume_reason": null,
+    "_continuous": true
+  }
+}

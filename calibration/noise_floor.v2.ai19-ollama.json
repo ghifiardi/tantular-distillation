@@ -42,6 +42,14 @@
       "several_answers_same_set_in_both": 21,
       "answer_set_differs_across_passes": 2
     },
+    "mode_frequency_drift": {
+      "prompts_whose_mode_mixture_moved": 11,
+      "of_total": 78,
+      "max_total_variation_distance": 0.4,
+      "mean_over_drifting_prompts": 0.2321,
+      "_correction": "Supersedes the earlier characterisation of across-run text variance as 2/78. That figure counted only prompts where a mode APPEARED or VANISHED. Nine further prompts kept an identical mode set while the mixture moved — 4:1 in one pass against 1:4 in the other reads as 'same set' to a membership test. Measured on the same bytes; no regeneration was involved in this correction.",
+      "_why_it_matters": "The mixture is what a training corpus inherits. Metric means were unmoved (all deltas 0.0) because the competing modes are equally acceptable answers, so this is not a quality finding — but 14.1% of prompts having an unstable answer mixture is the honest figure for run-to-run textual stability, not 2.6%."
+    },
     "metric_floors": {
       "constraints_ok": 0.0,
       "router_correct": 0.0,
@@ -71,7 +79,7 @@
       ],
       "_still_unmeasured": "Table-value fidelity. Checking that cell values survive requires a prompt that asks for the table back; this stratum's prompt asks for status and owner. That is a new prompt, therefore a new generation — not a check that can be attached to the traces on disk."
     },
-    "_finding": "The across-run METRIC floor is 0.0, same as the within-run floor — so the within-run measurement did not understate the metric floor after all. But answer TEXT is not equally stable: 2 of 78 prompts (2.6%) produced a mode in one pass that was absent from the other. Textual variance across runs is real and non-zero; it simply did not move any metric.",
+    "_finding": "The across-run METRIC floor is 0.0, same as the within-run floor — so the within-run measurement did not understate the metric floor after all. Answer TEXT is not equally stable. Two figures, and the larger one is the right one to quote: 2 of 78 prompts (2.6%) gained or lost a mode outright, and 11 of 78 (14.1%) had their mode MIXTURE move, the other 9 having kept an identical mode set at different frequencies. See mode_frequency_drift. Textual variance across runs is real and non-trivial; it simply did not move any metric, because the competing modes are equally acceptable answers.",
     "_mode_shift_groups": [
       {
         "digest": "5575fa7279f95c5e",

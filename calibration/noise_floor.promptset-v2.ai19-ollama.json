@@ -1,0 +1,108 @@
+{
+  "_label": "ACROSS-PASS VARIANCE WITH RESUMED SESSION BOUNDARY",
+  "_NOT": "This is NOT a single-session reproducibility result. Pass B was generated across two sessions. Any citation of these numbers must carry the label above; dropping the qualifier would claim a cleanliness the measurement does not have.",
+  "_prompt_set": "v2 (prompts/expanded.v2.jsonl)",
+  "_source_pack": "v2",
+  "_NAMING": "Distinct from calibration/noise_floor.v2.ai19-ollama.json, whose 'v2' is the SOURCE PACK version and whose numbers were measured against prompt set v1. Both files share a source pack; they do not share a prompt set. The 10 document:spreadsheet-text prompts differ between them, so the two floors must never be merged or read as a series.",
+
+  "_measured_from": [
+    {
+      "pass": "A",
+      "path": "data/v2-pass-a/traces.r0.jsonl",
+      "sha256": "55b0503a0839f6f5",
+      "_sha256_note": "truncated for readability; full digest in data/v2-pass-a/MANIFEST.json",
+      "traces": 260,
+      "sessions": 1,
+      "continuous": true
+    },
+    {
+      "pass": "B",
+      "path": "data/v2-pass-b/traces.r0.jsonl",
+      "sha256": "f21386aac57fb19b",
+      "_sha256_note": "truncated for readability; full digest in data/v2-pass-b/MANIFEST.json",
+      "traces": 260,
+      "sessions": 2,
+      "continuous": false
+    }
+  ],
+
+  "pass_b_session_structure": {
+    "pass_b_sessions": 2,
+    "resumed_at_trace": 80,
+    "traces_before_resume": 80,
+    "traces_after_resume": 180,
+    "resume_reason": "Session 1 was stopped externally at trace 80 by a harness task-stop — not an infrastructure fault. The ai19 tunnel was still serving HTTP 200 and preflight still matched the int4 signature at the time of the stop. Session 2 resumed via scripts/run_expanded.sh, whose --resume appends only families absent from the output file.",
+    "plan_fingerprint_unchanged": true,
+    "_plan_fingerprint_evidence": "split_fingerprint ccb5ff683228c4c9 and template_sha256 114f55eb… are identical in both sessions and in pass A; all 9 pinned fields matched on comparison.",
+    "no_duplication_after_resume": true,
+    "_duplication_evidence": "260 traces, 260 distinct families, zero families appearing twice. Checked in pass_manifest.py rather than assumed from the runner's append semantics — a replayed chunk would have weighted every mean toward the replayed slice.",
+    "all_prompt_hashes_match": true,
+    "_hash_evidence": "All 260 traces in each pass re-render to the prompt_sha256 recorded at generation time (520/520, 0 mismatches), so both passes are observations of prompt set v2 and of nothing else."
+  },
+
+  "matched_prompt_digests": 78,
+  "answer_agreement": {
+    "single_answer_identical_in_both": 56,
+    "several_answers_same_set_in_both": 16,
+    "answer_set_differs_across_passes": 6
+  },
+  "mode_frequency_drift": {
+    "prompts_whose_mode_mixture_moved": 6,
+    "of_total": 78,
+    "max_total_variation_distance": 1.0,
+    "mean_over_drifting_prompts": 0.3488,
+    "_max_case": "prose:umum::0005 — disjoint answers, one mode in each pass and no overlap. An unchecked open-ended stratum.",
+    "_why_reported": "Mode-set membership alone would miss a prompt whose modes went 4:1 in one pass and 1:4 in the other. The mixture is what a training corpus inherits."
+  },
+
+  "metric_floors": {
+    "constraints_ok": 0.0,
+    "source_preserved": 0.0,
+    "router_correct": 0.0,
+    "indonesian": 0.0,
+    "refusal": 0.0,
+    "empty": 0.0,
+    "truncated": 0.0
+  },
+  "_metric_coverage_unique_prompt": {
+    "constraints_ok": "45/78",
+    "source_preserved": "39/78",
+    "router_correct": "24/78",
+    "indonesian": "51/78",
+    "refusal": "78/78",
+    "empty": "78/78",
+    "truncated": "78/78"
+  },
+  "_coverage_note": "constraints_ok covers 45/78 here against 48/78 under prompt set v1, because the revised spreadsheet prompts carry table_rows (a preservation ratio) instead of v1's must_contain (a pass/fail constraint). The stratum did not lose coverage; its evidence moved from constraints_ok to source_preserved.",
+
+  "table_fidelity": {
+    "_what": "The gap prompt set v2 exists to close. document:spreadsheet-text now asks for the table back, so cell values are checkable.",
+    "check": "table_rows — a row counts only if all six of its cells appear together on one line",
+    "pass_a": 1.0,
+    "pass_b": 1.0,
+    "n_prompts": 10,
+    "_validated": "The check was shown to discriminate before being trusted: perfect copy 1.0, half the rows 0.5, two values rounded 0.5, a v1-style prose answer 0.0.",
+    "_result": "The teacher reproduces the table intact at int4 on ai19, in both passes."
+  },
+
+  "resume_boundary_analysis": {
+    "_question": "Did the session boundary itself induce the answer variance?",
+    "differing_prompts_before_boundary": 1,
+    "differing_prompts_after_boundary": 5,
+    "straddling_boundary": 0,
+    "pre_boundary_share_of_traces": 0.308,
+    "expected_before_under_chance": 1.85,
+    "binomial_p_le_1": 0.404,
+    "_verdict": "Consistent with chance. The post-boundary slice holds 69.2% of traces, so 5-of-6 falling there is close to what position-independence predicts. No evidence the resume caused the variance.",
+    "_LIMITATION": "n=6 is also far too small to RULE OUT a boundary effect. This analysis cannot clear the resume, only decline to convict it. A single-session pass B is what would settle it.",
+    "_composition": "4 of the 6 differing prompts sit in the 5 unchecked open-ended prose strata, where more answer freedom is expected by construction."
+  },
+
+  "_finding": "Every across-pass metric delta is 0.0 at 21/26 strata coverage, including the table-fidelity check that prompt set v1 could not support. Answer text is less stable than the metrics: 6 of 78 prompts (7.7%) differ in answer set, the same 6 drifting in mode mixture, one of them completely. As under v1, the competing modes are acceptable answers, so textual variance did not move a metric.",
+
+  "_comparison_to_v1_is_NOT_licensed": "Prompt set v1 reported 2/78 set differences and 11/78 mixture drift; this reports 6/78 and 6/78. Those numbers must NOT be read as a trend. The prompt sets differ, pass B here has a session boundary and v1's passes had their own interruption history, and n is small in both. Two numbers from two instruments are not a measurement of change.",
+
+  "_use": "Cite as: across-pass variance with resumed session boundary, prompt set v2, 21/26 strata checked. Standing constraints: (1) do not describe this as single-session reproducibility; (2) do not merge with the prompt-set-v1 floor; (3) 5 open-ended prose strata still contribute to no constraint or preservation metric.",
+
+  "_corpus_status": "synthetic_candidate. NOT training-ready. Promotion has not been approved and nothing in this file constitutes approval."
+}
