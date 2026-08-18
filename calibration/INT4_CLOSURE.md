@@ -38,6 +38,20 @@ file states which prompt set produced it.
 Unchanged by any of this. `verify_corpus.py --gate` still fails and still exits
 1. No FP8 claim may be made; the int4 waiver is what permits the work above.
 
+## FP8 arm: FROZEN 2026-08-18
+
+Two rentals produced no treatment arm (~$3.35). The int4 waiver therefore stands
+unchanged, and its central admission remains literally true: the magnitude of
+quantization loss is unmeasured and no number in this repository bounds it.
+
+The infrastructure is solved — driver gate, clean-venv stack check, and the two
+vLLM protocol fixes are committed and verified. The blocker is model support:
+vLLM has no native implementation for `TransformersMultiModalForCausalLM` and
+generates only control tokens.
+
+No further GPU rental until a free or local runtime is shown to produce a valid
+answer channel from one prompt. See `FP8_ARM_RUNBOOK.md`.
+
 ## Next, and it is not calibration
 
 Corpus quality, before training. The measurement side is now sound enough that

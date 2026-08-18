@@ -1,5 +1,17 @@
 # Running the FP8 treatment arm
 
+> **FROZEN 2026-08-18 — DO NOT RENT A GPU AGAINST THIS RUNBOOK.**
+>
+> Two rentals (~$3.35 total) produced no arm. Hardware, driver, stack and
+> pipeline are all now correct and gated; the blocker is that vLLM has no
+> native implementation for this checkpoint's `TransformersMultiModalForCausalLM`
+> architecture and emits only `<|eom|>` tokens with no text.
+>
+> **Precondition for any future rental:** a free or local runtime must first be
+> shown to produce a valid answer channel from ONE prompt. Without that
+> evidence, renting repeats the same failure. The steps below are correct for
+> the infrastructure and should not be re-derived — but they are on hold.
+
 The pre-registered study in `acceptance.yaml` has two arms. Only the baseline
 (int4) was ever generated, so the study has **never been run** — not failed, not
 inconclusive. This runbook produces the missing arm and the verdict.
