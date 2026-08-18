@@ -33,10 +33,30 @@ for attempt in $(seq 1 12); do
   fi
   # Preflight WITHOUT a pipe: a pipeline's exit status is the last command's,
   # which silently let a dead-endpoint run proceed once already.
+  #
+  # A failure here has two very different causes and they need opposite
+  # responses. A CHANGED SIGNATURE is fatal — the whole point of the check is
+  # that a swapped model must never be generated against. A momentarily
+  # UNREACHABLE endpoint is not: the tunnel to ai19 drops every ten minutes or
+  # so, and treating that as fatal killed pass C twice at 39/260 and 62/260
+  # with the endpoint answering again seconds later.
+  #
+  # Distinguish them by asking whether the endpoint is up at all. If it is
+  # reachable and preflight still fails, the signature genuinely differs and we
+  # stop. If it is unreachable, this is the tunnel again — loop, and let
+  # ensure_tunnel rebuild it on the next pass.
   if ! ./.venv/bin/python src/preflight.py --teacher muse-glimmer --host ai19-ollama \
         --verify data/calibration/int4/signature.json >/dev/null 2>&1; then
-    echo "    PREFLIGHT FAILED — model signature changed or endpoint down; stopping"
-    exit 1
+    if curl -s -m 10 -o /dev/null http://localhost:11435/v1/models; then
+      echo "    PREFLIGHT FAILED with the endpoint reachable — the model"
+      echo "    signature has CHANGED. Stopping: generating now would mix"
+      echo "    traces from different weights into one corpus."
+      exit 1
+    fi
+    echo "    preflight could not reach the endpoint; tunnel is down again."
+    echo "    Not treating this as a signature change; retrying in 30s."
+    sleep 30
+    continue
   fi
   ./.venv/bin/python src/generate_normalized.py --host ai19-ollama \
     --prompts "$PROMPTS" --out "$OUT" --resume --limit "$CHUNK"

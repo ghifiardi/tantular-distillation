@@ -1,4 +1,10 @@
-# v3 volatility — `UNMEASURED`
+# v3 volatility — MEASURED at concurrency 4; UNMEASURED across batching
+
+**Status 2026-08-18.** Three independent passes over all 260 v3 prompts show
+**0 of 260 families varying**. That closes the question at the configuration
+tested, and leaves one narrower question open — see the scope note at the end.
+
+Superseded sections below are kept for the reasoning trail.
 
 Status as of 2026-08-17. **Not `PASS`. Not `NONE FOUND`.** No family has been
 tested, so nothing is known either way.
@@ -129,3 +135,62 @@ agree/disagree, which is the whole point of that tool.
 
 Absent that, the honest statement is: **no v3 family has been shown to vary, and
 no v3 family has been shown to be stable.**
+
+
+---
+
+## Result 2026-08-18: three passes, 0/260 varied
+
+| | |
+|---|---|
+| passes | `data/v3-candidate`, `data/v3-pass-a`, `data/v3-pass-c` |
+| plan consistency | all 9 pinned fields identical |
+| prompt digests | identical for all 260 families in all 3 passes |
+| uniqueness | 260 traces / 260 families / 0 duplicates, each pass |
+| **families that varied** | **0 / 260** |
+
+Every completion is byte-identical across all three passes. The only difference
+between the files is LINE ORDER — pass C was generated across resumed chunks
+after tunnel drops, so its families are written in a different sequence. A
+field-by-field comparison finds no other difference at all: not one provenance
+value, not one token count.
+
+### Steps 3 and 4 were not run, because there was nothing to run them on
+
+The agreed sequence was: probe, then replicate any varying family, then
+`volatile_review` to decide INCLUDE ALL / INCLUDE ONE / EXCLUDE. The probe
+returned zero candidates, so there are no families to replicate and no modes to
+adjudicate. Running the review on an empty set would produce a verdict with no
+evidence behind it.
+
+The waiver's rule — *replicated, or excluded, never one arbitrary sample* —
+is therefore satisfied on evidence rather than vacuously. Previously no family
+was designated volatile because none had been looked for. Now 260 have been
+checked three times.
+
+### What this does and does not establish
+
+**Does:** at `concurrency 4` with identical configuration, the teacher produced
+identical answers to all 260 v3 prompts on three separate runs, hours apart,
+across tunnel drops and process restarts.
+
+**Does not:** establish stability under DIFFERENT batching. All three passes ran
+at concurrency 4. The v1 evidence tied mode selection to batching, and that
+remains untested for v3 — a concurrency-8 pass was attempted and abandoned after
+180 of 260 requests failed with `RemoteProtocolError`, because ai19 is a shared
+production box that drops connections at that load. Those failures are
+infrastructure, not quality, and are filed under
+`data/_failed-runs/v3-pass-c-concurrency8/`.
+
+**Also does not:** prove a rare mode cannot exist. Three samples would very
+likely miss a mode that appears, say, 5% of the time. The honest statement is
+*no variation was observed in three observations at these settings*, not *this
+teacher is deterministic*.
+
+### Practical consequence
+
+No v3 family requires replication or exclusion before training. The corpus can
+be used as generated, and `verify_corpus.py --gate`'s volatile-family check now
+passes over an empty set for a measured reason.
+
+Corpus remains `synthetic_candidate`; the int4 waiver is unaffected.

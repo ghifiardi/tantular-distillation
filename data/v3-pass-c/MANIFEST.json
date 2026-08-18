@@ -1,0 +1,40 @@
+{
+  "_what": "Digests of an on-disk generation pass. The traces themselves are gitignored (see .gitignore: *.jsonl); this pins which bytes a measurement referred to.",
+  "_note": "Prompt set v3, third observation, concurrency 4 (same as passes A and candidate).",
+  "location": "data/v3-pass-c",
+  "files": {
+    "traces.r0.jsonl": {
+      "sha256": "94fde1a47f348177f299746971eda2ca6d136950d2fb871a354f341f50ca7210",
+      "bytes": 534017,
+      "traces": 260,
+      "distinct_prompt_digests": 260,
+      "families": 260,
+      "duplicate_families": null,
+      "all_traces_unique": true,
+      "provenance": {
+        "split_fingerprint": "ccb5ff683228c4c9",
+        "split_seed": "tantular-office-v2",
+        "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+        "repo": "muse-glimmer:30b",
+        "quantization": "int4_ollama",
+        "host": "ai19-ollama",
+        "reasoning_strength": "high",
+        "temperature": 0.0,
+        "seed": 0
+      }
+    }
+  },
+  "sessions": {
+    "count": 4,
+    "resumed_at_trace": [
+      39,
+      62,
+      102
+    ],
+    "resume_reason": "SSH tunnel to ai19 dropped repeatedly; runner's preflight guard treated each transient outage as fatal until it was fixed to distinguish an unreachable endpoint from a changed signature. ai19 was healthy throughout.",
+    "_continuous": false
+  },
+  "_errors_recorded_in": [
+    "traces.r0.errors.json"
+  ]
+}
