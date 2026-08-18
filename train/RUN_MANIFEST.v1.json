@@ -1,0 +1,48 @@
+{
+  "_what": "The exact inputs and authorisation a training run started from. Written before training, never edited after.",
+  "frozen_at": "2026-08-19T09:00:00+07:00",
+  "corpus": {
+    "path": "data/v3-candidate/traces.r0.jsonl",
+    "sha256": "1d16204ddc384fce1904a075c2dca2e5a9d50c5262f6fb1f56755a3280a757f2",
+    "traces": 260,
+    "families": 260,
+    "provenance": {
+      "split_fingerprint": "ccb5ff683228c4c9",
+      "split_seed": "tantular-office-v2",
+      "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+      "repo": "muse-glimmer:30b",
+      "quantization": "int4_ollama",
+      "host": "ai19-ollama",
+      "reasoning_strength": "high",
+      "temperature": 0.0,
+      "seed": 0
+    }
+  },
+  "training_config": {
+    "path": "train/qlora_9b.yaml",
+    "sha256": "79fd7bd376eb724ebc758b0b83693e1382978cca21dd5379a153af18bc4908fa"
+  },
+  "gate": {
+    "command": "src/verify_corpus.py data/v3-candidate/traces.r0.jsonl --gate",
+    "exit_code": 1,
+    "verdict": "FAILED",
+    "_not_a_pass": "A non-zero exit is the correct and expected state for an int4 corpus. The waiver authorises proceeding DESPITE this failure; it does not convert it into a pass, and no FP8 claim may be made on the strength of it.",
+    "output": [
+      "    challenge  families   34 ( 13.1%)   traces    34 ( 13.1%)",
+      "    eval       families   54 ( 20.8%)   traces    54 ( 20.8%)",
+      "    train      families  172 ( 66.2%)   traces   172 ( 66.2%)",
+      "",
+      "FAILED \u2014 1 violation(s):",
+      "  260 trace(s) from a quantized teacher ({'int4_ollama': 260}) \u2014 regenerate at fp8 before training, or proceed under a SIGNED waiver (calibration/INT4_WAIVER.md). This gate stays FAILED either way: a waiver authorises proceeding despite the failure, it does not convert it into a pass, and no FP8 claim may be made."
+    ]
+  },
+  "waiver": {
+    "path": "calibration/INT4_WAIVER.md",
+    "sha256": "dd9725a5b5d940198289877fa98ca1f73fbad35c0f7a0091a4755f54affc7d18"
+  },
+  "claims_this_run_may_NOT_support": [
+    "Any statement about performance on real Office documents \u2014 the corpus is entirely source_class: synthetic.",
+    "FP8 equivalence, or that the FP8 gate passed. The treatment arm has never been generated.",
+    "Teacher stability under batching other than concurrency 4. See calibration/VOLATILITY_v3.md."
+  ]
+}
