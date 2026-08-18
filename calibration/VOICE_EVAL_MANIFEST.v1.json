@@ -1,0 +1,67 @@
+{
+  "_what": "Held-out Indonesian-voice eval. Authored fresh 2026-08-19 from Office scenarios; scored by src/score_voice.py against the rubric approved the same day. Kept OUT of data/promoted/ and out of every training corpus.",
+  "items": 40,
+  "sha256": "249acd7c65ce5c58ecb249611a23ca144ec1414d3399e2df21105289817cda23",
+  "path": "prompts/voice_eval.v1.jsonl",
+  "threshold": {
+    "min_pass_rate": 0.95,
+    "items_required_to_pass": 38,
+    "_verified": "38/40 passes and 37/40 fails, checked against the scorer."
+  },
+  "gating": {
+    "gate_on": "overall item pass rate",
+    "reported_not_gated": [
+      "register_address",
+      "register_opener",
+      "baku",
+      "terminology",
+      "language"
+    ],
+    "_why": "Per-dimension rates say WHERE a regression happened; a single number cannot."
+  },
+  "scenario_domains": [
+    "facilities maintenance",
+    "records/archiving",
+    "meeting minutes",
+    "travel and vehicle policy",
+    "energy and consumption",
+    "inventory and assets",
+    "complaint handling procedure"
+  ],
+  "_domains_disjoint_from": {
+    "survey_corpus": "banking and civil administration (blocking cards, OTP, Dukcapil, NPWP)",
+    "training_corpus": "procurement, access review, staff training programmes"
+  },
+  "leakage_check": {
+    "survey_sft": {
+      "max_token_overlap": 0.444,
+      "exact_reuse": 0
+    },
+    "survey_sft_aug": {
+      "max_token_overlap": 0.643,
+      "exact_reuse": 0
+    },
+    "promoted_train": {
+      "max_token_overlap": 0.9,
+      "exact_reuse": 0
+    },
+    "promoted_eval": {
+      "max_token_overlap": 0.905,
+      "exact_reuse": 0
+    },
+    "_analysis": {
+      "exact_reuse": "0 against all four corpora — no answer, user phrasing, or item is reused.",
+      "token_overlap_is_not_reuse": "Up to 0.90 against the promoted corpus, but that is shared common Indonesian vocabulary (berikut, bagian, dokumen, untuk, tidak), not shared content. Reported because the raw number looks alarming and would otherwise invite a wrong conclusion.",
+      "phrase_overlap_8gram_full_prompt": "6/40 items — ALL instruction templates or document-format boilerplate ('terjemahkan teks berikut ke bahasa inggris pertahankan angka', 'memo internal kepada seluruh kepala bagian'). This sharing is DELIBERATE: the eval must use the product's real task instructions or it is not testing the product's tasks.",
+      "phrase_overlap_8gram_content_only": "1/40 — the memo header layout only. No scenario, fact, figure, or answer is shared with any training or survey corpus."
+    }
+  },
+  "_leakage_note": "tantular_sft_aug.jsonl IS the 153-example corpus that trained tantular:0.2-id-3b-lora, and tantular_sft.jsonl its 17-example seed. Neither answer, user phrasing, nor paraphrase is reused here. Token overlap is common Indonesian vocabulary, not shared content — exact reuse is 0 against all four.",
+  "rubric": {
+    "register": "no informal address (Kak/kamu/lo), no greeting filler opening a document answer",
+    "baku": "no colloquial contractions",
+    "terminology": "generic anglicisms flagged where a standard term exists; established domain terms allow-listed; source-required terms exempt",
+    "language": "Indonesian-dominant, except where the task asks for English"
+  },
+  "_no_model_judges_another": "Every check is a deterministic string or ratio test."
+}
