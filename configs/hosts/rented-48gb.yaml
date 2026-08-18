@@ -19,3 +19,8 @@ tensor_parallel_size: 1
 quantization: fp8
 gpu_memory_utilization: 0.92
 max_model_len: 32768
+
+# generate_normalized.py requires an explicit endpoint; preflight can build one
+# from the port but generation cannot. Absent until a 2026-08-18 rental became
+# the first run to actually generate against this host.
+base_url: http://localhost:8010/v1

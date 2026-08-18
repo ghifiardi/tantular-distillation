@@ -10,7 +10,9 @@
 # that capability is Tantular's own and distilling over it loses ground.
 
 name: muse-glimmer
-port: 8001
+# 8001 collides with the nginx that ships in RunPod's PyTorch template, which
+# even answers HTTP 200 on /v1/models. Measured 2026-08-18.
+port: 8010
 served_model_name: muse-glimmer
 license: apache-2.0
 

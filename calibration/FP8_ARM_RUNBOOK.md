@@ -442,3 +442,77 @@ one does.
   that claim still needs approved, redacted real sources.
 - **The corpus stays `synthetic_candidate`** until someone decides otherwise on
   the evidence.
+
+---
+
+## BLOCKER as of 2026-08-18: vLLM cannot generate from this checkpoint
+
+A second rental cleared every infrastructure gate and still produced **no arm**.
+This is the current stopping point, and it is not a hardware or config problem.
+
+### What worked
+
+| step | result |
+|---|---|
+| pod: L40S, cc 8.9, **driver 580.159.04** | driver gate passed |
+| clean venv, `uv pip install vllm --torch-backend=auto` | torch 2.13.0+**cu132**, vllm 0.27.1, transformers 5.15.0 |
+| `verify_stack.sh` | all checks incl. vLLM's compiled CUDA extension |
+| model load | 32.32 GiB in 87 s |
+| FP8 kernels | `Selected TritonFp8BlockScaledMMKernel for CompressedTensorsW8A8Fp8` |
+| gates 1–3 | passed |
+
+FP8 serving on Ada is confirmed possible. The driver gate did its job.
+
+### What failed
+
+All 52 traces malformed. Raw output, once `skip_special_tokens: False` made the
+control tokens visible:
+
+```
+<|eom|><|eom|><|eom|><|eom|><|eom|>… (repeating, no content)
+```
+
+The chat endpoint is equally broken (`content: "\n"`, 4 tokens). The model
+generates control tokens and no text, on either request path.
+
+The probable cause is in the startup log:
+
+```
+TransformersMultiModalForCausalLM has no vLLM implementation,
+falling back to Transformers implementation
+```
+
+vLLM has no native implementation for this architecture and runs it through a
+generic fallback. Weights load and FP8 kernels engage, but generation is
+garbage. No request-level flag fixed it.
+
+### Fixed along the way — real bugs, now committed
+
+The `runtime == "openai"` branch of `generate_normalized.py` had **never been
+executed** before this rental; ai19-ollama was the only host ever used to
+generate. Two genuine defects were hiding there:
+
+- `add_special_tokens: False` — the harmony template renders `bos_token`
+  itself, so vLLM prepending another gave a doubled BOS; every completion came
+  back empty.
+- `skip_special_tokens: False` — vLLM strips control tokens from returned text
+  by default, deleting the very channel markers `parse_channels` needs.
+
+Ollama's single `raw: True` covers both, which is why neither had surfaced.
+Also fixed: `rented-48gb` had no `base_url`; the teacher port collided with the
+template's nginx; and `serve_teacher.sh` now registers both the short name and
+the repo path as served-model aliases.
+
+### Before renting again
+
+**Do not debug this on a rented GPU.** Three incompatibilities were found at
+$1/hr, each revealing the next. Resolve the architecture support question
+off-GPU first:
+
+1. Determine whether any vLLM version natively implements this architecture, or
+   whether a different serving stack is needed.
+2. Verify generation produces real text against a free or local endpoint.
+3. Only then rent, and expect the run to take about 30 minutes.
+
+Until that is answered, the FP8 arm remains unobtainable and the int4 waiver
+stands unchanged.

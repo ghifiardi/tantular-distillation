@@ -164,10 +164,35 @@ async def complete(client: httpx.AsyncClient, base: str, model: str, prompt: str
                 "stop_reason": "__absent__"}
     # vLLM and anything else OpenAI-compatible: the completions path, not chat,
     # so no server-side template is applied to our already-rendered prompt.
+    #
+    # Ollama's `raw: True` above suppresses THREE things at once: the chat
+    # template, BOS insertion, and special-token filtering on the way out. The
+    # OpenAI path needs the last two requested explicitly, and both were missing
+    # until a 2026-08-18 rental exercised this branch for the first time — until
+    # then ai19-ollama was the only host ever used for generation, so
+    # `runtime == "openai"` was untested code.
+    #
+    #   add_special_tokens=False   the harmony template renders `bos_token`
+    #                              itself, so letting the tokenizer prepend
+    #                              another gives a doubled BOS. The model then
+    #                              emits a stop token immediately and every
+    #                              trace comes back empty.
+    #
+    #   skip_special_tokens=False  vLLM strips control tokens from the returned
+    #                              text by default, which deletes exactly the
+    #                              channel markers parse_channels needs —
+    #                              `<|message|>`, `<|eom|>`, and the
+    #                              `<|start|>assistant to=user<|message|>` that
+    #                              FINAL_MARKER looks for. Output that parsed
+    #                              fine under Ollama arrived here as "".
+    #
+    # Both are required for the two arms to receive and return comparable text,
+    # which is the entire premise of the normalized protocol.
     response = await client.post(
         f"{base}/v1/completions",
         json={"model": model, "prompt": prompt, "temperature": temperature,
               "seed": seed, "max_tokens": max_tokens,
+              "add_special_tokens": False, "skip_special_tokens": False,
               **({"stop": stops} if stops else {})},
         timeout=timeout)
     response.raise_for_status()

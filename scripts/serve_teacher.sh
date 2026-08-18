@@ -43,10 +43,22 @@ echo "  repo   : $TEACHER_REPO"
 echo "  quant  : $HOST_QUANTIZATION   tp: $HOST_TENSOR_PARALLEL_SIZE"
 echo "  url    : http://0.0.0.0:$TEACHER_PORT/v1"
 
+# Serve under BOTH the short name and the repo path. preflight.py asks for
+# TEACHER_REPO whenever a base_url is set, and generate_normalized.py always
+# asks for TEACHER_REPO — but vLLM only answers to --served-model-name, so a
+# single short name makes the endpoint reject the very id the pipeline requests
+# ("model 'RedHatAI/...' is not served; available: muse-glimmer"). Registering
+# both aliases satisfies every caller without renaming the repo in the teacher
+# config, which would corrupt the `repo` field recorded in every trace's
+# provenance. Measured 2026-08-18.
+#
+# The quantization flag is deliberately NOT passed: this checkpoint declares
+# compressed-tensors/FP8_BLOCK itself, and forcing "fp8" makes vLLM refuse to
+# start. Letting the checkpoint decide also makes the FP8 evidence in the log
+# independent of what we asked for.
 exec vllm serve "$TEACHER_REPO" \
-  --served-model-name "$TEACHER_SERVED_MODEL_NAME" \
+  --served-model-name "$TEACHER_SERVED_MODEL_NAME" "$TEACHER_REPO" \
   --port "$TEACHER_PORT" \
   --tensor-parallel-size "$HOST_TENSOR_PARALLEL_SIZE" \
-  --quantization "$HOST_QUANTIZATION" \
   --gpu-memory-utilization "$HOST_GPU_MEMORY_UTILIZATION" \
   --max-model-len "$HOST_MAX_MODEL_LEN"

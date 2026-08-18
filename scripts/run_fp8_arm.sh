@@ -137,12 +137,20 @@ print("  OK")
 PY
 
 # --- gate 2: the server actually selected fp8 --------------------------------
+# The negative patterns are narrow ON PURPOSE. Broad ones blocked a genuinely
+# healthy FP8 arm twice on 2026-08-18: "quantization.*none" matched the benign
+# "quantization=compressed-tensors, quantization_config=None", and a bare
+# "falling back" matched "TransformersMultiModalForCausalLM ... falling back to
+# Transformers implementation" — a MODEL-IMPLEMENTATION fallback that says
+# nothing about precision. A gate that cries wolf gets loosened in a hurry by
+# someone paying for a GPU, which is worse than one that was precise to begin
+# with.
 echo "=== gate 2: vLLM quantization ==="
 [[ -n "$VLLM_LOG" ]] || abort "--vllm-log is required: preflight reports the CONFIG's
        quantization, so the server's own log is the only evidence it served fp8"
 [[ -f "$VLLM_LOG" ]] || abort "no such log: $VLLM_LOG"
-if grep -qiE "cannot use fp8|fp8 is not supported|falling back|quantization.*(awq|gptq|none)" "$VLLM_LOG"; then
-  grep -iE "cannot use fp8|fp8 is not supported|falling back|quantization" "$VLLM_LOG" | head -5 >&2
+if grep -qiE "cannot use fp8|fp8 is not supported|falling back to unquantized|quantization=(awq|gptq|none)" "$VLLM_LOG"; then
+  grep -iE "cannot use fp8|fp8 is not supported|falling back to unquantized|quantization" "$VLLM_LOG" | head -5 >&2
   abort "vLLM log shows a fallback or a non-fp8 method — this would not be an FP8 arm"
 fi
 grep -qi "fp8" "$VLLM_LOG" || abort "vLLM log never mentions fp8; refusing to assume it"
@@ -150,6 +158,12 @@ grep -iE "quantization|fp8" "$VLLM_LOG" | head -3 | sed 's/^/  /'
 echo "  OK"
 
 # --- gate 3: signature -------------------------------------------------------
+# Compares TEACHER, not the model id. The two arms run on different runtimes
+# that name the same weights differently — Ollama serves "muse-glimmer:30b",
+# vLLM serves the HF repo path — so requested_model can never match across a
+# legitimate int4-vs-fp8 comparison. `teacher` is the field that actually means
+# "same teacher", and the checks that matter are still enforced below:
+# reported==requested, and quantization differing from the baseline's.
 echo "=== gate 3: preflight signature ==="
 mkdir -p data/calibration/fp8
 $PY src/preflight.py --teacher muse-glimmer --host rented-48gb \
@@ -158,9 +172,9 @@ $PY - <<'PY' || exit 1
 import json, sys
 sig = json.load(open("data/calibration/fp8/signature.json"))
 base = json.load(open("data/calibration/int4/signature.json"))
-if sig.get("requested_model") != base.get("requested_model"):
-    sys.exit(f"ABORT: model differs from the baseline study "
-             f"({sig.get('requested_model')} vs {base.get('requested_model')})")
+if sig.get("teacher") != base.get("teacher"):
+    sys.exit(f"ABORT: teacher differs from the baseline study "
+             f"({sig.get('teacher')} vs {base.get('teacher')})")
 if sig.get("reported_model") != sig.get("requested_model"):
     sys.exit(f"ABORT: server reported a different model than requested "
              f"({sig.get('reported_model')} vs {sig.get('requested_model')})")
