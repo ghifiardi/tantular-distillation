@@ -1,0 +1,969 @@
+{
+  "_what": "Families promoted into a training corpus under the MECHANICAL bar. Does not supersede RUN_MANIFEST.v1.json, which freezes the full 260-trace corpus as generated.",
+  "frozen_at": "2026-08-19T10:00:00+07:00",
+  "source_corpus": {
+    "path": "data/v3-candidate/traces.r0.jsonl",
+    "sha256": "1d16204ddc384fce1904a075c2dca2e5a9d50c5262f6fb1f56755a3280a757f2",
+    "traces": 260
+  },
+  "bar": {
+    "mechanical_strata_promoted": [
+      "document:email",
+      "document:memo",
+      "document:report",
+      "document:slide-text",
+      "document:spreadsheet-text",
+      "edit:elaborasi",
+      "edit:koreksi",
+      "edit:perjelas",
+      "edit:restrukturisasi",
+      "edit:ringkas_bagian",
+      "edit:ubah_istilah",
+      "prose:ringkas",
+      "prose:terjemah",
+      "router:CEK_AMAN",
+      "router:DRAFT_TEKS",
+      "router:EDIT_TEKS",
+      "router:RINGKAS",
+      "router:TANYA_DOKUMEN",
+      "router:TERJEMAH",
+      "router:UBAH_NADA",
+      "router:UMUM"
+    ],
+    "unchecked_strata_EXCLUDED": [
+      "prose:cekAman",
+      "prose:draftTeks",
+      "prose:tanyaDokumen",
+      "prose:ubahNada",
+      "prose:umum"
+    ],
+    "_why_excluded": "No objective rule exists for these, so nothing here can establish their quality. Muse Glimmer was NOT used to judge its own output; that measures a model against itself. They need an independent judge or human review."
+  },
+  "splits": {
+    "fingerprint": "ccb5ff683228c4c9",
+    "_not_re_derived": "split and split_fingerprint come from the manifest that governed generation.",
+    "challenge_held_out": 27
+  },
+  "promoted": {
+    "train": {
+      "path": "data/promoted/train.jsonl",
+      "traces": 136,
+      "sha256": "79c7b6aca182ceeb17fdd4de02a994d63dd890b3fdf9019f5df4de3a6f515629",
+      "families": [
+        "document:email::0001",
+        "document:email::0002",
+        "document:email::0004",
+        "document:email::0005",
+        "document:email::0006",
+        "document:email::0008",
+        "document:email::0009",
+        "document:memo::0002",
+        "document:memo::0003",
+        "document:memo::0004",
+        "document:memo::0005",
+        "document:memo::0008",
+        "document:memo::0009",
+        "document:report::0000",
+        "document:report::0001",
+        "document:report::0002",
+        "document:report::0004",
+        "document:report::0006",
+        "document:report::0009",
+        "document:slide-text::0001",
+        "document:slide-text::0002",
+        "document:slide-text::0003",
+        "document:slide-text::0004",
+        "document:slide-text::0006",
+        "document:slide-text::0007",
+        "document:slide-text::0008",
+        "document:spreadsheet-text::0005",
+        "document:spreadsheet-text::0006",
+        "document:spreadsheet-text::0007",
+        "document:spreadsheet-text::0008",
+        "document:spreadsheet-text::0009",
+        "edit:elaborasi::0002",
+        "edit:elaborasi::0003",
+        "edit:elaborasi::0004",
+        "edit:elaborasi::0005",
+        "edit:elaborasi::0006",
+        "edit:elaborasi::0007",
+        "edit:koreksi::0000",
+        "edit:koreksi::0001",
+        "edit:koreksi::0002",
+        "edit:koreksi::0005",
+        "edit:koreksi::0006",
+        "edit:koreksi::0007",
+        "edit:koreksi::0008",
+        "edit:koreksi::0009",
+        "edit:perjelas::0001",
+        "edit:perjelas::0002",
+        "edit:perjelas::0003",
+        "edit:perjelas::0004",
+        "edit:perjelas::0005",
+        "edit:perjelas::0006",
+        "edit:perjelas::0007",
+        "edit:perjelas::0008",
+        "edit:restrukturisasi::0001",
+        "edit:restrukturisasi::0002",
+        "edit:restrukturisasi::0004",
+        "edit:restrukturisasi::0005",
+        "edit:restrukturisasi::0006",
+        "edit:restrukturisasi::0007",
+        "edit:restrukturisasi::0008",
+        "edit:restrukturisasi::0009",
+        "edit:ringkas_bagian::0001",
+        "edit:ringkas_bagian::0002",
+        "edit:ringkas_bagian::0003",
+        "edit:ringkas_bagian::0004",
+        "edit:ringkas_bagian::0005",
+        "edit:ringkas_bagian::0007",
+        "edit:ringkas_bagian::0009",
+        "edit:ubah_istilah::0000",
+        "edit:ubah_istilah::0001",
+        "edit:ubah_istilah::0002",
+        "edit:ubah_istilah::0005",
+        "edit:ubah_istilah::0008",
+        "prose:ringkas::0005",
+        "prose:ringkas::0006",
+        "prose:ringkas::0007",
+        "prose:ringkas::0008",
+        "prose:ringkas::0009",
+        "prose:terjemah::0001",
+        "prose:terjemah::0002",
+        "prose:terjemah::0003",
+        "prose:terjemah::0005",
+        "prose:terjemah::0006",
+        "prose:terjemah::0008",
+        "prose:terjemah::0009",
+        "router:CEK_AMAN::0001",
+        "router:CEK_AMAN::0002",
+        "router:CEK_AMAN::0003",
+        "router:CEK_AMAN::0004",
+        "router:CEK_AMAN::0005",
+        "router:CEK_AMAN::0006",
+        "router:CEK_AMAN::0007",
+        "router:CEK_AMAN::0008",
+        "router:DRAFT_TEKS::0000",
+        "router:DRAFT_TEKS::0002",
+        "router:DRAFT_TEKS::0003",
+        "router:DRAFT_TEKS::0005",
+        "router:DRAFT_TEKS::0006",
+        "router:DRAFT_TEKS::0007",
+        "router:DRAFT_TEKS::0008",
+        "router:EDIT_TEKS::0001",
+        "router:EDIT_TEKS::0002",
+        "router:EDIT_TEKS::0003",
+        "router:EDIT_TEKS::0004",
+        "router:EDIT_TEKS::0007",
+        "router:RINGKAS::0001",
+        "router:RINGKAS::0003",
+        "router:RINGKAS::0004",
+        "router:RINGKAS::0006",
+        "router:RINGKAS::0007",
+        "router:TANYA_DOKUMEN::0000",
+        "router:TANYA_DOKUMEN::0001",
+        "router:TANYA_DOKUMEN::0004",
+        "router:TANYA_DOKUMEN::0005",
+        "router:TANYA_DOKUMEN::0006",
+        "router:TANYA_DOKUMEN::0008",
+        "router:TANYA_DOKUMEN::0009",
+        "router:TERJEMAH::0002",
+        "router:TERJEMAH::0003",
+        "router:TERJEMAH::0004",
+        "router:TERJEMAH::0006",
+        "router:TERJEMAH::0007",
+        "router:TERJEMAH::0008",
+        "router:TERJEMAH::0009",
+        "router:UBAH_NADA::0001",
+        "router:UBAH_NADA::0002",
+        "router:UBAH_NADA::0003",
+        "router:UBAH_NADA::0005",
+        "router:UBAH_NADA::0006",
+        "router:UBAH_NADA::0009",
+        "router:UMUM::0000",
+        "router:UMUM::0002",
+        "router:UMUM::0003",
+        "router:UMUM::0005",
+        "router:UMUM::0006",
+        "router:UMUM::0007"
+      ]
+    },
+    "eval": {
+      "path": "data/promoted/eval.jsonl",
+      "traces": 47,
+      "sha256": "636f78642152246ef5579b883e988df5fef35cf8538fa1efed461b1697b00d6e",
+      "families": [
+        "document:email::0000",
+        "document:email::0003",
+        "document:memo::0000",
+        "document:memo::0006",
+        "document:memo::0007",
+        "document:report::0003",
+        "document:report::0005",
+        "document:report::0007",
+        "document:slide-text::0000",
+        "document:spreadsheet-text::0000",
+        "document:spreadsheet-text::0001",
+        "document:spreadsheet-text::0002",
+        "document:spreadsheet-text::0004",
+        "edit:elaborasi::0000",
+        "edit:elaborasi::0001",
+        "edit:koreksi::0004",
+        "edit:perjelas::0000",
+        "edit:restrukturisasi::0003",
+        "edit:ringkas_bagian::0006",
+        "edit:ringkas_bagian::0008",
+        "edit:ubah_istilah::0003",
+        "edit:ubah_istilah::0006",
+        "prose:ringkas::0001",
+        "prose:ringkas::0002",
+        "prose:ringkas::0003",
+        "prose:ringkas::0004",
+        "prose:terjemah::0004",
+        "prose:terjemah::0007",
+        "router:CEK_AMAN::0009",
+        "router:DRAFT_TEKS::0001",
+        "router:DRAFT_TEKS::0004",
+        "router:EDIT_TEKS::0000",
+        "router:EDIT_TEKS::0005",
+        "router:EDIT_TEKS::0006",
+        "router:EDIT_TEKS::0009",
+        "router:RINGKAS::0000",
+        "router:RINGKAS::0005",
+        "router:RINGKAS::0008",
+        "router:RINGKAS::0009",
+        "router:TANYA_DOKUMEN::0003",
+        "router:TERJEMAH::0000",
+        "router:TERJEMAH::0005",
+        "router:UBAH_NADA::0004",
+        "router:UBAH_NADA::0007",
+        "router:UBAH_NADA::0008",
+        "router:UMUM::0001",
+        "router:UMUM::0009"
+      ]
+    }
+  },
+  "rejected": {
+    "count": 50,
+    "by_reason": {
+      "stratum has no mechanical check (excluded by decision)": 50
+    },
+    "families": [
+      {
+        "family": "prose:cekAman::0000",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0001",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0002",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0003",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0004",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0005",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0006",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0007",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0008",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:cekAman::0009",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0000",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0001",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0002",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0003",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0004",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0005",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0006",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0007",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0008",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:draftTeks::0009",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0000",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0001",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0002",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0003",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0004",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0005",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0006",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0007",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0008",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:tanyaDokumen::0009",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0000",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0001",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0002",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0003",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0004",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0005",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0006",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0007",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0008",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:ubahNada::0009",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0000",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0001",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0002",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0003",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0004",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0005",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0006",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0007",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0008",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      },
+      {
+        "family": "prose:umum::0009",
+        "reason": "stratum has no mechanical check (excluded by decision)"
+      }
+    ]
+  },
+  "exact_duplicates_removed": [],
+  "near_duplicate_audit": {
+    "challenge": [
+      {
+        "flagged": "edit:ubah_istilah::0007",
+        "resembles": "edit:ubah_istilah::0004",
+        "similarity": 0.9184,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ubah_istilah::0009",
+        "resembles": "edit:ubah_istilah::0007",
+        "similarity": 0.9133,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "router:TANYA_DOKUMEN::0007",
+        "resembles": "router:TANYA_DOKUMEN::0002",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UMUM::0008",
+        "resembles": "router:UMUM::0004",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      }
+    ],
+    "eval": [
+      {
+        "flagged": "document:report::0007",
+        "resembles": "document:report::0005",
+        "similarity": 0.8204,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ringkas_bagian::0008",
+        "resembles": "edit:ringkas_bagian::0006",
+        "similarity": 0.8059,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ubah_istilah::0006",
+        "resembles": "edit:ubah_istilah::0003",
+        "similarity": 0.9286,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "router:DRAFT_TEKS::0004",
+        "resembles": "router:DRAFT_TEKS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:EDIT_TEKS::0005",
+        "resembles": "router:EDIT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:EDIT_TEKS::0006",
+        "resembles": "router:EDIT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:EDIT_TEKS::0009",
+        "resembles": "router:EDIT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:RINGKAS::0005",
+        "resembles": "router:RINGKAS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:RINGKAS::0008",
+        "resembles": "router:RINGKAS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:RINGKAS::0009",
+        "resembles": "router:RINGKAS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TERJEMAH::0005",
+        "resembles": "router:TERJEMAH::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UBAH_NADA::0007",
+        "resembles": "router:UBAH_NADA::0004",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UBAH_NADA::0008",
+        "resembles": "router:UBAH_NADA::0004",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UMUM::0009",
+        "resembles": "router:UMUM::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      }
+    ],
+    "train": [
+      {
+        "flagged": "document:report::0001",
+        "resembles": "document:report::0000",
+        "similarity": 0.8329,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "document:report::0002",
+        "resembles": "document:report::0001",
+        "similarity": 0.8733,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "document:report::0006",
+        "resembles": "document:report::0000",
+        "similarity": 0.8107,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "document:report::0009",
+        "resembles": "document:report::0006",
+        "similarity": 0.87,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:koreksi::0006",
+        "resembles": "edit:koreksi::0005",
+        "similarity": 0.8347,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:koreksi::0008",
+        "resembles": "edit:koreksi::0005",
+        "similarity": 0.8142,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:perjelas::0005",
+        "resembles": "edit:perjelas::0004",
+        "similarity": 0.8029,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:perjelas::0007",
+        "resembles": "edit:perjelas::0004",
+        "similarity": 0.8384,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:restrukturisasi::0002",
+        "resembles": "edit:restrukturisasi::0001",
+        "similarity": 0.8526,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:restrukturisasi::0004",
+        "resembles": "edit:restrukturisasi::0002",
+        "similarity": 0.8241,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:restrukturisasi::0005",
+        "resembles": "edit:restrukturisasi::0001",
+        "similarity": 0.8041,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:restrukturisasi::0006",
+        "resembles": "edit:restrukturisasi::0001",
+        "similarity": 0.8225,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:restrukturisasi::0007",
+        "resembles": "edit:restrukturisasi::0005",
+        "similarity": 0.8427,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:restrukturisasi::0008",
+        "resembles": "edit:restrukturisasi::0006",
+        "similarity": 0.8282,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:restrukturisasi::0009",
+        "resembles": "edit:restrukturisasi::0008",
+        "similarity": 0.8287,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ringkas_bagian::0003",
+        "resembles": "edit:ringkas_bagian::0002",
+        "similarity": 0.8363,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ringkas_bagian::0005",
+        "resembles": "edit:ringkas_bagian::0004",
+        "similarity": 0.8152,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ringkas_bagian::0007",
+        "resembles": "edit:ringkas_bagian::0005",
+        "similarity": 0.8242,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ringkas_bagian::0009",
+        "resembles": "edit:ringkas_bagian::0005",
+        "similarity": 0.8071,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ubah_istilah::0001",
+        "resembles": "edit:ubah_istilah::0000",
+        "similarity": 0.9231,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ubah_istilah::0002",
+        "resembles": "edit:ubah_istilah::0000",
+        "similarity": 0.9275,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ubah_istilah::0005",
+        "resembles": "edit:ubah_istilah::0001",
+        "similarity": 0.9286,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "edit:ubah_istilah::0008",
+        "resembles": "edit:ubah_istilah::0000",
+        "similarity": 0.8995,
+        "expected_by_construction": false
+      },
+      {
+        "flagged": "router:CEK_AMAN::0002",
+        "resembles": "router:CEK_AMAN::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:CEK_AMAN::0003",
+        "resembles": "router:CEK_AMAN::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:CEK_AMAN::0004",
+        "resembles": "router:CEK_AMAN::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:CEK_AMAN::0005",
+        "resembles": "router:CEK_AMAN::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:CEK_AMAN::0006",
+        "resembles": "router:CEK_AMAN::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:CEK_AMAN::0007",
+        "resembles": "router:CEK_AMAN::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:CEK_AMAN::0008",
+        "resembles": "router:CEK_AMAN::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:DRAFT_TEKS::0002",
+        "resembles": "router:DRAFT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:DRAFT_TEKS::0003",
+        "resembles": "router:DRAFT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:DRAFT_TEKS::0005",
+        "resembles": "router:DRAFT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:DRAFT_TEKS::0006",
+        "resembles": "router:DRAFT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:DRAFT_TEKS::0007",
+        "resembles": "router:DRAFT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:DRAFT_TEKS::0008",
+        "resembles": "router:DRAFT_TEKS::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:EDIT_TEKS::0002",
+        "resembles": "router:EDIT_TEKS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:EDIT_TEKS::0003",
+        "resembles": "router:EDIT_TEKS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:EDIT_TEKS::0004",
+        "resembles": "router:EDIT_TEKS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:EDIT_TEKS::0007",
+        "resembles": "router:EDIT_TEKS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:RINGKAS::0003",
+        "resembles": "router:RINGKAS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:RINGKAS::0004",
+        "resembles": "router:RINGKAS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:RINGKAS::0006",
+        "resembles": "router:RINGKAS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:RINGKAS::0007",
+        "resembles": "router:RINGKAS::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TANYA_DOKUMEN::0001",
+        "resembles": "router:TANYA_DOKUMEN::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TANYA_DOKUMEN::0004",
+        "resembles": "router:TANYA_DOKUMEN::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TANYA_DOKUMEN::0005",
+        "resembles": "router:TANYA_DOKUMEN::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TANYA_DOKUMEN::0006",
+        "resembles": "router:TANYA_DOKUMEN::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TANYA_DOKUMEN::0008",
+        "resembles": "router:TANYA_DOKUMEN::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TANYA_DOKUMEN::0009",
+        "resembles": "router:TANYA_DOKUMEN::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TERJEMAH::0003",
+        "resembles": "router:TERJEMAH::0002",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TERJEMAH::0004",
+        "resembles": "router:TERJEMAH::0002",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TERJEMAH::0006",
+        "resembles": "router:TERJEMAH::0002",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TERJEMAH::0007",
+        "resembles": "router:TERJEMAH::0002",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TERJEMAH::0008",
+        "resembles": "router:TERJEMAH::0002",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:TERJEMAH::0009",
+        "resembles": "router:TERJEMAH::0002",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UBAH_NADA::0002",
+        "resembles": "router:UBAH_NADA::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UBAH_NADA::0003",
+        "resembles": "router:UBAH_NADA::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UBAH_NADA::0005",
+        "resembles": "router:UBAH_NADA::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UBAH_NADA::0006",
+        "resembles": "router:UBAH_NADA::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UBAH_NADA::0009",
+        "resembles": "router:UBAH_NADA::0001",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UMUM::0002",
+        "resembles": "router:UMUM::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UMUM::0003",
+        "resembles": "router:UMUM::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UMUM::0005",
+        "resembles": "router:UMUM::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UMUM::0006",
+        "resembles": "router:UMUM::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      },
+      {
+        "flagged": "router:UMUM::0007",
+        "resembles": "router:UMUM::0000",
+        "similarity": 1.0,
+        "expected_by_construction": true
+      }
+    ]
+  },
+  "_near_duplicates_not_removed": "Reported for review only. Removal is a human decision; identical answers to different instructions can both be valid.",
+  "_near_duplicate_caveat": "Entries with expected_by_construction=true are router strata, whose answers are single closed-set labels — every correct answer for an intent is the same string, so near-duplicate detection flags them at ~100% by construction. dedup.py is scoped to prose by its own docstring. Only the false entries are a genuine review surface."
+}
