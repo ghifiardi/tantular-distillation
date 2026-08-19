@@ -15,9 +15,10 @@ not be inside a paid v1 run.
 
 Two specific risks this is meant to surface early:
 
-- **TRL API drift.** `train_qlora.py` was written against the TRL 0.x
-  `SFTTrainer`/`SFTConfig` API; the pin is **TRL 1.10.0**. If that API moved, the
-  fix is to update the trainer, *not* to unpin the version.
+- **TRL API drift.** The smoke and v1 now call the same
+  `build_sft_trainer()` helper. The smoke must construct `SFTConfig`,
+  construct `SFTTrainer`, and complete `trainer.train()` with `max_steps=1`.
+  If TRL 1.10.0 rejects that path, fix the shared helper rather than unpinning.
 - **Quantization config.** A 9B that loads without a `quantization_config` is
   bf16, not NF4, and will not fit the memory budget QLoRA assumes.
 
@@ -77,10 +78,10 @@ curl -s localhost:8020/v1/completions -H 'Content-Type: application/json' -d '{
    exists, compute capability ≥8.0.
 2. **NF4 load** — `Qwen3.5-9B` loads 4-bit. A model that comes back with no
    `quantization_config` fails the step; it is bf16 wearing a QLoRA label.
-3. **LoRA attach and one optimizer step** — trainable parameter count must be
-   non-zero, loss must not be NaN, and **gradient norm must not be zero**. Zero
-   gradients are the failure that otherwise runs to completion and learns
-   nothing.
+3. **Real TRL path plus one manual optimizer step** — the smoke constructs the
+   same `SFTConfig`/`SFTTrainer` path as v1, completes one TRL step, and also
+   requires non-zero trainable parameters, finite loss, and a **non-zero
+   gradient norm**. The two checks detect different failures.
 4. **Save and reload** — the adapter directory must contain exactly what
    `run_gates.verify_adapter_served()` requires (`adapter_config.json` plus
    weights), and the reloaded config must name the configured base model.
@@ -95,7 +96,7 @@ Any step failing → stop the pod, do not train. Specifically:
 
 - a dependency will not import, or resolves to a different version than pinned;
 - the model loads without a quantization config;
-- loss is NaN, or the gradient norm is zero;
+- loss/gradient norm is non-finite or zero, or the real TRL trainer path fails;
 - the adapter directory is missing `adapter_config.json` or weights;
 - `/v1/models` does not list `tantular-smoke`, or that id returns empty text.
 

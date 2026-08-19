@@ -8,7 +8,7 @@
 # Full fine-tuning a 9B does not fit 24GB. LoRA over a 4-bit base does, with
 # room for a 32k sequence.
 
-base_model: Qwen/Qwen3.5-9B-Instruct
+base_model: Qwen/Qwen3.5-9B
 load_in_4bit: true
 max_seq_length: 32768
 

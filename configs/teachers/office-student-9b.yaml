@@ -14,7 +14,7 @@
 
 name: office-student-9b
 port: 8020            # distinct from muse-glimmer's 8010 so both can be up
-served_model_name: Qwen/Qwen3.5-9B-Instruct
+served_model_name: Qwen/Qwen3.5-9B
 license: apache-2.0
 
 repos:
@@ -32,12 +32,12 @@ repos:
   # adapter would then appear to fix something it did not cause. A host that
   # asks for fp8/int4 will fail to resolve, loudly, which is the correct
   # outcome — not a silent substitution.
-  bf16: Qwen/Qwen3.5-9B-Instruct
+  bf16: Qwen/Qwen3.5-9B
 
 # Tokenizer comes from the same repo. Do not point the server at a different
 # tokenizer revision: prompt_sha256 in the corpus was computed over rendered
 # prompts, and a different chat template silently changes what is measured.
-tokenizer: Qwen/Qwen3.5-9B-Instruct
+tokenizer: Qwen/Qwen3.5-9B
 
 sampling:
   temperature: 0.0

@@ -9,7 +9,7 @@ produces.
 
 ## What is being validated
 
-That `Qwen/Qwen3.5-9B-Instruct` — the model `train/qlora_9b.yaml` names — can be
+That `Qwen/Qwen3.5-9B` — the model `train/qlora_9b.yaml` names — can be
 served at bf16 and gated. Not the teacher. Not NF4, int4 or FP8. The student
 config (`configs/teachers/office-student-9b.yaml`) carries a bf16 repo only, so a
 host asking for any other precision fails to resolve rather than substituting.

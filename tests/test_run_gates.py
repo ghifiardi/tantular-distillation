@@ -85,7 +85,7 @@ def make_adapter(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "adapter_config.json").write_text(json.dumps({
         "peft_type": "LORA", "r": 32, "lora_alpha": 64,
-        "base_model_name_or_path": "Qwen/Qwen3.5-9B-Instruct"}))
+        "base_model_name_or_path": "Qwen/Qwen3.5-9B"}))
     (path / "adapter_model.safetensors").write_bytes(b"placeholder weights")
     return path
 
@@ -338,15 +338,15 @@ def _identity(monkeypatch, expect, served):
 
 
 def test_identity_accepts_the_configured_student(monkeypatch):
-    got = _identity(monkeypatch, "Qwen/Qwen3.5-9B-Instruct",
-                    ["Qwen/Qwen3.5-9B-Instruct"])
-    assert got["expected"] == "Qwen/Qwen3.5-9B-Instruct"
+    got = _identity(monkeypatch, "Qwen/Qwen3.5-9B",
+                    ["Qwen/Qwen3.5-9B"])
+    assert got["expected"] == "Qwen/Qwen3.5-9B"
 
 
 def test_identity_rejects_the_teacher_endpoint(monkeypatch):
     """Pointing the student gates at Muse Glimmer must abort, not proceed."""
     with pytest.raises(SystemExit) as e:
-        _identity(monkeypatch, "Qwen/Qwen3.5-9B-Instruct", ["muse-glimmer:30b"])
+        _identity(monkeypatch, "Qwen/Qwen3.5-9B", ["muse-glimmer:30b"])
     assert e.value.code == 2
 
 
@@ -662,7 +662,7 @@ def test_endpoint_not_serving_the_adapter_is_refused(monkeypatch, tmp_path):
     class Resp:
         @staticmethod
         def json():
-            return {"data": [{"id": "Qwen/Qwen3.5-9B-Instruct"}]}   # base only
+            return {"data": [{"id": "Qwen/Qwen3.5-9B"}]}   # base only
 
     monkeypatch.setattr(config_module, "resolve",
                         lambda t, h: {"HOST_BASE_URL": "http://x/v1"})
@@ -671,7 +671,7 @@ def test_endpoint_not_serving_the_adapter_is_refused(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as e:
         run_gates.verify_adapter_served(
             make_adapter(tmp_path / "a"), ADAPTER_ID,
-            "Qwen/Qwen3.5-9B-Instruct", "student-serve", "office-student-9b",
+            "Qwen/Qwen3.5-9B", "student-serve", "office-student-9b",
             live=True)
     assert e.value.code == 2
 
@@ -684,7 +684,7 @@ def test_endpoint_serving_the_adapter_is_accepted(monkeypatch, tmp_path):
     class Resp:
         @staticmethod
         def json():
-            return {"data": [{"id": "Qwen/Qwen3.5-9B-Instruct"},
+            return {"data": [{"id": "Qwen/Qwen3.5-9B"},
                              {"id": ADAPTER_ID}]}
 
     monkeypatch.setattr(config_module, "resolve",
@@ -692,6 +692,6 @@ def test_endpoint_serving_the_adapter_is_accepted(monkeypatch, tmp_path):
     import httpx
     monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp())
     got = run_gates.verify_adapter_served(
-        make_adapter(tmp_path / "a"), ADAPTER_ID, "Qwen/Qwen3.5-9B-Instruct",
+        make_adapter(tmp_path / "a"), ADAPTER_ID, "Qwen/Qwen3.5-9B",
         "student-serve", "office-student-9b", live=True)
     assert got["model_id"] == ADAPTER_ID and ADAPTER_ID in got["served"]

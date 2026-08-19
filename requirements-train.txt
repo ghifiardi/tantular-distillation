@@ -14,10 +14,9 @@
 #                      tokenizers to 0.23.1 and fail on the pod.
 #   trl 1.10.0         requires transformers>=4.56.2, accelerate>=1.4, datasets>=4.7
 #
-# KNOWN RISK, to be settled by the smoke test rather than by assumption:
-# src/train_qlora.py was written against the TRL 0.x SFTTrainer/SFTConfig API.
-# TRL is now 1.x. If the smoke test fails on that API, the fix is to update the
-# trainer — not to unpin the version.
+# The smoke and real trainer call the same build_sft_trainer() helper. The
+# bounded smoke executes SFTConfig, SFTTrainer, and trainer.train(max_steps=1);
+# API drift therefore fails before a v1 run.
 
 torch==2.13.0
 transformers==5.15.0

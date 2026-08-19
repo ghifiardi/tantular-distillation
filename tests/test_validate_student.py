@@ -54,7 +54,7 @@ def test_no_log_means_no_bf16_claim():
 def test_log_stating_bfloat16_passes(tmp_path):
     log = tmp_path / "vllm.log"
     log.write_text("INFO llm_engine.py:200] Initializing an LLM engine with "
-                   "config: model='Qwen/Qwen3.5-9B-Instruct', dtype=torch.bfloat16, "
+                   "config: model='Qwen/Qwen3.5-9B', dtype=torch.bfloat16, "
                    "max_seq_len=32768\n")
     assert v.check_2_bf16(log).ok is True
 

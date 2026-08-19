@@ -391,12 +391,75 @@ def run_gates(stage: str, out: Path, adapter: Path | None, args, expect: str) ->
 
 # --- the training step ------------------------------------------------------
 
+def make_lora_config(config: dict):
+    """One LoRA definition shared by the real trainer and GPU smoke."""
+    from peft import LoraConfig
+
+    lora = config["lora"]
+    return LoraConfig(
+        r=lora["r"],
+        lora_alpha=lora["alpha"],
+        lora_dropout=lora["dropout"],
+        bias="none",
+        target_modules=lora["target_modules"],
+        task_type="CAUSAL_LM",
+    )
+
+
+def build_sft_trainer(config: dict, model, train_dataset, eval_dataset,
+                      processing_class, output_dir: Path, *,
+                      max_steps: int | None = None,
+                      max_length: int | None = None,
+                      smoke: bool = False):
+    """Construct the exact TRL path used by both smoke and v1.
+
+    The smoke test must execute this function and trainer.train(); merely
+    importing TRL would leave SFTConfig/SFTTrainer API drift undiscovered until
+    the paid v1 run.
+    """
+    from trl import SFTConfig, SFTTrainer
+
+    tr = config["training"]
+    kwargs = {
+        "output_dir": str(output_dir),
+        "max_length": max_length or config.get("max_seq_length", 32768),
+        "num_train_epochs": tr["num_train_epochs"],
+        "per_device_train_batch_size": tr["per_device_train_batch_size"],
+        "gradient_accumulation_steps": tr["gradient_accumulation_steps"],
+        "learning_rate": float(tr["learning_rate"]),
+        "lr_scheduler_type": tr["lr_scheduler_type"],
+        "warmup_ratio": tr["warmup_ratio"],
+        "gradient_checkpointing": tr["gradient_checkpointing"],
+        "bf16": tr["bf16"],
+        "logging_steps": 1 if smoke else tr["logging_steps"],
+        "save_steps": tr["save_steps"],
+        "report_to": [],
+    }
+    if max_steps is not None:
+        kwargs.update({
+            "max_steps": max_steps,
+            "num_train_epochs": 1,
+            "gradient_accumulation_steps": 1,
+            "save_strategy": "no",
+            "eval_strategy": "no",
+            "gradient_checkpointing": False,
+        })
+
+    return SFTTrainer(
+        model=model,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        processing_class=processing_class,
+        peft_config=make_lora_config(config),
+        args=SFTConfig(**kwargs),
+    )
+
+
 def train(config: dict, run_dir: Path, args) -> Path:
     """Imports GPU dependencies lazily so every check above works without them."""
     try:
         import torch  # noqa: F401
         from datasets import Dataset  # noqa: F401
-        from peft import LoraConfig  # noqa: F401
         from transformers import (AutoModelForCausalLM, AutoTokenizer,  # noqa: F401
                                   BitsAndBytesConfig)
         from trl import SFTConfig, SFTTrainer  # noqa: F401
@@ -407,11 +470,9 @@ def train(config: dict, run_dir: Path, args) -> Path:
 
     import torch
     from datasets import Dataset
-    from peft import LoraConfig
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-    from trl import SFTConfig, SFTTrainer
 
-    lora, tr, out = config["lora"], config["training"], config["output"]
+    out = config["output"]
     adapter_dir = run_dir / Path(out["adapter_dir"]).name
     tok = AutoTokenizer.from_pretrained(config["base_model"])
 
@@ -431,23 +492,8 @@ def train(config: dict, run_dir: Path, args) -> Path:
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True))
 
-    trainer = SFTTrainer(
-        model=model, train_dataset=train_ds, eval_dataset=eval_ds,
-        peft_config=LoraConfig(
-            r=lora["r"], lora_alpha=lora["alpha"], lora_dropout=lora["dropout"],
-            target_modules=lora["target_modules"], task_type="CAUSAL_LM"),
-        args=SFTConfig(
-            output_dir=str(run_dir / "checkpoints"),
-            max_length=config.get("max_seq_length", 32768),
-            num_train_epochs=tr["num_train_epochs"],
-            per_device_train_batch_size=tr["per_device_train_batch_size"],
-            gradient_accumulation_steps=tr["gradient_accumulation_steps"],
-            learning_rate=float(tr["learning_rate"]),
-            lr_scheduler_type=tr["lr_scheduler_type"],
-            warmup_ratio=tr["warmup_ratio"],
-            gradient_checkpointing=tr["gradient_checkpointing"],
-            bf16=tr["bf16"], logging_steps=tr["logging_steps"],
-            save_steps=tr["save_steps"], report_to=[]))
+    trainer = build_sft_trainer(
+        config, model, train_ds, eval_ds, tok, run_dir / "checkpoints")
     trainer.train()
     trainer.save_model(str(adapter_dir))
     tok.save_pretrained(str(adapter_dir))

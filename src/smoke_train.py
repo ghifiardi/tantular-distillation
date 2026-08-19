@@ -32,11 +32,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+EXPECTED_VERSIONS = {
+    "torch": "2.13.0",
+    "transformers": "5.15.0",
+    "tokenizers": "0.22.2",
+    "trl": "1.10.0",
+    "peft": "0.20.0",
+    "datasets": "5.0.1",
+    "accelerate": "1.14.0",
+    "bitsandbytes": "0.50.1",
+    "safetensors": "0.8.0",
+    "vllm": "0.27.1",
+}
 
 # Four short Indonesian office examples, written here and used nowhere else.
 SMOKE_EXAMPLES = [
@@ -83,17 +96,27 @@ def main() -> None:
     # --- 1. CUDA and dependency verification --------------------------------
     step(1, "CUDA and dependency versions")
     try:
-        import accelerate, bitsandbytes, datasets, peft, torch, transformers, trl
+        import accelerate, bitsandbytes, datasets, peft, safetensors
+        import torch, transformers, trl, vllm
     except ImportError as e:
         die(f"a pinned dependency is missing: {e}\n"
             "Install requirements-train.txt on the pod.")
     import tokenizers
     versions = {m.__name__: getattr(m, "__version__", "?") for m in
                 (torch, transformers, tokenizers, trl, peft, datasets,
-                 accelerate, bitsandbytes)}
+                 accelerate, bitsandbytes, safetensors, vllm)}
     report["versions"] = versions
     for name, ver in versions.items():
         print(f"  {name:<14} {ver}")
+    mismatched = {
+        name: (EXPECTED_VERSIONS[name], versions.get(name))
+        for name in EXPECTED_VERSIONS
+        if versions.get(name) != EXPECTED_VERSIONS[name]
+    }
+    if mismatched:
+        die("pinned versions did not resolve exactly: "
+            + ", ".join(f"{name} expected {wanted}, got {got}"
+                        for name, (wanted, got) in mismatched.items()))
     if not torch.cuda.is_available():
         die("torch reports no CUDA device. Wrong image, wrong driver, or a "
             "CPU pod.")
@@ -132,22 +155,24 @@ def main() -> None:
     report["steps"]["2_nf4_load"] = {"quantization_config": type(loaded_quant).__name__,
                                      "seconds": round(time.time() - t0, 1)}
 
-    # --- 3. LoRA attach and one optimizer step ------------------------------
-    step(3, "attach LoRA and take one optimizer step")
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    lora = cfg.get("lora", {})
-    peft_cfg = LoraConfig(
-        r=lora.get("r", 32), lora_alpha=lora.get("alpha", 64),
-        lora_dropout=lora.get("dropout", 0.05), bias="none",
-        task_type="CAUSAL_LM",
-        target_modules=lora.get("target_modules",
-                                ["q_proj", "k_proj", "v_proj", "o_proj",
-                                 "gate_proj", "up_proj", "down_proj"]))
+    # --- 3. Exact TRL path + non-zero-gradient proof ------------------------
+    step(3, "construct the real TRL trainer and take one optimizer step")
+    from datasets import Dataset
+    from train_qlora import build_sft_trainer
+
+    smoke_ds = Dataset.from_list([{"messages": [
+        {"role": "user", "content": ex["user"]},
+        {"role": "assistant", "content": ex["assistant"]},
+    ]} for ex in SMOKE_EXAMPLES])
     try:
-        model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(model, peft_cfg)
+        trainer = build_sft_trainer(
+            cfg, model, smoke_ds, smoke_ds, tokenizer,
+            out / "checkpoints", max_steps=1,
+            max_length=args.max_seq_len, smoke=True)
+        model = trainer.model
     except Exception as e:
-        die(f"LoRA attach failed: {type(e).__name__}: {e}")
+        die(f"TRL SFTConfig/SFTTrainer construction failed: "
+            f"{type(e).__name__}: {e}")
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
     print(f"  trainable {trainable:,} / {total:,} ({100 * trainable / total:.3f}%)")
@@ -156,7 +181,8 @@ def main() -> None:
 
     texts = [tokenizer.apply_chat_template(
         [{"role": "user", "content": ex["user"]},
-         {"role": "assistant", "content": ex["assistant"]}], tokenize=False)
+         {"role": "assistant", "content": ex["assistant"]}],
+        tokenize=False, add_generation_prompt=False)
         for ex in SMOKE_EXAMPLES]
     batch = tokenizer(texts, return_tensors="pt", padding=True, truncation=True,
                       max_length=args.max_seq_len).to("cuda")
@@ -171,25 +197,38 @@ def main() -> None:
         grad_norm = sum(p.grad.norm().item() ** 2 for p in model.parameters()
                         if p.requires_grad and p.grad is not None) ** 0.5
         optimizer.step()
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
     except Exception as e:
         die(f"forward/backward failed: {type(e).__name__}: {e}")
     print(f"  loss {loss.item():.4f}   grad norm {grad_norm:.4f}")
-    if not (loss.item() == loss.item()):                      # NaN
-        die("loss is NaN on the first step — the compute dtype or the "
+    if not math.isfinite(loss.item()):
+        die("loss is non-finite on the first step — the compute dtype or the "
             "quantization config is wrong.")
-    if grad_norm == 0.0:
-        die("gradients are all zero: the optimizer step changed nothing, so "
-            "training would run to completion and learn nothing.")
-    report["steps"]["3_lora_step"] = {"trainable_params": trainable,
-                                      "loss": round(loss.item(), 4),
-                                      "grad_norm": round(grad_norm, 4)}
+    if not math.isfinite(grad_norm) or grad_norm == 0.0:
+        die(f"gradient norm is invalid ({grad_norm}): the optimizer step changed "
+            "nothing or diverged, so training cannot proceed.")
+    try:
+        trl_result = trainer.train()
+    except Exception as e:
+        die(f"TRL trainer.train() failed: {type(e).__name__}: {e}")
+    trl_metrics = {
+        key: value for key, value in (trl_result.metrics or {}).items()
+        if isinstance(value, (int, float, str, bool)) or value is None
+    }
+    print(f"  TRL trainer.train completed: {trl_metrics}")
+    report["steps"]["3_lora_step"] = {
+        "trainable_params": trainable,
+        "manual_loss": round(loss.item(), 4),
+        "manual_grad_norm": round(grad_norm, 4),
+        "trl_max_steps": 1,
+        "trl_metrics": trl_metrics,
+    }
 
     # --- 4. save and reload --------------------------------------------------
     step(4, "save the adapter and reload it")
     adapter_dir = out / "adapter"
     try:
-        model.save_pretrained(adapter_dir)
+        trainer.save_model(str(adapter_dir))
         tokenizer.save_pretrained(adapter_dir)
     except Exception as e:
         die(f"adapter save failed: {type(e).__name__}: {e}")
