@@ -32,9 +32,12 @@ PROMPT = ("Ringkas kalimat berikut menjadi satu kalimat: Rapat anggaran "
 DEGENERATE = re.compile(r"^(?:(.{1,20}?)\1{4,})$", re.DOTALL)
 
 
-def post(base: str, model: str, max_tokens: int) -> dict:
-    body = json.dumps({"model": model, "prompt": PROMPT,
-                       "max_tokens": max_tokens, "temperature": 0}).encode()
+def post(base: str, model: str, max_tokens: int, logprobs: int | None = None) -> dict:
+    payload = {"model": model, "prompt": PROMPT,
+               "max_tokens": max_tokens, "temperature": 0}
+    if logprobs is not None:
+        payload["logprobs"] = logprobs
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(f"{base}/completions", body,
                                  {"Content-Type": "application/json"})
     try:
@@ -96,17 +99,52 @@ def main() -> None:
         tb = text_of(post(args.base_url, args.base_id, args.max_tokens))
         print(f"  {tb!r}")
 
+    # Identical TEXT does not distinguish "the adapter changed little" from
+    # "the adapter was never applied", and the second would invalidate every
+    # after-gate. Logprobs do distinguish them: a LoRA that is applied shifts
+    # the distribution even where the argmax is unchanged. Bit-identical
+    # logprobs across many tokens mean the same weights answered twice.
+    delta = None
+    if tb is not None and ta == tb:
+        print("\n=== LOGPROB COMPARISON (identical text — deciding why) ===")
+        la = post(args.base_url, args.adapter_id, args.max_tokens, logprobs=1)
+        lb = post(args.base_url, args.base_id, args.max_tokens, logprobs=1)
+        try:
+            pa = la["choices"][0]["logprobs"]["token_logprobs"]
+            pb = lb["choices"][0]["logprobs"]["token_logprobs"]
+            pairs = [(x, y) for x, y in zip(pa, pb)
+                     if isinstance(x, float) and isinstance(y, float)]
+            delta = max((abs(x - y) for x, y in pairs), default=0.0)
+            same = sum(1 for x, y in pairs if x == y)
+            print(f"  compared {len(pairs)} tokens")
+            print(f"  max |delta| {delta:.6g}   bit-identical {same}/{len(pairs)}")
+        except (KeyError, TypeError, IndexError) as e:
+            print(f"  could not read logprobs ({e}) — comparison inconclusive")
+
     print("\n=== RESULT ===")
     print(f"  adapter id served     : yes")
     print(f"  adapter produced text : yes ({len(ta.strip())} chars)")
     if tb is not None:
         differs = ta != tb
         print(f"  differs from base     : {'yes' if differs else 'NO'}")
-        if not differs:
-            print("    Identical output. Recorded, not failed: a one-step "
-                  "adapter over four\n    examples can decode identically under "
-                  "greedy sampling. It does mean this\n    run did NOT prove the "
-                  "two ids address different weights.")
+        if not differs and delta is not None:
+            if delta == 0.0:
+                print("  LoRA applied         : NO EVIDENCE IT WAS")
+                print("    Every token logprob is bit-identical. The same "
+                      "weights answered both\n    requests. Either the adapter "
+                      "was not applied, or its effect is exactly\n    zero — and "
+                      "a one-step adapter whose training loss moved 2.13 -> 1.77 "
+                      "is\n    not exactly zero. Do NOT rely on the after-gates "
+                      "until this is explained.")
+                sys.exit(1)
+            print(f"  LoRA applied         : yes (max logprob delta {delta:.6g})")
+            print("    Identical text, different distribution: the adapter IS "
+                  "being applied and\n    is simply too small to move the argmax "
+                  "after one step on four examples.")
+        elif not differs:
+            print("    Identical output, and logprobs could not be compared. "
+                  "This run did NOT\n    prove the two ids address different "
+                  "weights.")
     print("\nSTEP 6 PASSED. Stop the pod (step 7).")
     print("This authorises NO training run. That is a separate decision.")
 
