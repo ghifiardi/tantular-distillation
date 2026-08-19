@@ -19,6 +19,15 @@ TEACHER="${1:?usage: serve_teacher.sh <teacher> <host>}"
 HOST="${2:?usage: serve_teacher.sh <teacher> <host>}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Prefer the project venv's binaries. The pinned torch/vllm live there, not on
+# the system PATH, and a bare `vllm` either is not found (exit 127, which is how
+# this surfaced on the smoke pod) or is some other install with different pins —
+# which would be worse, because it would run.
+VLLM_BIN="$ROOT/.venv/bin/vllm"; [[ -x "$VLLM_BIN" ]] || VLLM_BIN="$(command -v vllm || true)"
+PYTHON_BIN="$ROOT/.venv/bin/python"; [[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="$(command -v python3)"
+[[ -n "$VLLM_BIN" ]] || { echo "vllm not found in $ROOT/.venv/bin or on PATH." >&2
+  echo "Install requirements-train.txt into the project venv." >&2; exit 127; }
+
 TEACHER_CFG="$ROOT/configs/teachers/$TEACHER.yaml"
 HOST_CFG="$ROOT/configs/hosts/$HOST.yaml"
 [[ -f "$TEACHER_CFG" ]] || { echo "no such teacher: $TEACHER" >&2; exit 1; }
@@ -27,7 +36,7 @@ HOST_CFG="$ROOT/configs/hosts/$HOST.yaml"
 # Single source of truth for config parsing: reuse the same loader the Python
 # side uses, so a serve command and a generate run can never disagree about
 # which repo or port is in play.
-eval "$(python3 "$ROOT/src/config.py" --shell "$TEACHER" "$HOST")"
+eval "$("$PYTHON_BIN" "$ROOT/src/config.py" --shell "$TEACHER" "$HOST")"
 
 if [[ "${HOST_RUNTIME:-vllm}" == "mlx" ]]; then
   echo "Host '$HOST' is validation-scale (int4/Metal), not a vLLM host."
@@ -56,7 +65,7 @@ echo "  url    : http://0.0.0.0:$TEACHER_PORT/v1"
 # compressed-tensors/FP8_BLOCK itself, and forcing "fp8" makes vLLM refuse to
 # start. Letting the checkpoint decide also makes the FP8 evidence in the log
 # independent of what we asked for.
-exec vllm serve "$TEACHER_REPO" \
+exec "$VLLM_BIN" serve "$TEACHER_REPO" \
   --served-model-name "$TEACHER_SERVED_MODEL_NAME" "$TEACHER_REPO" \
   --port "$TEACHER_PORT" \
   --tensor-parallel-size "$HOST_TENSOR_PARALLEL_SIZE" \

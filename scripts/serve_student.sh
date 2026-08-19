@@ -28,7 +28,16 @@ ADAPTER_PATH="${3:-}"
 ADAPTER_ID="${4:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-eval "$(python3 "$ROOT/src/config.py" --shell "$MODEL" "$HOST")"
+# Prefer the project venv's binaries. The pinned torch/vllm live there, not on
+# the system PATH, and a bare `vllm` either is not found (exit 127, which is how
+# this surfaced on the smoke pod) or is some other install with different pins —
+# which would be worse, because it would run.
+VLLM_BIN="$ROOT/.venv/bin/vllm"; [[ -x "$VLLM_BIN" ]] || VLLM_BIN="$(command -v vllm || true)"
+PYTHON_BIN="$ROOT/.venv/bin/python"; [[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="$(command -v python3)"
+[[ -n "$VLLM_BIN" ]] || { echo "vllm not found in $ROOT/.venv/bin or on PATH." >&2
+  echo "Install requirements-train.txt into the project venv." >&2; exit 127; }
+
+eval "$("$PYTHON_BIN" "$ROOT/src/config.py" --shell "$MODEL" "$HOST")"
 
 if [[ "$HOST_QUANTIZATION" != "bf16" ]]; then
   echo "REFUSING: host '$HOST' asks for quantization '$HOST_QUANTIZATION'." >&2
@@ -72,7 +81,7 @@ echo "  url    : http://0.0.0.0:$TEACHER_PORT/v1"
 # path, and vLLM answers only to --served-model-name. run_gates' identity check
 # accepts either, but it compares against the config's base_model, so the repo
 # path must be one of the names actually served.
-exec vllm serve "$TEACHER_REPO" \
+exec "$VLLM_BIN" serve "$TEACHER_REPO" \
   --served-model-name "$TEACHER_REPO" "$MODEL" \
   --dtype bfloat16 \
   "${LORA_ARGS[@]+"${LORA_ARGS[@]}"}" \
