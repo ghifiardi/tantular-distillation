@@ -691,7 +691,100 @@ def test_endpoint_serving_the_adapter_is_accepted(monkeypatch, tmp_path):
                         lambda t, h: {"HOST_BASE_URL": "http://x/v1"})
     import httpx
     monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp())
+
+    # Serving the id is not applying the LoRA, so the live path now probes both
+    # ids for logprobs. Give the adapter a shifted distribution.
+    class Probe:
+        def __init__(self, lp): self._lp = lp
+        def json(self):
+            return {"choices": [{"logprobs": {"token_logprobs": self._lp}}]}
+
+    monkeypatch.setattr(httpx, "post", lambda url, timeout=None, json=None:
+                        Probe([-0.5, -1.25] if json["model"] == ADAPTER_ID
+                              else [-0.5, -1.30]))
     got = run_gates.verify_adapter_served(
         make_adapter(tmp_path / "a"), ADAPTER_ID, "Qwen/Qwen3.5-9B",
         "student-serve", "office-student-9b", live=True)
     assert got["model_id"] == ADAPTER_ID and ADAPTER_ID in got["served"]
+    assert got["effect"]["max_logprob_delta"] > 0
+
+
+def test_a_served_but_inert_adapter_is_refused(monkeypatch, tmp_path):
+    """The smoke-rental endpoint, end to end: listed, answering, inert."""
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+    import config as config_module
+
+    class Models:
+        @staticmethod
+        def json():
+            return {"data": [{"id": "Qwen/Qwen3.5-9B"}, {"id": ADAPTER_ID}]}
+
+    class Probe:
+        @staticmethod
+        def json():
+            return {"choices": [{"logprobs": {"token_logprobs": [-0.5, -1.25]}}]}
+
+    monkeypatch.setattr(config_module, "resolve",
+                        lambda t, h: {"HOST_BASE_URL": "http://x/v1"})
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: Models())
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: Probe())
+    with pytest.raises(SystemExit) as e:
+        run_gates.verify_adapter_served(
+            make_adapter(tmp_path / "b"), ADAPTER_ID, "Qwen/Qwen3.5-9B",
+            "student-serve", "office-student-9b", live=True)
+    assert e.value.code == 2
+
+
+# --- being served is not being applied --------------------------------------
+#
+# 2026-08-19, on the smoke rental: vLLM loaded a genuinely-trained adapter,
+# logged "Loaded new LoRA adapter", bound it to nothing because the module paths
+# did not match the served architecture, and answered every request with
+# base-model output. /v1/models listed the adapter id throughout.
+#
+# verify_adapter_served() passed that endpoint. It checked the directory was a
+# real adapter and the id was distinct and listed — all true, all irrelevant to
+# whether the LoRA does anything. These cover the check that closes the gap.
+
+def _probe(monkeypatch, adapter_lp, base_lp):
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+
+    class Resp:
+        def __init__(self, lp): self._lp = lp
+        def json(self):
+            return {"choices": [{"logprobs": {"token_logprobs": self._lp}}]}
+
+    def post(url, timeout=None, json=None):
+        return Resp(adapter_lp if json["model"] == "adapter-id" else base_lp)
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", post)
+    return run_gates.adapter_changes_the_distribution(
+        "http://x/v1", "adapter-id", "base-id")
+
+
+def test_identical_logprobs_are_refused(monkeypatch):
+    """The exact smoke-rental failure: served, answering, and inert."""
+    lp = [-0.5, -1.25, -0.125, -2.0]
+    with pytest.raises(SystemExit) as e:
+        _probe(monkeypatch, lp, list(lp))
+    assert e.value.code == 2
+
+
+def test_a_shifted_distribution_passes(monkeypatch):
+    """Identical TEXT with different logprobs is a pass — a small adapter can
+    decode the same string while still being applied."""
+    got = _probe(monkeypatch, [-0.5, -1.25, -0.125, -2.0],
+                 [-0.5, -1.25, -0.1251, -2.0])
+    assert got["max_logprob_delta"] > 0
+    assert got["probe_tokens"] == 4
+
+
+def test_missing_logprobs_fail_closed(monkeypatch):
+    """No logprobs means no proof; that must abort rather than pass quietly."""
+    with pytest.raises(SystemExit) as e:
+        _probe(monkeypatch, [], [])
+    assert e.value.code == 2

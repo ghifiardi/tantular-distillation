@@ -174,6 +174,65 @@ def configured_base_aliases(base_id: str, teacher: str | None) -> set[str]:
     return {alias for alias in aliases if alias}
 
 
+# A fixed probe. Short, Indonesian, and deterministic at temperature 0.
+ADAPTER_PROBE = ("Ringkas kalimat berikut menjadi satu kalimat: Rapat anggaran "
+                 "ditunda ke pekan depan karena data realisasi belum lengkap.")
+
+
+def adapter_changes_the_distribution(url: str, adapter_id: str,
+                                     base_id: str) -> dict:
+    """Prove the adapter has an EFFECT, not merely an entry in /v1/models.
+
+    verify_adapter_served() checks the id is listed and the directory is a real
+    adapter. Neither says the LoRA does anything, and on 2026-08-19 that gap was
+    not hypothetical: vLLM loaded a genuinely-trained adapter, logged success,
+    bound it to nothing because the module paths did not match the served
+    architecture, and answered every request with base-model output. An after
+    run would have reported a complete before/after comparison of the base model
+    against itself, with the adapter's digest attached.
+
+    Text comparison cannot catch this — a small adapter legitimately decodes to
+    the same string. Logprobs can: an applied LoRA shifts the distribution even
+    where the argmax is unchanged. Bit-identical logprobs across every token mean
+    the same weights answered twice.
+    """
+    import httpx
+
+    def sample(model: str) -> list:
+        r = httpx.post(f"{url}/completions", timeout=300, json={
+            "model": model, "prompt": ADAPTER_PROBE, "max_tokens": 32,
+            "temperature": 0, "logprobs": 1})
+        payload = r.json()
+        if "choices" not in payload:
+            fail(f"probe request for {model!r} failed: {str(payload)[:300]}")
+        lp = (payload["choices"][0].get("logprobs") or {}).get("token_logprobs")
+        if not lp:
+            fail(f"the endpoint returned no logprobs for {model!r}. The adapter "
+                 "gate cannot prove the LoRA has any effect without them.")
+        return lp
+
+    a, b = sample(adapter_id), sample(base_id)
+    pairs = [(x, y) for x, y in zip(a, b)
+             if isinstance(x, float) and isinstance(y, float)]
+    if not pairs:
+        fail("no comparable logprobs came back from the probe")
+    delta = max(abs(x - y) for x, y in pairs)
+    identical = sum(1 for x, y in pairs if x == y)
+
+    if delta == 0.0:
+        fail(f"the adapter has NO EFFECT: all {len(pairs)} probe logprobs are "
+             f"bit-identical to the base model's.\n"
+             f"  adapter id {adapter_id}\n  base id    {base_id}\n"
+             "The endpoint serves the id and answers with the BASE model. Every "
+             "gate below would measure the base and report it as the adapter.\n"
+             "Most likely the adapter's module paths do not match the served "
+             "architecture — see calibration/SMOKE_RESULT.md.")
+    print(f"  adapter effect OK: max logprob delta {delta:.6g} over "
+          f"{len(pairs)} tokens")
+    return {"probe_tokens": len(pairs), "max_logprob_delta": delta,
+            "bit_identical_tokens": identical}
+
+
 def list_served(host: str, teacher: str) -> tuple[list, str]:
     sys.path.insert(0, str(ROOT / "src"))
     from config import base_url, resolve
@@ -253,6 +312,14 @@ def verify_adapter_served(adapter: Path, adapter_id: str, base_id: str,
                  "with --lora-modules <id>=<path>, or the after run measures the "
                  "base model.")
         print(f"  adapter identity OK: {adapter_id} served at {url}")
+        # Being served is not being applied.
+        serving_base = next((s for s in served if s in base_aliases), None)
+        if serving_base is None:
+            fail(f"the endpoint serves the adapter but none of the base ids "
+                 f"{sorted(base_aliases)}, so the adapter's effect cannot be "
+                 "measured against anything.")
+        detail["effect"] = adapter_changes_the_distribution(
+            url, adapter_id, serving_base)
     else:
         detail["served"] = None
         detail["fixtures"] = True

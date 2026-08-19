@@ -71,6 +71,27 @@ if [[ -n "$ADAPTER_PATH" ]]; then
   echo "  adapter: $ADAPTER_ID -> $ADAPTER_PATH"
 fi
 
+# Serve the TEXT-ONLY architecture, always — with or without an adapter.
+#
+# Qwen3.5-9B's config declares Qwen3_5ForConditionalGeneration, whose module
+# tree is model.language_model.layers.*. Training loads it through
+# AutoModelForCausalLM, which gives Qwen3_5ForCausalLM, whose tree is
+# model.layers.* — so PEFT writes adapter keys WITHOUT the language_model
+# segment. vLLM then loads the adapter, matches nothing, binds nothing, logs
+# "Loaded new LoRA adapter", and serves the base model's answers.
+#
+# Measured 2026-08-19 on the smoke rental: logprobs bit-identical to the base
+# across all 48 tokens, from an adapter whose lora_B was demonstrably non-zero.
+#
+# vLLM registers Qwen3_5ForCausalLM separately and it SupportsLoRA, so pinning
+# the architecture makes the served tree match the trained tree. It also skips
+# the vision tower, which a text-only Office student never uses.
+#
+# Applied unconditionally BECAUSE before and after must be the same
+# architecture. Overriding only when an adapter is present would make the
+# baseline a different model from the thing compared against it.
+HF_OVERRIDES='{"architectures": ["Qwen3_5ForCausalLM"]}'
+
 echo "Serving STUDENT $MODEL on $HOST"
 echo "  repo   : $TEACHER_REPO"
 echo "  dtype  : bfloat16   tp: $HOST_TENSOR_PARALLEL_SIZE"
@@ -84,6 +105,7 @@ echo "  url    : http://0.0.0.0:$TEACHER_PORT/v1"
 exec "$VLLM_BIN" serve "$TEACHER_REPO" \
   --served-model-name "$TEACHER_REPO" "$MODEL" \
   --dtype bfloat16 \
+  --hf-overrides "$HF_OVERRIDES" \
   "${LORA_ARGS[@]+"${LORA_ARGS[@]}"}" \
   --port "$TEACHER_PORT" \
   --tensor-parallel-size "$HOST_TENSOR_PARALLEL_SIZE" \
