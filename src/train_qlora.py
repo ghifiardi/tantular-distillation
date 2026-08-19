@@ -428,7 +428,14 @@ def build_sft_trainer(config: dict, model, train_dataset, eval_dataset,
         "gradient_accumulation_steps": tr["gradient_accumulation_steps"],
         "learning_rate": float(tr["learning_rate"]),
         "lr_scheduler_type": tr["lr_scheduler_type"],
-        "warmup_ratio": tr["warmup_ratio"],
+        # transformers 5.x REMOVED warmup_ratio and folded it into warmup_steps,
+        # which now accepts a float in [0, 1) meaning "ratio of total steps".
+        # Passing warmup_ratio to SFTConfig raises TypeError — and it would have
+        # raised it in the v1 run, after the model had finished loading.
+        # Verified against transformers 5.15.0 and trl 1.10.0 metadata,
+        # 2026-08-19. The config keeps `warmup_ratio` because that is what the
+        # value means; only the argument name changed.
+        "warmup_steps": float(tr["warmup_ratio"]),
         "gradient_checkpointing": tr["gradient_checkpointing"],
         "bf16": tr["bf16"],
         "logging_steps": 1 if smoke else tr["logging_steps"],
