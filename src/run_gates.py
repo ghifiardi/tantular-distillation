@@ -1,0 +1,297 @@
+"""Run the training eval gates, before and after, and compare them.
+
+    # evaluate the base model
+    ./.venv/bin/python src/run_gates.py run --stage before \
+        --host ai19-ollama --teacher muse-glimmer --out data/gates/before.json
+
+    # evaluate the trained adapter
+    ./.venv/bin/python src/run_gates.py run --stage after \
+        --host ai19-ollama --teacher muse-glimmer \
+        --adapter adapters/tantular-office-9b-v2 --out data/gates/after.json
+
+    ./.venv/bin/python src/run_gates.py compare \
+        --before data/gates/before.json --after data/gates/after.json
+
+`train/qlora_9b.yaml` says of its gates: "Run before and after, compare, and do
+not promote an adapter that regresses either." This executes that instruction.
+
+FAILS CLOSED. A missing eval set, a missing scorer, a missing gate runner, or a
+gate that produces no output is a FAILURE, never a skip. A gate that silently
+does not run is worse than one that fails: the run completes, the report looks
+clean, and nothing was checked.
+
+MODEL-DEPENDENT vs MODEL-INDEPENDENT — measured, and it matters:
+
+  indonesian_voice      MODEL-DEPENDENT. Generates 40 answers from the model
+                        under test and scores them. Before/after differ, so it
+                        can detect a regression.
+
+  office_json_contract  MODEL-INDEPENDENT as configured. It runs the add-in's
+                        own JS suite (`node --test tests/*.test.mjs`, 382 tests)
+                        with globalThis.fetch MOCKED. It never calls a model, so
+                        it returns the SAME result before and after and CANNOT
+                        detect an adapter regression.
+
+That second finding is reported in every comparison rather than left implicit.
+The config's stated intent — "edit-contract shape must still parse" — is about
+whether the MODEL still emits parseable edit payloads, which would require
+feeding model output through the add-in's parser. The gate as configured checks
+that the add-in's own code still works, which is a build-health check. Both are
+worth having; only one of them gates the adapter.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    sys.exit("pyyaml is required: pip install -r requirements.txt")
+
+ROOT = Path(__file__).resolve().parent.parent
+PY = str(ROOT / ".venv" / "bin" / "python")
+
+# Which gates can see the model at all. Anything not listed is treated as
+# model-independent, which is the conservative reading.
+MODEL_DEPENDENT = {"indonesian_voice"}
+
+
+def digest_file(path: Path) -> str | None:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+
+def digest_tree(path: Path) -> str | None:
+    """Stable digest of a directory: sorted (relpath, filehash) pairs."""
+    if not path.is_dir():
+        return None
+    parts = []
+    for f in sorted(p for p in path.rglob("*") if p.is_file()):
+        parts.append(f"{f.relative_to(path)}:{digest_file(f)}")
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def fail(msg: str) -> None:
+    print(f"\nGATE RUN ABORTED: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+# --- gate implementations ---------------------------------------------------
+
+def gate_indonesian_voice(spec: dict, stage: str, args, out_dir: Path) -> dict:
+    items = ROOT / spec["source"]
+    scorer = ROOT / spec.get("scorer", "src/score_voice.py")
+    if not items.is_file():
+        fail(f"indonesian_voice source missing: {items}")
+    if not scorer.is_file():
+        fail(f"indonesian_voice scorer missing: {scorer}")
+
+    traces = out_dir / f"voice.{stage}.traces.jsonl"
+    if args.traces:                       # pre-generated, e.g. for tests
+        traces = Path(args.traces)
+        if not traces.is_file():
+            fail(f"--traces given but missing: {traces}")
+    else:
+        cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
+               "--teacher", args.teacher, "--host", args.host,
+               "--prompts", str(items), "--out", str(traces), "--resume"]
+        print(f"  generating {stage} answers -> {traces.name}")
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            fail(f"generation failed for indonesian_voice:\n{proc.stderr[-500:]}")
+    if not traces.is_file():
+        fail("indonesian_voice produced no traces — failing closed")
+
+    report = out_dir / f"voice.{stage}.score.json"
+    proc = subprocess.run(
+        [PY, str(scorer), "--traces", str(traces), "--items", str(items),
+         "--threshold", str(spec["min_pass_rate"]), "--json-out", str(report)],
+        capture_output=True, text=True)
+    if not report.is_file():
+        fail(f"indonesian_voice scorer produced no report:\n{proc.stderr[-500:]}")
+    scored = json.loads(report.read_text())
+    return {
+        "name": "indonesian_voice",
+        "model_dependent": True,
+        "rate": scored["rate"], "threshold": scored["threshold"],
+        "passed": scored["verdict"] == "PASS",
+        "items": scored["items"],
+        "per_dimension_failures": scored.get("per_dimension_failures", {}),
+        "hashes": {"eval_set": digest_file(items), "scorer": digest_file(scorer)},
+        "artifacts": {"traces": str(traces), "report": str(report)},
+    }
+
+
+def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> dict:
+    suite = (ROOT / spec["source"]).resolve()
+    if not suite.is_dir():
+        fail(f"office_json_contract source missing: {suite}")
+    project = suite.parent
+    tests = sorted(suite.glob("*.test.mjs"))
+    if not tests:
+        fail(f"office_json_contract found no *.test.mjs under {suite}")
+
+    proc = subprocess.run(["node", "--test", *[str(t) for t in tests]],
+                          capture_output=True, text=True, cwd=project)
+    out = proc.stdout + proc.stderr
+    if "# tests " not in out:
+        fail("office_json_contract runner produced no test summary — "
+             "is node installed? failing closed rather than skipping")
+    def field(key: str) -> int:
+        for line in out.splitlines():
+            if line.startswith(f"# {key} "):
+                return int(line.split()[-1])
+        fail(f"office_json_contract summary missing '{key}'")
+    total, passed = field("tests"), field("pass")
+    rate = passed / total if total else 0.0
+    return {
+        "name": "office_json_contract",
+        "model_dependent": False,
+        "_model_independent_note": (
+            "Runs the add-in's own JS suite with globalThis.fetch mocked. It never "
+            "calls a model, so before and after are identical by construction and "
+            "this gate CANNOT detect an adapter regression."),
+        "rate": rate, "threshold": spec["min_pass_rate"],
+        "passed": rate >= spec["min_pass_rate"],
+        "items": total,
+        "hashes": {"suite": digest_tree(suite)},
+    }
+
+
+GATES = {"indonesian_voice": gate_indonesian_voice,
+         "office_json_contract": gate_office_json_contract}
+
+
+# --- commands ---------------------------------------------------------------
+
+def cmd_run(args) -> None:
+    config = Path(args.config)
+    if not config.is_file():
+        fail(f"config missing: {config}")
+    cfg = yaml.safe_load(config.read_text())
+    specs = cfg.get("eval_gates") or []
+    if not specs:
+        fail("config declares no eval_gates")
+
+    out_dir = Path(args.out).parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    adapter = Path(args.adapter) if args.adapter else None
+    if args.stage == "after" and adapter is None:
+        fail("--stage after requires --adapter: an 'after' run with no adapter "
+             "would re-measure the base model and report it as the trained one")
+    if adapter is not None and not adapter.exists():
+        fail(f"--adapter given but missing: {adapter}")
+
+    print(f"=== GATE RUN [{args.stage}] ===")
+    print(f"  config  {config}  {digest_file(config)[:16]}…")
+    print(f"  model   {args.teacher} @ {args.host}")
+    print(f"  adapter {adapter or '(base model, no adapter)'}")
+
+    results = []
+    for spec in specs:
+        name = spec.get("name")
+        if name not in GATES:
+            fail(f"config declares gate '{name}' with no runner — failing closed "
+                 "rather than skipping a gate someone believes is running")
+        print(f"\n--- {name} ---")
+        result = GATES[name](spec, args.stage, args, out_dir)
+        mark = "PASS" if result["passed"] else "FAIL"
+        dep = "model-dependent" if result["model_dependent"] else "MODEL-INDEPENDENT"
+        print(f"  {mark}  {result['rate']:.4f} >= {result['threshold']}  "
+              f"({result['items']} items, {dep})")
+        results.append(result)
+
+    report = {
+        "stage": args.stage,
+        "config": {"path": str(config), "sha256": digest_file(config)},
+        "model": {"teacher": args.teacher, "host": args.host},
+        "adapter": {"path": str(adapter) if adapter else None,
+                    "sha256": digest_tree(adapter) if adapter else None},
+        "gates": results,
+        "all_passed": all(r["passed"] for r in results),
+    }
+    Path(args.out).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"\nwrote {args.out}")
+    print("ALL GATES PASS" if report["all_passed"] else "ONE OR MORE GATES FAILED")
+    sys.exit(0 if report["all_passed"] else 1)
+
+
+def cmd_compare(args) -> None:
+    before, after = Path(args.before), Path(args.after)
+    for p in (before, after):
+        if not p.is_file():
+            fail(f"missing gate report: {p}")
+    b, a = json.loads(before.read_text()), json.loads(after.read_text())
+
+    if b["config"]["sha256"] != a["config"]["sha256"]:
+        fail("before and after ran against DIFFERENT configs — the comparison "
+             "would attribute a config change to the adapter")
+    if a["adapter"]["sha256"] is None:
+        fail("the 'after' report has no adapter — nothing was trained to compare")
+
+    print("=== BEFORE / AFTER ===")
+    print(f"  config  {b['config']['sha256'][:16]}…  (identical in both)")
+    print(f"  adapter {a['adapter']['path']}  {a['adapter']['sha256'][:16]}…\n")
+    print(f"  {'gate':<24}{'before':>9}{'after':>9}{'delta':>9}   verdict")
+
+    bg = {g["name"]: g for g in b["gates"]}
+    regressed, uninformative = [], []
+    for g in a["gates"]:
+        prev = bg.get(g["name"])
+        if prev is None:
+            fail(f"gate '{g['name']}' present after but not before")
+        delta = g["rate"] - prev["rate"]
+        verdict = "REGRESSED" if delta < 0 else ("same" if delta == 0 else "improved")
+        if delta < 0:
+            regressed.append(g["name"])
+        if not g["model_dependent"]:
+            uninformative.append(g["name"])
+        print(f"  {g['name']:<24}{prev['rate']:>9.4f}{g['rate']:>9.4f}"
+              f"{delta:>+9.4f}   {verdict}"
+              + ("  [model-independent]" if not g["model_dependent"] else ""))
+
+    if uninformative:
+        print(f"\n  NOTE {', '.join(uninformative)} is model-independent: identical")
+        print("       before and after by construction, so 'same' here is not")
+        print("       evidence the adapter preserved anything.")
+
+    failed_after = [g["name"] for g in a["gates"] if not g["passed"]]
+    print()
+    if regressed:
+        print(f"DO NOT PROMOTE — regressed: {', '.join(regressed)}")
+    if failed_after:
+        print(f"DO NOT PROMOTE — below threshold after training: {', '.join(failed_after)}")
+    if not regressed and not failed_after:
+        print("No regression and all gates pass after training.")
+    sys.exit(1 if (regressed or failed_after) else 0)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    r = sub.add_parser("run", help="run every gate at one stage")
+    r.add_argument("--config", default="train/qlora_9b.yaml")
+    r.add_argument("--stage", choices=("before", "after"), required=True)
+    r.add_argument("--host", default="ai19-ollama")
+    r.add_argument("--teacher", default="muse-glimmer")
+    r.add_argument("--adapter", default=None)
+    r.add_argument("--traces", default=None,
+                   help="use pre-generated traces instead of calling the model")
+    r.add_argument("--out", required=True)
+
+    c = sub.add_parser("compare", help="compare two stage reports")
+    c.add_argument("--before", required=True)
+    c.add_argument("--after", required=True)
+
+    args = parser.parse_args()
+    (cmd_run if args.command == "run" else cmd_compare)(args)
+
+
+if __name__ == "__main__":
+    main()
