@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Serve the BASE STUDENT for the before/after gates. Run ON the serving pod.
+#
+#   ./scripts/serve_student.sh office-student-9b student-serve
+#
+# Deliberately separate from serve_teacher.sh. That script serves a 30B teacher
+# at whatever quantization its host config picks; this one serves the 9B student
+# and hard-refuses any quantization at all. The reason is the whole point of the
+# baseline: QLoRA trains against a bnb-NF4 view of these weights, vLLM cannot
+# serve that, and bf16 is the honest substitute — same weights, same tokenizer,
+# no second lossy transform. Serving int4 or fp8 here would make the "before"
+# number a measurement of quantization damage that the adapter would then
+# appear to have fixed.
+set -euo pipefail
+
+MODEL="${1:-office-student-9b}"
+HOST="${2:-student-serve}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+eval "$(python3 "$ROOT/src/config.py" --shell "$MODEL" "$HOST")"
+
+if [[ "$HOST_QUANTIZATION" != "bf16" ]]; then
+  echo "REFUSING: host '$HOST' asks for quantization '$HOST_QUANTIZATION'." >&2
+  echo "The student baseline is served bf16 or not at all." >&2
+  exit 2
+fi
+
+echo "Serving STUDENT $MODEL on $HOST"
+echo "  repo   : $TEACHER_REPO"
+echo "  dtype  : bfloat16   tp: $HOST_TENSOR_PARALLEL_SIZE"
+echo "  url    : http://0.0.0.0:$TEACHER_PORT/v1"
+
+# Registered under both the short name and the repo path, for the same reason
+# serve_teacher.sh does it: preflight and generate_normalized ask for the repo
+# path, and vLLM answers only to --served-model-name. run_gates' identity check
+# accepts either, but it compares against the config's base_model, so the repo
+# path must be one of the names actually served.
+exec vllm serve "$TEACHER_REPO" \
+  --served-model-name "$TEACHER_REPO" "$MODEL" \
+  --dtype bfloat16 \
+  --port "$TEACHER_PORT" \
+  --tensor-parallel-size "$HOST_TENSOR_PARALLEL_SIZE" \
+  --gpu-memory-utilization "$HOST_GPU_MEMORY_UTILIZATION" \
+  --max-model-len "$HOST_MAX_MODEL_LEN"
