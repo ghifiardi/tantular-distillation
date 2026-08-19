@@ -1,0 +1,33 @@
+# Training + serving dependencies. GPU HOST ONLY — do not install on the Mac.
+#
+# EXACT pins, not floors. A floor ("transformers>=4.48") resolves to whatever
+# happened to be current on the day the pod was created, so two runs a week
+# apart can train on different library versions and the checkpoint cannot be
+# attributed. These versions were resolved 2026-08-19 against PyPI and are
+# mutually consistent by their own declared constraints:
+#
+#   vllm 0.27.1        pins torch==2.13.0 exactly, and needs transformers>=5.5.3
+#   transformers 5.15  requires tokenizers>=0.22.0,<=0.23.0. There is no 0.23.0
+#                      final on PyPI — only 0.23.0rc0 and then 0.23.1, which the
+#                      ceiling excludes. The highest usable release is 0.22.2.
+#                      Checked, not assumed: pip would otherwise resolve
+#                      tokenizers to 0.23.1 and fail on the pod.
+#   trl 1.10.0         requires transformers>=4.56.2, accelerate>=1.4, datasets>=4.7
+#
+# KNOWN RISK, to be settled by the smoke test rather than by assumption:
+# src/train_qlora.py was written against the TRL 0.x SFTTrainer/SFTConfig API.
+# TRL is now 1.x. If the smoke test fails on that API, the fix is to update the
+# trainer — not to unpin the version.
+
+torch==2.13.0
+transformers==5.15.0
+tokenizers==0.22.2
+trl==1.10.0
+peft==0.20.0
+datasets==5.0.1
+accelerate==1.14.0
+bitsandbytes==0.50.1
+safetensors==0.8.0
+
+# Serving, for the adapter-id check at the end of the smoke test.
+vllm==0.27.1
