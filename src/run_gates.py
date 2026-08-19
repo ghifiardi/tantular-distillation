@@ -11,6 +11,25 @@
         --expect-model Qwen/Qwen3.5-9B-Instruct \
         --adapter adapters/tantular-office-9b-v2 --out data/gates/after.json
 
+STAGE SEMANTICS, decided 2026-08-19.
+
+  before   Everything must be present and runnable: endpoint, model identity,
+           generated output, every declared gate. A score under threshold is
+           recorded as BASELINE_BELOW_TARGET and the run continues — the base
+           student was never trained on Indonesian office work, so requiring it
+           to clear the bar meant for a PROMOTED adapter would mean the run can
+           never start, and the obvious escape is to lower the bar. Exit 0.
+
+  after    The adapter must reach the absolute threshold AND not regress against
+           the baseline, with every gate executed. Only then is it promotable.
+           Exit 1 on a missed threshold.
+
+  both     Missing endpoint, wrong model, missing scorer or missing output is
+           exit 2. A tolerant threshold must not become a tolerant runner.
+
+"measured" and "passed" are separate words in the report and never merge: a
+baseline below target is not a pass, and no threshold moves to make it one.
+
     ./.venv/bin/python src/run_gates.py compare \
         --before data/gates/before.json --after data/gates/after.json
 
@@ -326,10 +345,16 @@ def cmd_run(args) -> None:
                  "rather than skipping a gate someone believes is running")
         print(f"\n--- {name} ---")
         result = GATES[name](spec, args.stage, args, out_dir)
-        mark = "PASS" if result["passed"] else "FAIL"
+        # `passed` keeps its meaning at BOTH stages: rate >= threshold, nothing
+        # else. What changes with the stage is the consequence, not the label —
+        # a baseline below target is still a baseline below target.
+        result["status"] = (
+            ("MET_TARGET" if result["passed"] else "BASELINE_BELOW_TARGET")
+            if args.stage == "before" else
+            ("PASS" if result["passed"] else "FAIL"))
         dep = "model-dependent" if result["model_dependent"] else "MODEL-INDEPENDENT"
-        print(f"  {mark}  {result['rate']:.4f} >= {result['threshold']}  "
-              f"({result['items']} items, {dep})")
+        print(f"  {result['status']:<22} {result['rate']:.4f} vs threshold "
+              f"{result['threshold']}  ({result['items']} items, {dep})")
         results.append(result)
 
     report = {
@@ -340,12 +365,52 @@ def cmd_run(args) -> None:
         "adapter": {"path": str(adapter) if adapter else None,
                     "sha256": digest_tree(adapter) if adapter else None},
         "gates": results,
+        # Reaching this line means every gate EXECUTED: each implementation
+        # fail()s with exit 2 on a missing endpoint, scorer, source or output,
+        # so a rate exists for every gate or the run never got here.
+        "measured": True,
         "all_passed": all(r["passed"] for r in results),
+        "below_target": [r["name"] for r in results if not r["passed"]],
     }
+
+    # Stage semantics, decided 2026-08-19.
+    #
+    # `before` measures a base model that was never trained on Indonesian office
+    # work. Requiring it to clear 0.95 — the bar for a PROMOTED adapter — would
+    # mean the run can never start, and the obvious escape is to lower the
+    # threshold, which destroys the only number that matters after training. So
+    # a low baseline is recorded, not treated as a failure.
+    #
+    # What is NOT weakened: "measured" and "passed" stay separate. A baseline
+    # below target is BASELINE_BELOW_TARGET, never a pass, and the report says
+    # so in the file as well as on the terminal. Infrastructure and identity
+    # failures still exit 2 at both stages, from inside the gate runners.
+    if args.stage == "before":
+        report["verdict"] = ("BASELINE_MEASURED_BELOW_TARGET"
+                             if report["below_target"] else "BASELINE_MEETS_TARGET")
+        report["promotable"] = False      # a baseline is never promotable
+        exit_code = 0
+    else:
+        report["verdict"] = "PASS" if report["all_passed"] else "FAIL"
+        # Absolute threshold is necessary but not sufficient: `compare` also has
+        # to find no regression before anything is promotable.
+        report["promotable"] = None
+        exit_code = 0 if report["all_passed"] else 1
+
     Path(args.out).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"\nwrote {args.out}")
-    print("ALL GATES PASS" if report["all_passed"] else "ONE OR MORE GATES FAILED")
-    sys.exit(0 if report["all_passed"] else 1)
+    if args.stage == "before":
+        if report["below_target"]:
+            print(f"\nBASELINE MEASURED, BELOW TARGET: "
+                  f"{', '.join(report['below_target'])}")
+            print("This is NOT a pass. It is a recorded starting point, and the "
+                  "run may continue.")
+            print("The same thresholds apply unchanged at --stage after.")
+        else:
+            print("\nBASELINE MEASURED, already at or above every threshold.")
+    else:
+        print("ALL GATES PASS" if report["all_passed"] else "ONE OR MORE GATES FAILED")
+    sys.exit(exit_code)
 
 
 def cmd_compare(args) -> None:
@@ -354,6 +419,10 @@ def cmd_compare(args) -> None:
         if not p.is_file():
             fail(f"missing gate report: {p}")
     b, a = json.loads(before.read_text()), json.loads(after.read_text())
+
+    if b.get("stage") != "before" or a.get("stage") != "after":
+        fail(f"stages are wrong way round: before={b.get('stage')!r}, "
+             f"after={a.get('stage')!r}")
 
     if b["config"]["sha256"] != a["config"]["sha256"]:
         fail("before and after ran against DIFFERENT configs — the comparison "
@@ -387,15 +456,45 @@ def cmd_compare(args) -> None:
         print("       before and after by construction, so 'same' here is not")
         print("       evidence the adapter preserved anything.")
 
+    # Promotion needs BOTH, and neither substitutes for the other:
+    #   absolute    every gate at or above its own threshold after training
+    #   relative    no gate below where the baseline already was
+    # An adapter that improves a lot and still misses 0.95 is not promotable —
+    # improvement is progress, not a product. And an adapter that clears every
+    # threshold while regressing another gate is not promotable either.
     failed_after = [g["name"] for g in a["gates"] if not g["passed"]]
+    baseline_low = b.get("below_target", [])
     print()
+    if baseline_low:
+        print(f"  baseline was below target on: {', '.join(baseline_low)} — "
+              "recorded, not held against the adapter.")
     if regressed:
         print(f"DO NOT PROMOTE — regressed: {', '.join(regressed)}")
     if failed_after:
-        print(f"DO NOT PROMOTE — below threshold after training: {', '.join(failed_after)}")
-    if not regressed and not failed_after:
-        print("No regression and all gates pass after training.")
-    sys.exit(1 if (regressed or failed_after) else 0)
+        print(f"DO NOT PROMOTE — below threshold after training: "
+              f"{', '.join(failed_after)}")
+        for name in failed_after:
+            g = next(x for x in a["gates"] if x["name"] == name)
+            prev = bg[name]["rate"]
+            if g["rate"] > prev:
+                print(f"  {name} improved {prev:.4f} -> {g['rate']:.4f} but the "
+                      f"bar is {g['threshold']}. Improvement is not promotion.")
+    promotable = not regressed and not failed_after
+    if promotable:
+        print("PROMOTABLE — every gate at or above threshold, and no regression.")
+    if args.json_out:
+        Path(args.json_out).write_text(json.dumps({
+            "promotable": promotable, "regressed": regressed,
+            "below_threshold_after": failed_after,
+            "baseline_below_target": baseline_low,
+            "gates": {g["name"]: {"before": bg[g["name"]]["rate"],
+                                  "after": g["rate"],
+                                  "threshold": g["threshold"],
+                                  "model_dependent": g["model_dependent"]}
+                      for g in a["gates"]},
+        }, indent=2) + "\n", encoding="utf-8")
+        print(f"wrote {args.json_out}")
+    sys.exit(0 if promotable else 1)
 
 
 def main() -> None:
@@ -421,6 +520,7 @@ def main() -> None:
     c = sub.add_parser("compare", help="compare two stage reports")
     c.add_argument("--before", required=True)
     c.add_argument("--after", required=True)
+    c.add_argument("--json-out", default=None)
 
     args = parser.parse_args()
     (cmd_run if args.command == "run" else cmd_compare)(args)

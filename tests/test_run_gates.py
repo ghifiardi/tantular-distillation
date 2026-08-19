@@ -104,13 +104,20 @@ def test_pass_when_every_gate_meets_threshold(config, tmp_path):
 
 
 def test_fail_when_a_gate_misses_threshold(config, tmp_path):
+    """At --stage after, missing the threshold is a failure. (At --stage before
+    it is a recorded baseline; see the stage-semantics tests below.)"""
+    adapter = tmp_path / "adapter"; adapter.mkdir()
+    (adapter / "w.bin").write_bytes(b"x")
     # 3 bad answers -> 37/40 = 0.925 < 0.95
     traces = write_traces(tmp_path / "t.jsonl", n_bad=3)
-    proc = run(config, tmp_path / "before.json", traces)
+    proc = run(config, tmp_path / "after.json", traces, stage="after",
+               adapter=adapter)
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    report = json.loads((tmp_path / "before.json").read_text())
+    report = json.loads((tmp_path / "after.json").read_text())
     voice = next(g for g in report["gates"] if g["name"] == "indonesian_voice")
     assert voice["passed"] is False and voice["rate"] < 0.95
+    assert voice["status"] == "FAIL"
+    assert report["verdict"] == "FAIL"
 
 
 def test_missing_runner_fails_closed(config, tmp_path):
@@ -192,7 +199,14 @@ def test_model_independent_gate_is_labelled(config, tmp_path):
 
 
 def run_edit(config: Path, out: Path, voice_traces: Path, edit_traces: Path,
-             stage: str = "before", adapter=None):
+             stage: str = "after", adapter=None):
+    """Defaults to --stage after: these tests are about whether the edit gate
+    SCORES correctly, and only the after stage turns a low score into exit 1.
+    At --stage before a low score is a recorded baseline (see stage semantics)."""
+    if stage == "after" and adapter is None:
+        adapter = out.parent / f"adapter-{out.stem}"
+        adapter.mkdir(exist_ok=True)
+        (adapter / "w.bin").write_bytes(b"x")
     cmd = [PY, RUNNER, "run", "--config", str(config), "--stage", stage,
            "--traces", str(voice_traces), "--edit-traces", str(edit_traces),
            "--out", str(out)]
@@ -360,3 +374,125 @@ def test_trainer_refuses_ai19_end_to_end():
         capture_output=True, text=True, cwd=ROOT)
     assert proc.returncode != 0
     assert "not declared as a training host" in proc.stdout + proc.stderr
+
+
+# --- stage semantics --------------------------------------------------------
+#
+# Decided 2026-08-19. The base student was never trained on Indonesian office
+# work, so its voice score will sit well under 0.95 — the bar for a PROMOTED
+# adapter. Failing `before` on that would mean the run can never start, and the
+# obvious escape is to lower the threshold, which destroys the one number that
+# matters after training.
+#
+# So: a low baseline is MEASURED, not passed. "measured" and "passed" stay
+# separate words in the report, the threshold is untouched, and infrastructure
+# or identity failures still exit 2 at both stages.
+
+def _adapter(tmp_path, name="adapter"):
+    d = tmp_path / name; d.mkdir()
+    (d / "w.bin").write_bytes(b"x")
+    return d
+
+
+def test_before_low_baseline_is_measured_not_failed(config, tmp_path):
+    """Case 1: baseline below target, but fully measured -> the run continues."""
+    # 12 bad answers -> 28/40 = 0.70, far under 0.95
+    traces = write_traces(tmp_path / "b.jsonl", n_bad=12)
+    proc = run(config, tmp_path / "before.json", traces, stage="before")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    report = json.loads((tmp_path / "before.json").read_text())
+    voice = next(g for g in report["gates"] if g["name"] == "indonesian_voice")
+
+    # measured, and every gate produced a rate
+    assert report["measured"] is True
+    assert len(report["gates"]) == 3
+    assert voice["rate"] == pytest.approx(0.70)
+
+    # but NOT a pass, and never promotable
+    assert voice["passed"] is False
+    assert voice["status"] == "BASELINE_BELOW_TARGET"
+    assert report["all_passed"] is False
+    assert report["verdict"] == "BASELINE_MEASURED_BELOW_TARGET"
+    assert report["promotable"] is False
+    assert "indonesian_voice" in report["below_target"]
+    assert "This is NOT a pass" in proc.stdout
+
+    # the threshold itself is untouched
+    assert voice["threshold"] == 0.95
+
+
+def test_before_still_exits_2_on_infrastructure_failure(config, tmp_path):
+    """A tolerant threshold must not become a tolerant runner."""
+    cfg = yaml.safe_load(config.read_text())
+    for g in cfg["eval_gates"]:
+        if g["name"] == "indonesian_voice":
+            g["scorer"] = "src/scorer_that_does_not_exist.py"
+    config.write_text(yaml.safe_dump(cfg))
+    proc = run(config, tmp_path / "before.json", write_traces(tmp_path / "b.jsonl", 0))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "scorer missing" in proc.stderr
+
+
+def test_improved_but_under_threshold_is_not_promotable(config, tmp_path):
+    """Case 2: the adapter improves a lot and still misses 0.95.
+
+    Improvement is progress, not a product. This is the case most likely to be
+    argued away in the moment, so it is pinned here.
+    """
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 12))      # 0.700
+    run(config, after, write_traces(tmp_path / "a.jsonl", 4),        # 0.900
+        stage="after", adapter=_adapter(tmp_path))
+
+    assert json.loads(after.read_text())["verdict"] == "FAIL"
+    out = tmp_path / "cmp.json"
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after), "--json-out", str(out)],
+                          capture_output=True, text=True, cwd=ROOT)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "DO NOT PROMOTE" in proc.stdout
+    assert "Improvement is not promotion" in proc.stdout
+
+    cmp = json.loads(out.read_text())
+    assert cmp["promotable"] is False
+    assert cmp["regressed"] == []                       # it went UP
+    assert cmp["below_threshold_after"] == ["indonesian_voice"]
+    assert cmp["gates"]["indonesian_voice"]["before"] == pytest.approx(0.70)
+    assert cmp["gates"]["indonesian_voice"]["after"] == pytest.approx(0.90)
+
+
+def test_reaching_threshold_without_regression_is_promotable(config, tmp_path):
+    """Case 3: 0.95 met, nothing regressed -> promotable."""
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 12))      # 0.700
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0),        # 1.000
+        stage="after", adapter=_adapter(tmp_path))
+
+    after_report = json.loads(after.read_text())
+    assert after_report["verdict"] == "PASS"
+    assert all(g["status"] == "PASS" for g in after_report["gates"])
+
+    out = tmp_path / "cmp.json"
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after), "--json-out", str(out)],
+                          capture_output=True, text=True, cwd=ROOT)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "PROMOTABLE" in proc.stdout
+    cmp = json.loads(out.read_text())
+    assert cmp["promotable"] is True
+    assert cmp["regressed"] == [] and cmp["below_threshold_after"] == []
+    # the low baseline is reported, not held against the adapter
+    assert cmp["baseline_below_target"] == ["indonesian_voice"]
+
+
+def test_compare_refuses_stages_the_wrong_way_round(config, tmp_path):
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 0))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=_adapter(tmp_path))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(after),
+                           "--after", str(before)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "wrong way round" in (proc.stdout + proc.stderr)

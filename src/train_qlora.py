@@ -348,6 +348,12 @@ def main() -> None:
 
     run_dir.mkdir(parents=True, exist_ok=True)
     before = run_gates("before", run_dir / "gates.before.json", None, args, base_model)
+    # A base model with no Indonesian office training is EXPECTED to sit under
+    # 0.95. That is recorded as the starting point, not treated as a pass and not
+    # treated as a stop; the same thresholds apply unchanged after training.
+    if before.get("below_target"):
+        print(f"\n  baseline below target on: {', '.join(before['below_target'])} "
+              "— recorded, continuing.")
     adapter = train(config, run_dir, args)
     after = run_gates("after", run_dir / "gates.after.json", adapter, args, base_model)
 
@@ -364,6 +370,11 @@ def main() -> None:
         "run_dir_kind": run_dir_kind,
         "adapter": str(adapter),
         "gates_before": before["gates"], "gates_after": after["gates"],
+        "baseline_verdict": before.get("verdict"),
+        "baseline_below_target": before.get("below_target", []),
+        "after_verdict": after.get("verdict"),
+        # Promotion needs the absolute thresholds AND no regression; `compare`
+        # is the only thing that checks both, so its exit code is the answer.
         "promote_adapter": proc.returncode == 0,
     }, indent=2) + "\n", encoding="utf-8")
     print(f"\nwrote {run_dir / 'RUN.json'}")
