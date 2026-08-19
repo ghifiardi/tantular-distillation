@@ -49,8 +49,37 @@ data:
 # compare, and do not promote an adapter that regresses either.
 eval_gates:
   - name: office_json_contract
-    source: ../tantular_office_addin/tests   # edit-contract shape must still parse
+    source: ../tantular_office_addin/tests
     min_pass_rate: 0.98
+    model_dependent: false
+    # MEASURED 2026-08-19, not assumed: this runs the add-in's own JS suite
+    # (382 tests) with globalThis.fetch MOCKED. It never calls a model, so it
+    # returns the SAME result before and after and CANNOT detect an adapter
+    # regression. Retained as a genuine BUILD-HEALTH check — if the add-in's own
+    # code breaks, that matters — but its "same" is never evidence the adapter
+    # preserved the edit contract. That job belongs to edit_contract_output.
+
+  - name: edit_contract_output
+    source: prompts/edit_contract_eval.v1.jsonl
+    checker: scripts/check_edit_contract.mjs
+    addin_src: ../tantular_office_addin/src   # the REAL parser, not a copy
+    items: 20
+    min_pass_rate: 0.90
+    model_dependent: true
+    # The model-dependent half the config always intended by "edit-contract shape
+    # must still parse". Generates edit answers from the model under test and
+    # pushes them through the add-in's own parseEditContract / resolveEdits /
+    # applyEditsToText.
+    #
+    # The rate is contract_ok — parsed AND located AND applied. parse_ok alone
+    # would be too weak: valid JSON whose `find` appears nowhere in the document
+    # parses cleanly and is useless. parse_ok and fields_ok are reported
+    # alongside so a regression can be localised.
+    #
+    # Prompts are held out: laboratory, warehouse, publication, security, canteen
+    # — disjoint from the training corpus and from the voice eval. The system
+    # prompt is pulled from the add-in's EDIT_SYSTEM_PROMPT so it cannot drift
+    # from what the product actually sends.
   - name: indonesian_voice
     # Wired 2026-08-19. The previous source (../tantular/data/eval) never existed:
     # tantular/data/ is gitignored, and the commit cited (55d10e8) actually added
@@ -63,6 +92,7 @@ eval_gates:
     manifest: calibration/VOICE_EVAL_MANIFEST.v2.json
     items: 40
     min_pass_rate: 0.95                      # 38/40; verified 38 PASS, 37 FAIL
+    model_dependent: true
     # THIS GATE DOES NOT TEST FAITHFULNESS. A fabricated figure written in fluent
     # professional Indonesian passes it. Faithfulness belongs to the mechanical
     # checks in calibrate.py and to office_json_contract above.

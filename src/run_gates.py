@@ -58,7 +58,7 @@ PY = str(ROOT / ".venv" / "bin" / "python")
 
 # Which gates can see the model at all. Anything not listed is treated as
 # model-independent, which is the conservative reading.
-MODEL_DEPENDENT = {"indonesian_voice"}
+MODEL_DEPENDENT = {"indonesian_voice", "edit_contract_output"}
 
 
 def digest_file(path: Path) -> str | None:
@@ -162,8 +162,83 @@ def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> di
     }
 
 
+def gate_edit_contract_output(spec: dict, stage: str, args, out_dir: Path) -> dict:
+    """Model-dependent counterpart to office_json_contract.
+
+    Generates edit answers from the model under test and pushes them through the
+    add-in's OWN parser (parseEditContract / resolveEdits / applyEditsToText) via
+    scripts/check_edit_contract.mjs. The rate is contract_ok — parsed AND located
+    AND applied — because valid JSON whose `find` appears nowhere in the document
+    parses cleanly and is useless.
+    """
+    items = ROOT / spec["source"]
+    checker = ROOT / spec.get("checker", "scripts/check_edit_contract.mjs")
+    addin_src = (ROOT / spec["addin_src"]).resolve()
+    if not items.is_file():
+        fail(f"edit_contract_output source missing: {items}")
+    if not checker.is_file():
+        fail(f"edit_contract_output checker missing: {checker}")
+    if not (addin_src / "chat" / "editContract.js").is_file():
+        fail(f"add-in parser missing under {addin_src} — cannot check the real contract")
+
+    cases_in = [json.loads(l) for l in
+                items.read_text(encoding="utf-8").splitlines() if l.strip()]
+    traces_path = out_dir / f"edit.{stage}.traces.jsonl"
+    if args.edit_traces:
+        traces_path = Path(args.edit_traces)
+        if not traces_path.is_file():
+            fail(f"--edit-traces given but missing: {traces_path}")
+    else:
+        cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
+               "--teacher", args.teacher, "--host", args.host,
+               "--prompts", str(items), "--out", str(traces_path), "--resume"]
+        print(f"  generating {stage} edit answers -> {traces_path.name}")
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            fail(f"generation failed for edit_contract_output:\n{proc.stderr[-500:]}")
+    if not traces_path.is_file():
+        fail("edit_contract_output produced no traces — failing closed")
+
+    completions = {}
+    for line in traces_path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            completions[row.get("family") or row.get("id")] = row.get("completion", "")
+    missing = [c["id"] for c in cases_in if c["id"] not in completions]
+    if missing:
+        fail(f"{len(missing)} edit item(s) have no model output: {missing[:3]} — "
+             "a missing output is a failure, not a skip")
+
+    cases = [{"id": c["id"], "document": c["document"],
+              "completion": completions[c["id"]]} for c in cases_in]
+    cases_file = out_dir / f"edit.{stage}.cases.json"
+    cases_file.write_text(json.dumps(cases, ensure_ascii=False), encoding="utf-8")
+
+    proc = subprocess.run(["node", str(checker), str(cases_file), str(addin_src)],
+                          capture_output=True, text=True)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        fail(f"edit contract checker failed:\n{proc.stderr[-500:]}")
+    scored = json.loads(proc.stdout)
+    report = out_dir / f"edit.{stage}.score.json"
+    report.write_text(json.dumps(scored, indent=2, ensure_ascii=False) + "\n",
+                      encoding="utf-8")
+    return {
+        "name": "edit_contract_output",
+        "model_dependent": True,
+        "rate": scored["rate"], "threshold": spec["min_pass_rate"],
+        "passed": scored["rate"] >= spec["min_pass_rate"],
+        "items": scored["items"],
+        "breakdown": {"parse_ok": scored["parse_ok"], "fields_ok": scored["fields_ok"],
+                      "contract_ok": scored["contract_ok"]},
+        "hashes": {"eval_set": digest_file(items), "checker": digest_file(checker),
+                   "addin_parser": digest_file(addin_src / "chat" / "editContract.js")},
+        "artifacts": {"traces": str(traces_path), "report": str(report)},
+    }
+
+
 GATES = {"indonesian_voice": gate_indonesian_voice,
-         "office_json_contract": gate_office_json_contract}
+         "office_json_contract": gate_office_json_contract,
+         "edit_contract_output": gate_edit_contract_output}
 
 
 # --- commands ---------------------------------------------------------------
@@ -282,7 +357,9 @@ def main() -> None:
     r.add_argument("--teacher", default="muse-glimmer")
     r.add_argument("--adapter", default=None)
     r.add_argument("--traces", default=None,
-                   help="use pre-generated traces instead of calling the model")
+                   help="pre-generated voice traces instead of calling the model")
+    r.add_argument("--edit-traces", default=None,
+                   help="pre-generated edit traces instead of calling the model")
     r.add_argument("--out", required=True)
 
     c = sub.add_parser("compare", help="compare two stage reports")

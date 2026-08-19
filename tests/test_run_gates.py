@@ -41,9 +41,44 @@ def write_traces(path: Path, n_bad: int) -> Path:
     return path
 
 
+# --- edit_contract_output: the model-dependent gate -------------------------
+
+EDIT_ITEMS = ROOT / "prompts" / "edit_contract_eval.v1.jsonl"
+
+
+def write_edit_traces(path: Path, mode: str) -> Path:
+    """mode: good | unparseable | find-absent | missing-one"""
+    items = [json.loads(l) for l in EDIT_ITEMS.read_text(encoding="utf-8").splitlines()
+             if l.strip()]
+    rows = []
+    for i, it in enumerate(items):
+        if mode == "missing-one" and i == 0:
+            continue                      # omit an answer entirely
+        doc = it["document"]
+        word = doc.split()[0]             # a token guaranteed to be in the document
+        if mode == "unparseable" and i < 3:
+            completion = "Tentu, berikut hasil penyuntingannya."
+        elif mode == "find-absent" and i < 3:
+            completion = json.dumps({"edits": [
+                {"find": "kalimat yang tidak ada di dokumen", "replace": "x",
+                 "occurrence": 1}]}, ensure_ascii=False)
+        else:
+            completion = json.dumps({"edits": [
+                {"find": word, "replace": word.upper(), "occurrence": 1}]},
+                ensure_ascii=False)
+        rows.append({"family": it["id"], "completion": completion})
+    path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+                    encoding="utf-8")
+    return path
+
+
 def run(config: Path, out: Path, traces: Path, stage: str = "before", adapter=None):
+    """Drive every gate from fixtures. The edit gate needs its own traces; without
+    them the runner would try to reach a model, which is correct behaviour but not
+    what these tests are exercising."""
+    edit = write_edit_traces(out.parent / f"edit-{out.stem}.jsonl", "good")
     cmd = [PY, RUNNER, "run", "--config", str(config), "--stage", stage,
-           "--traces", str(traces), "--out", str(out)]
+           "--traces", str(traces), "--edit-traces", str(edit), "--out", str(out)]
     if adapter:
         cmd += ["--adapter", str(adapter)]
     return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
@@ -64,8 +99,8 @@ def test_pass_when_every_gate_meets_threshold(config, tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     report = json.loads((tmp_path / "before.json").read_text())
     assert report["all_passed"] is True
-    assert {g["name"] for g in report["gates"]} == {"indonesian_voice",
-                                                    "office_json_contract"}
+    assert {g["name"] for g in report["gates"]} == {
+        "indonesian_voice", "office_json_contract", "edit_contract_output"}
 
 
 def test_fail_when_a_gate_misses_threshold(config, tmp_path):
@@ -154,3 +189,80 @@ def test_model_independent_gate_is_labelled(config, tmp_path):
     contract = next(g for g in report["gates"] if g["name"] == "office_json_contract")
     assert contract["model_dependent"] is False
     assert "CANNOT detect" in contract["_model_independent_note"]
+
+
+def run_edit(config: Path, out: Path, voice_traces: Path, edit_traces: Path,
+             stage: str = "before", adapter=None):
+    cmd = [PY, RUNNER, "run", "--config", str(config), "--stage", stage,
+           "--traces", str(voice_traces), "--edit-traces", str(edit_traces),
+           "--out", str(out)]
+    if adapter:
+        cmd += ["--adapter", str(adapter)]
+    return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
+
+
+def test_edit_gate_passes_on_valid_contract(config, tmp_path):
+    proc = run_edit(config, tmp_path / "b.json",
+                    write_traces(tmp_path / "v.jsonl", 0),
+                    write_edit_traces(tmp_path / "e.jsonl", "good"))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    report = json.loads((tmp_path / "b.json").read_text())
+    gate = next(g for g in report["gates"] if g["name"] == "edit_contract_output")
+    assert gate["model_dependent"] is True
+    assert gate["passed"] is True and gate["rate"] == 1.0
+    assert gate["breakdown"]["contract_ok"] == gate["items"]
+
+
+def test_edit_gate_fails_when_output_is_not_json(config, tmp_path):
+    proc = run_edit(config, tmp_path / "b.json",
+                    write_traces(tmp_path / "v.jsonl", 0),
+                    write_edit_traces(tmp_path / "e.jsonl", "unparseable"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    gate = next(g for g in json.loads((tmp_path / "b.json").read_text())["gates"]
+                if g["name"] == "edit_contract_output")
+    assert gate["passed"] is False
+    assert gate["breakdown"]["parse_ok"] < gate["items"]
+
+
+def test_edit_gate_fails_when_json_parses_but_find_is_absent(config, tmp_path):
+    """The case parse_ok alone would miss: valid JSON, useless edits."""
+    proc = run_edit(config, tmp_path / "b.json",
+                    write_traces(tmp_path / "v.jsonl", 0),
+                    write_edit_traces(tmp_path / "e.jsonl", "find-absent"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    gate = next(g for g in json.loads((tmp_path / "b.json").read_text())["gates"]
+                if g["name"] == "edit_contract_output")
+    assert gate["breakdown"]["parse_ok"] == gate["items"], "all should parse"
+    assert gate["breakdown"]["contract_ok"] < gate["items"], "but not resolve"
+    assert gate["passed"] is False
+
+
+def test_edit_gate_missing_output_fails_closed(config, tmp_path):
+    proc = run_edit(config, tmp_path / "b.json",
+                    write_traces(tmp_path / "v.jsonl", 0),
+                    write_edit_traces(tmp_path / "e.jsonl", "missing-one"))
+    assert proc.returncode == 2, "a missing model output must abort, not skip"
+    assert "no model output" in (proc.stdout + proc.stderr)
+
+
+def test_edit_gate_missing_parser_fails_closed(config, tmp_path):
+    cfg = yaml.safe_load(config.read_text())
+    for g in cfg["eval_gates"]:
+        if g["name"] == "edit_contract_output":
+            g["addin_src"] = "../does_not_exist/src"
+    config.write_text(yaml.safe_dump(cfg))
+    proc = run_edit(config, tmp_path / "b.json",
+                    write_traces(tmp_path / "v.jsonl", 0),
+                    write_edit_traces(tmp_path / "e.jsonl", "good"))
+    assert proc.returncode == 2
+    assert "add-in parser missing" in (proc.stdout + proc.stderr)
+
+
+def test_both_contract_gates_coexist(config, tmp_path):
+    """The model-independent gate is retained, not replaced."""
+    run_edit(config, tmp_path / "b.json",
+             write_traces(tmp_path / "v.jsonl", 0),
+             write_edit_traces(tmp_path / "e.jsonl", "good"))
+    gates = {g["name"]: g for g in json.loads((tmp_path / "b.json").read_text())["gates"]}
+    assert gates["office_json_contract"]["model_dependent"] is False
+    assert gates["edit_contract_output"]["model_dependent"] is True
