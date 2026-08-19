@@ -14,7 +14,7 @@ start. One gate the config requires does not exist.
 | gate | source | status |
 |---|---|---|
 | `office_json_contract` | `../tantular_office_addin/tests` | present, 32 entries |
-| `indonesian_voice` | `../tantular/data/eval` | **MISSING** |
+| `indonesian_voice` | `prompts/voice_eval.v1.jsonl` | **RESOLVED 2026-08-19** — 40 items, rubric v2, wired |
 
 `../tantular/data/eval` does not exist, and `tantular/data/` is gitignored, so it
 was never in version control and cannot be recovered from history.
@@ -43,6 +43,26 @@ repointed at, renamed to, or counted as `indonesian_voice`.
 A real Indonesian-voice eval must be authored from product requirements or
 reviewed test fixtures. Until it exists and is wired in as its own gate,
 **the trainer is not to be run.**
+
+### RESOLVED 2026-08-19 — but training remains blocked for other reasons
+
+`indonesian_voice` now points at `prompts/voice_eval.v1.jsonl` (40 held-out
+items, `249acd7c65ce5c58…`), scored by `src/score_voice.py` at rubric v2,
+threshold 0.95 (38/40). Approved after product review.
+
+`id_factual_calibration.jsonl` was NOT repointed at this gate, as decided.
+
+**Two blockers remain, and neither is the eval:**
+
+1. **There is no trainer.** Nothing reads `qlora_9b.yaml`. `office_json_contract`
+   has a source but no runner either — "all gates executable" is not yet true.
+2. **No explicit decision to run v1.** Required before any training starts.
+
+**Also: `train/RUN_MANIFEST.v1.json` is now STALE.** It froze the config at
+`79fd7bd376eb724e…`; wiring the gate changed it to `afb6cdd52f56b998…`. That
+freeze predates the gate and must NOT be used for a run. Re-run
+`src/freeze_training_run.py` immediately before training so the record matches
+what actually executes.
 
 ## What is ready, and stays ready
 

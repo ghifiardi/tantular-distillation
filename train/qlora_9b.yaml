@@ -52,8 +52,23 @@ eval_gates:
     source: ../tantular_office_addin/tests   # edit-contract shape must still parse
     min_pass_rate: 0.98
   - name: indonesian_voice
-    source: ../tantular/data/eval            # eval set added in 55d10e8
-    min_pass_rate: 0.95
+    # Wired 2026-08-19. The previous source (../tantular/data/eval) never existed:
+    # tantular/data/ is gitignored, and the commit cited (55d10e8) actually added
+    # eval_sets/id_factual_calibration.jsonl — 5 items measuring FACTUAL
+    # CALIBRATION, not voice, and too few for a 0.95 threshold where one failure
+    # scores 0.80. It was not repointed here; that would report one property while
+    # measuring another.
+    source: prompts/voice_eval.v1.jsonl
+    scorer: src/score_voice.py               # rubric v2, approved 2026-08-19
+    manifest: calibration/VOICE_EVAL_MANIFEST.v2.json
+    items: 40
+    min_pass_rate: 0.95                      # 38/40; verified 38 PASS, 37 FAIL
+    # THIS GATE DOES NOT TEST FAITHFULNESS. A fabricated figure written in fluent
+    # professional Indonesian passes it. Faithfulness belongs to the mechanical
+    # checks in calibrate.py and to office_json_contract above.
+    # Known limitations, accepted for v1 and not grounds for loosening the gate:
+    #   - audience coverage is 5 of 40 items;
+    #   - items and rubric were drafted and reviewed by the same author.
 
 output:
   adapter_dir: adapters/tantular-office-9b-v2
