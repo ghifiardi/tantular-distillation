@@ -1,12 +1,14 @@
 """Run the training eval gates, before and after, and compare them.
 
-    # evaluate the base model
+    # evaluate the base STUDENT (never the teacher: see verify_served_model)
     ./.venv/bin/python src/run_gates.py run --stage before \
-        --host ai19-ollama --teacher muse-glimmer --out data/gates/before.json
+        --host student-serve --teacher office-student-9b \
+        --expect-model Qwen/Qwen3.5-9B-Instruct --out data/gates/before.json
 
     # evaluate the trained adapter
     ./.venv/bin/python src/run_gates.py run --stage after \
-        --host ai19-ollama --teacher muse-glimmer \
+        --host student-serve --teacher office-student-9b \
+        --expect-model Qwen/Qwen3.5-9B-Instruct \
         --adapter adapters/tantular-office-9b-v2 --out data/gates/after.json
 
     ./.venv/bin/python src/run_gates.py compare \

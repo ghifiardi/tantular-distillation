@@ -18,3 +18,8 @@ gpu_memory_utilization: 0.90
 # Reached over an SSH tunnel like the other rentals; set HOST_BASE_URL when the
 # pod exists. Left unset deliberately so a run against a stale address fails to
 # connect rather than quietly gating whatever now answers on that port.
+
+# src/config.py: training_guard()
+training_allowed: false
+no_training_reason: >-
+  Serves the base student for the gates. Keep serving and training on separate hosts so a training run cannot perturb the endpoint being measured.

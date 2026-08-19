@@ -316,3 +316,47 @@ def test_identity_rejects_the_teacher_endpoint(monkeypatch):
     with pytest.raises(SystemExit) as e:
         _identity(monkeypatch, "Qwen/Qwen3.5-9B-Instruct", ["muse-glimmer:30b"])
     assert e.value.code == 2
+
+
+# --- training host: ai19 is production, and must refuse to train ------------
+#
+# ai19 backs the openai.ina17.com gateway and a face_ai_service. Its config used
+# to say `role: training`, which is exactly the kind of stale note someone acts
+# on at 2am. The role is now production-serving, but a comment is not a guard —
+# these are.
+
+def _guard(host, machine):
+    sys.path.insert(0, str(ROOT / "src"))
+    import config as config_module
+    return config_module.training_guard(host, hostname=machine)
+
+
+def test_training_allowed_on_a_declared_rental():
+    assert _guard("rented-48gb", "pod-7f3a")["gpu"]
+
+
+def test_ai19_refuses_to_train():
+    with pytest.raises(SystemExit) as e:
+        _guard("ai19", "pod-7f3a")
+    assert "not declared as a training host" in str(e.value)
+
+
+def test_a_silent_host_refuses_to_train():
+    """Serving hosts are not training hosts by default; silence is a refusal."""
+    with pytest.raises(SystemExit):
+        _guard("student-serve", "pod-7f3a")
+
+
+def test_declaring_a_rental_does_not_help_when_running_ON_ai19():
+    """The machine check is independent of what was declared."""
+    with pytest.raises(SystemExit) as e:
+        _guard("rented-48gb", "ai19.internal")
+    assert "this machine" in str(e.value)
+
+
+def test_trainer_refuses_ai19_end_to_end():
+    proc = subprocess.run(
+        [PY, str(ROOT / "src" / "train_qlora.py"), "--dry-run", "--train-host", "ai19"],
+        capture_output=True, text=True, cwd=ROOT)
+    assert proc.returncode != 0
+    assert "not declared as a training host" in proc.stdout + proc.stderr

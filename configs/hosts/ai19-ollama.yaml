@@ -32,3 +32,8 @@ request_timeout_s: 600
 # Shared box running a face_ai_service and serving other users: a high
 # concurrency here would evict their models from VRAM.
 concurrency: 4
+
+# src/config.py: training_guard()
+training_allowed: false
+no_training_reason: >-
+  A tunnel to ai19's production Ollama. Same machine, same objection.

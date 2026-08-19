@@ -24,3 +24,7 @@ max_model_len: 32768
 # from the port but generation cannot. Absent until a 2026-08-18 rental became
 # the first run to actually generate against this host.
 base_url: http://localhost:8010/v1
+
+# The v1 QLoRA run happens on a rental, not on ai19. Declared explicitly
+# because src/config.py: training_guard() refuses any host that is silent.
+training_allowed: true

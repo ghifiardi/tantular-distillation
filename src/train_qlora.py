@@ -256,6 +256,10 @@ def main() -> None:
                         help="host serving the BASE STUDENT named in the config")
     parser.add_argument("--student-model", default=None,
                         help="model key for that host")
+    parser.add_argument("--train-host", default=None,
+                        help="host config for the machine that will TRAIN. Must "
+                             "declare training_allowed: true, and must not be "
+                             "ai19, which is production-serving.")
     parser.add_argument("--dry-run", action="store_true",
                         help="verify everything and stop before gates or training")
     parser.add_argument("--confirm-run-v1", action="store_true",
@@ -279,6 +283,26 @@ def main() -> None:
     print(f"\n=== GATES DECLARED ===\n  {', '.join(gate_names)}")
 
     base_model = config["base_model"]
+    print(f"\n=== TRAINING HOST ===")
+    # Serving and training are separate machines on purpose: a training run on
+    # the box serving the gates would perturb the very endpoint being measured,
+    # and ai19 — the obvious box to reach for — is in production.
+    if not args.train_host:
+        print("  NOT DECLARED — no --train-host given.")
+        print("  Declare where training will run. It is checked twice: the host "
+              "config must say")
+        print("  training_allowed: true, and this machine's own hostname must "
+              "not belong to a")
+        print("  forbidden host (so --train-host rented-48gb typed on ai19 "
+              "still refuses).")
+        train_host_ok = False
+    else:
+        sys.path.insert(0, str(ROOT / "src"))
+        from config import training_guard
+        training_guard(args.train_host)          # exits on violation
+        print(f"  {args.train_host}  training_allowed  OK")
+        train_host_ok = True
+
     print(f"\n=== STUDENT ENDPOINT ===")
     if not (args.student_host and args.student_model):
         print(f"  config base_model : {base_model}")
@@ -298,6 +322,10 @@ def main() -> None:
         print("\nDRY RUN OK — configuration, corpus integrity, held-out status and "
               "run directory all verified.\nNothing was generated, trained, or "
               "written. Gates were NOT executed: that needs a served model.")
+        if not train_host_ok:
+            print("\nSTILL BLOCKED: no training host declared. Pass --train-host "
+                  "rented-48gb (or another\nhost whose config declares "
+                  "training_allowed: true). ai19 is refused by design.")
         if not student_ready:
             print("\nSTILL BLOCKED: no student endpoint. Training cannot start "
                   "until an endpoint serves\n" + f"  {base_model}\n"
@@ -305,6 +333,10 @@ def main() -> None:
                   "gates at the teacher\nwould measure the wrong model entirely.")
         return
 
+    if not train_host_ok:
+        die("no --train-host declared. Where a training run happens is a decision "
+            "that must be stated and checked, not inherited from whichever "
+            "machine the command was typed on.")
     if not student_ready:
         die("no student endpoint configured. The gates would otherwise be pointed "
             "at whatever is default — the teacher — and the before/after "

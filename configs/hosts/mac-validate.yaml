@@ -19,3 +19,8 @@ quantization: int4_mlx
 max_model_len: 8192
 validate_only: true
 max_prompts: 50
+
+# src/config.py: training_guard()
+training_allowed: false
+no_training_reason: >-
+  Validation scale only: Metal, 24GB unified, no CUDA. QLoRA does not run here.

@@ -31,6 +31,50 @@ def _load(kind: str, name: str) -> dict:
     return yaml.safe_load(path.read_text()) or {}
 
 
+def training_guard(host_name: str, hostname: str | None = None) -> dict:
+    """Refuse to train on a host that is not allowed to train.
+
+    ai19 backs the openai.ina17.com gateway and a face_ai_service. A QLoRA run
+    there competes for VRAM with production traffic, and freeing room means
+    stopping Ollama, which takes the gateway down. The operating decision
+    (2026-08-19) is that ai19 trains nothing.
+
+    Two independent checks, because either alone is evadable:
+
+      declared   the host config must say `training_allowed: true`. A host that
+                 is silent is refused: a training host is a deliberate choice,
+                 not a default.
+      actual     if the machine we are ACTUALLY running on matches a forbidden
+                 host's `hostnames`, the run is refused whatever was declared.
+                 Otherwise `--train-host rented-48gb` typed on ai19 would pass.
+    """
+    import socket
+    host = _load("hosts", host_name)
+    actual = (hostname or socket.gethostname()).lower()
+
+    for path in sorted((ROOT / "configs" / "hosts").glob("*.yaml")):
+        other = yaml.safe_load(path.read_text()) or {}
+        if other.get("training_allowed") is not False:
+            continue
+        for pattern in other.get("hostnames") or []:
+            if pattern.lower() in actual:
+                sys.exit(
+                    f"this machine ({actual}) is host '{path.stem}', which is "
+                    f"not allowed to train:\n  {other.get('no_training_reason', 'declared training_allowed: false')}\n"
+                    f"Declaring --train-host {host_name} does not change which "
+                    "machine the process is on."
+                )
+
+    if host.get("training_allowed") is not True:
+        sys.exit(
+            f"host '{host_name}' is not declared as a training host "
+            f"(training_allowed: {host.get('training_allowed')!r}).\n"
+            + (f"  {host['no_training_reason']}\n" if host.get("no_training_reason") else "")
+            + "Training must be an explicit property of a host, not an assumption."
+        )
+    return host
+
+
 def resolve(teacher_name: str, host_name: str) -> dict:
     teacher = _load("teachers", teacher_name)
     host = _load("hosts", host_name)

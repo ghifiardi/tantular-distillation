@@ -34,10 +34,27 @@ shared_host: true
 # up a second copy under vLLM on these same busy cards would consume VRAM to
 # produce identical int4 traces. Use the gateway for generation.
 #
-# ai19's role is TRAINING: QLoRA on a 9B fits one 3090 in bf16 once enough
-# VRAM is free. See train/qlora_9b.yaml.
+# ai19's role was recorded as TRAINING here. That is REVERSED as of 2026-08-19:
+# this box backs the openai.ina17.com gateway and a face_ai_service, and a QLoRA
+# run competes with production traffic for VRAM that is already committed.
+# Freeing enough room means stopping Ollama, which takes the gateway down.
+#
+# The change was made after auditing every consumer of `role:`. Only one exists:
+# src/config.py's teacher_serving refusal message interpolates it. Nothing
+# branches on the value, so the rename is message-only. `training_allowed` is
+# the field the guard actually reads (src/config.py: training_guard).
 teacher_serving: false
-role: training
+role: production-serving
+
+# Enforced by src/config.py: training_guard(). Both by declaration and by the
+# machine's own hostname, so `--train-host rented-48gb` typed on this box still
+# refuses.
+training_allowed: false
+no_training_reason: >-
+  ai19 is shared and in production (openai.ina17.com gateway + face_ai_service).
+  Training here competes for committed VRAM, and freeing it means stopping
+  Ollama, which takes the gateway down.
+hostnames: [ai19]
 
 tensor_parallel_size: 2
 quantization: int4

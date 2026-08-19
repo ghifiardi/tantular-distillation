@@ -37,3 +37,8 @@ quantization: remote
 min_max_tokens: 800
 request_timeout_s: 300
 concurrency: 16
+
+# src/config.py: training_guard()
+training_allowed: false
+no_training_reason: >-
+  Someone else's inference endpoint. There is no local GPU here to train on.
