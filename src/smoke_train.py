@@ -108,11 +108,25 @@ def main() -> None:
     report["versions"] = versions
     for name, ver in versions.items():
         print(f"  {name:<14} {ver}")
+    # Compare the RELEASE only. A wheel reports its local build tag —
+    # torch 2.13.0 installed from the CUDA 13 index calls itself
+    # "2.13.0+cu130" — and that suffix is evidence the right wheel was
+    # installed, not a mismatch. Rejecting it would abort a correct pod on the
+    # first check, which is precisely the crying-wolf gate that gets loosened
+    # under time pressure. Measured on an L40S pod, 2026-08-19.
+    def release(v: str) -> str:
+        return str(v).split("+", 1)[0]
+
     mismatched = {
         name: (EXPECTED_VERSIONS[name], versions.get(name))
         for name in EXPECTED_VERSIONS
-        if versions.get(name) != EXPECTED_VERSIONS[name]
+        if release(versions.get(name)) != release(EXPECTED_VERSIONS[name])
     }
+    builds = {n: v for n, v in versions.items() if "+" in str(v)}
+    if builds:
+        for n, v in builds.items():
+            print(f"  build tag: {n} {v}")
+        report["build_tags"] = builds
     if mismatched:
         die("pinned versions did not resolve exactly: "
             + ", ".join(f"{name} expected {wanted}, got {got}"
