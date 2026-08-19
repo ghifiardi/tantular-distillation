@@ -8,6 +8,13 @@ The `indonesian_voice` gate `train/qlora_9b.yaml` requires. Distillation
 reliably costs Indonesian voice, so this runs before and after a training run
 and an adapter that regresses is not promoted.
 
+RUBRIC v2, approved 2026-08-19 (v1 rubric revised the same day after review).
+
+THIS GATE DOES NOT TEST FAITHFULNESS. It checks voice only. A fabricated figure
+written in fluent professional Indonesian PASSES here. Faithfulness is covered by
+the mechanical checks in calibrate.py and by office_json_contract; a voice pass
+must never be read as a faithfulness pass.
+
 RUBRIC, approved 2026-08-19. Derived from a survey of accepted material
 (`calibration/VOICE_EVAL_PROPOSAL.md`), with register decided as a product
 question because the surveyed corpus is consumer-support ("Baik Kak") while
@@ -41,6 +48,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import calibrate
 
+RUBRIC_VERSION = "v2"
+
 # --- register ---------------------------------------------------------------
 INFORMAL_ADDRESS = ["kak", "kakak", "kamu", "lo", "lu", "gan", "bro", "sis"]
 # Openers that mark a customer-service turn rather than a document answer.
@@ -56,16 +65,26 @@ COLLOQUIAL = ["gak", "nggak", "udah", "udh", "dapet", "nunggu", "kelar", "bakal"
 # Flagged: generic anglicisms with a standard Indonesian equivalent in use.
 GENERIC_ANGLICISM = {
     "setting": "pengaturan", "backup": "pencadangan", "user": "pengguna",
-    "di-disable": "dinonaktifkan", "disable": "nonaktifkan", "update": "pembaruan",
+    "di-disable": "dinonaktifkan", "disable": "nonaktifkan",
+    # `update` is allow-listed as an established noun ("melakukan update"), but
+    # `di-update` is a mixed-affix verb — Indonesian prefix on an English root —
+    # whose standard form is `diperbarui`. Approved 2026-08-19: the noun is
+    # established usage, the affixed verb is not.
     "di-update": "diperbarui", "maintenance": "pemeliharaan", "meeting": "rapat",
-    "deadline": "batas waktu", "report": "laporan", "file": "berkas",
+    "deadline": "batas waktu", "report": "laporan",
     "schedule": "jadwal", "budget": "anggaran", "approve": "menyetujui",
 }
 # Never flagged: established domain terms the surveyed corpus itself retains,
 # plus Office formats and proper nouns.
+# `file` and `update` were added 2026-08-19 after review: both are established in
+# Indonesian office usage in a way `setting`/`backup`/`user` are not, and the
+# deny-list was producing false failures on natural professional Indonesian. A
+# gate that cries wolf gets loosened under pressure, so the fix is a correct list
+# rather than a lower threshold.
 ALLOWED_TERMS = ["otp", "pin", "cvv", "apk", "aplikasi", "call center",
                  "mobile banking", "internet banking", "helpdesk", "pdf", "xlsx",
-                 "docx", "kwh", "email", "sla", "npwp", "dukcapil"]
+                 "docx", "kwh", "email", "sla", "npwp", "dukcapil",
+                 "file", "update"]
 
 
 def word_present(text: str, term: str) -> bool:

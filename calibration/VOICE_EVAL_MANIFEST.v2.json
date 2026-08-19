@@ -1,0 +1,103 @@
+{
+  "_what": "Held-out Indonesian-voice eval, ITEMS v1 + RUBRIC v2. Items are unchanged from v1; the rubric was revised 2026-08-19 after product review found two false positives. Supersedes VOICE_EVAL_MANIFEST.v1.json.",
+  "items": 40,
+  "sha256": "249acd7c65ce5c58ecb249611a23ca144ec1414d3399e2df21105289817cda23",
+  "path": "prompts/voice_eval.v1.jsonl",
+  "threshold": {
+    "min_pass_rate": 0.95,
+    "items_required_to_pass": 38,
+    "_verified": "38/40 passes and 37/40 fails, checked against the scorer."
+  },
+  "gating": {
+    "gate_on": "overall item pass rate",
+    "reported_not_gated": [
+      "register_address",
+      "register_opener",
+      "baku",
+      "terminology",
+      "language"
+    ],
+    "_why": "Per-dimension rates say WHERE a regression happened; a single number cannot."
+  },
+  "scenario_domains": [
+    "facilities maintenance",
+    "records/archiving",
+    "meeting minutes",
+    "travel and vehicle policy",
+    "energy and consumption",
+    "inventory and assets",
+    "complaint handling procedure"
+  ],
+  "_domains_disjoint_from": {
+    "survey_corpus": "banking and civil administration (blocking cards, OTP, Dukcapil, NPWP)",
+    "training_corpus": "procurement, access review, staff training programmes"
+  },
+  "leakage_check": {
+    "survey_sft": {
+      "max_token_overlap": 0.444,
+      "exact_reuse": 0
+    },
+    "survey_sft_aug": {
+      "max_token_overlap": 0.643,
+      "exact_reuse": 0
+    },
+    "promoted_train": {
+      "max_token_overlap": 0.9,
+      "exact_reuse": 0
+    },
+    "promoted_eval": {
+      "max_token_overlap": 0.905,
+      "exact_reuse": 0
+    },
+    "_analysis": {
+      "exact_reuse": "0 against all four corpora — no answer, user phrasing, or item is reused.",
+      "token_overlap_is_not_reuse": "Up to 0.90 against the promoted corpus, but that is shared common Indonesian vocabulary (berikut, bagian, dokumen, untuk, tidak), not shared content. Reported because the raw number looks alarming and would otherwise invite a wrong conclusion.",
+      "phrase_overlap_8gram_full_prompt": "6/40 items — ALL instruction templates or document-format boilerplate ('terjemahkan teks berikut ke bahasa inggris pertahankan angka', 'memo internal kepada seluruh kepala bagian'). This sharing is DELIBERATE: the eval must use the product's real task instructions or it is not testing the product's tasks.",
+      "phrase_overlap_8gram_content_only": "1/40 — the memo header layout only. No scenario, fact, figure, or answer is shared with any training or survey corpus."
+    }
+  },
+  "_leakage_note": "tantular_sft_aug.jsonl IS the 153-example corpus that trained tantular:0.2-id-3b-lora, and tantular_sft.jsonl its 17-example seed. Neither answer, user phrasing, nor paraphrase is reused here. Token overlap is common Indonesian vocabulary, not shared content — exact reuse is 0 against all four.",
+  "rubric": {
+    "register": "no informal address (Kak/kamu/lo), no greeting filler opening a document answer",
+    "baku": "no colloquial contractions",
+    "terminology": "generic anglicisms flagged where a standard term exists; established domain terms allow-listed; source-required terms exempt",
+    "language": "Indonesian-dominant, except where the task asks for English"
+  },
+  "_no_model_judges_another": "Every check is a deterministic string or ratio test.",
+  "rubric_version": "v2",
+  "items_version": "v1 (unchanged, same sha256)",
+  "scorer_sha256": "42925034b86bd82ee1933eacf24b4970e434c582e407459c101153a66510fec8",
+  "rubric_v2_changes": {
+    "allow_list_added": [
+      "file",
+      "update"
+    ],
+    "_why": "Both are established in Indonesian office usage in a way setting/backup/user are not. Under rubric v1 they produced FALSE FAILURES on natural professional Indonesian ('Silakan unduh file laporan', 'Sistem melakukan update data'). Approved 2026-08-19.",
+    "deny_list_retained": [
+      "setting",
+      "backup",
+      "user",
+      "meeting",
+      "deadline",
+      "report",
+      "schedule",
+      "budget",
+      "approve",
+      "disable",
+      "di-disable",
+      "maintenance",
+      "di-update"
+    ],
+    "di_update_note": "`update` is allow-listed as an established NOUN; `di-update` stays denied as a mixed-affix VERB (Indonesian prefix, English root) whose standard form is `diperbarui`. Flagged at review rather than decided silently.",
+    "threshold": "UNCHANGED at 0.95. The fix for a false positive is a correct list, not a lower bar. Re-verified: 38/40 PASS, 37/40 FAIL."
+  },
+  "THIS_GATE_DOES_NOT_TEST_FAITHFULNESS": "It checks voice only. A fabricated figure written in fluent professional Indonesian PASSES here. Faithfulness is covered by the mechanical checks in calibrate.py and by office_json_contract. A voice pass must never be read as a faithfulness pass. Recorded per review finding 2, 2026-08-19.",
+  "known_limitations": {
+    "audience_coverage": "Only 5 of 40 items name an audience in the instruction, so 35 test 'not casual' rather than 'correct for this reader'. ACCEPTED for v1; to be widened in the next eval version. Explicitly NOT a reason to loosen the current gate.",
+    "self_review": "The items and rubric were drafted and reviewed by the same author. The findings are real; the absence of further findings carries less weight than independent review would."
+  },
+  "test_evidence": {
+    "behavioural_cases": "16/16 behaved as specified under rubric v2 — file/update pass; setting/backup/user/di-update/meeting/deadline/budget/approve fail; register and baku violations fail; source-exempt terms pass while an exempt answer with a register violation still fails.",
+    "threshold_boundary": "38/40 PASS, 37/40 FAIL, re-verified after the rubric change."
+  }
+}
