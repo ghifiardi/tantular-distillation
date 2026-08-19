@@ -72,7 +72,26 @@ def write_edit_traces(path: Path, mode: str) -> Path:
     return path
 
 
-def run(config: Path, out: Path, traces: Path, stage: str = "before", adapter=None):
+ADAPTER_ID = "tantular-office-9b-v1"
+
+
+def make_adapter(path: Path) -> Path:
+    """A directory that looks like a real PEFT adapter.
+
+    The fixtures used to be a directory with one placeholder file, which is
+    exactly what the gates would accept when --adapter was only hashed. It is
+    not accepted now: an adapter must carry adapter_config.json and weights.
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "adapter_config.json").write_text(json.dumps({
+        "peft_type": "LORA", "r": 32, "lora_alpha": 64,
+        "base_model_name_or_path": "Qwen/Qwen3.5-9B-Instruct"}))
+    (path / "adapter_model.safetensors").write_bytes(b"placeholder weights")
+    return path
+
+
+def run(config: Path, out: Path, traces: Path, stage: str = "before", adapter=None,
+        adapter_model_id: str | None = ADAPTER_ID):
     """Drive every gate from fixtures. The edit gate needs its own traces; without
     them the runner would try to reach a model, which is correct behaviour but not
     what these tests are exercising."""
@@ -81,6 +100,8 @@ def run(config: Path, out: Path, traces: Path, stage: str = "before", adapter=No
            "--traces", str(traces), "--edit-traces", str(edit), "--out", str(out)]
     if adapter:
         cmd += ["--adapter", str(adapter)]
+    if stage == "after" and adapter_model_id:
+        cmd += ["--adapter-model-id", adapter_model_id]
     return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
 
 
@@ -106,8 +127,7 @@ def test_pass_when_every_gate_meets_threshold(config, tmp_path):
 def test_fail_when_a_gate_misses_threshold(config, tmp_path):
     """At --stage after, missing the threshold is a failure. (At --stage before
     it is a recorded baseline; see the stage-semantics tests below.)"""
-    adapter = tmp_path / "adapter"; adapter.mkdir()
-    (adapter / "w.bin").write_bytes(b"x")
+    adapter = make_adapter(tmp_path / "adapter")
     # 3 bad answers -> 37/40 = 0.925 < 0.95
     traces = write_traces(tmp_path / "t.jsonl", n_bad=3)
     proc = run(config, tmp_path / "after.json", traces, stage="after",
@@ -154,8 +174,7 @@ def test_after_stage_requires_an_adapter(config, tmp_path):
 
 
 def test_compare_detects_regression(config, tmp_path):
-    adapter = tmp_path / "adapter"; adapter.mkdir()
-    (adapter / "weights.bin").write_bytes(b"placeholder")
+    adapter = make_adapter(tmp_path / "adapter")
     before = tmp_path / "before.json"; after = tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 0))
     run(config, after, write_traces(tmp_path / "a.jsonl", 3), stage="after",
@@ -171,8 +190,7 @@ def test_compare_detects_regression(config, tmp_path):
 def test_compare_refuses_mismatched_configs(config, tmp_path):
     """Comparing runs from different configs would blame the adapter for a
     config change."""
-    adapter = tmp_path / "adapter"; adapter.mkdir()
-    (adapter / "w.bin").write_bytes(b"x")
+    adapter = make_adapter(tmp_path / "adapter")
     before = tmp_path / "before.json"; after = tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 0))
     run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
@@ -199,19 +217,19 @@ def test_model_independent_gate_is_labelled(config, tmp_path):
 
 
 def run_edit(config: Path, out: Path, voice_traces: Path, edit_traces: Path,
-             stage: str = "after", adapter=None):
+             stage: str = "after", adapter=None, adapter_model_id=ADAPTER_ID):
     """Defaults to --stage after: these tests are about whether the edit gate
     SCORES correctly, and only the after stage turns a low score into exit 1.
     At --stage before a low score is a recorded baseline (see stage semantics)."""
     if stage == "after" and adapter is None:
-        adapter = out.parent / f"adapter-{out.stem}"
-        adapter.mkdir(exist_ok=True)
-        (adapter / "w.bin").write_bytes(b"x")
+        adapter = make_adapter(out.parent / f"adapter-{out.stem}")
     cmd = [PY, RUNNER, "run", "--config", str(config), "--stage", stage,
            "--traces", str(voice_traces), "--edit-traces", str(edit_traces),
            "--out", str(out)]
     if adapter:
         cmd += ["--adapter", str(adapter)]
+    if stage == "after" and adapter_model_id:
+        cmd += ["--adapter-model-id", adapter_model_id]
     return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
 
 
@@ -389,9 +407,7 @@ def test_trainer_refuses_ai19_end_to_end():
 # or identity failures still exit 2 at both stages.
 
 def _adapter(tmp_path, name="adapter"):
-    d = tmp_path / name; d.mkdir()
-    (d / "w.bin").write_bytes(b"x")
-    return d
+    return make_adapter(tmp_path / name)
 
 
 def test_before_low_baseline_is_measured_not_failed(config, tmp_path):
@@ -496,3 +512,160 @@ def test_compare_refuses_stages_the_wrong_way_round(config, tmp_path):
                           cwd=ROOT)
     assert proc.returncode == 2
     assert "wrong way round" in (proc.stdout + proc.stderr)
+
+
+# --- the after stage must actually evaluate the ADAPTER ----------------------
+#
+# Until 2026-08-19 --adapter was only existence-checked and hashed: the gates
+# then generated from the same model id as the baseline. Every after run would
+# have re-measured the BASE model, recorded the adapter's digest beside it, and
+# reported a complete before/after comparison of a model against itself. The
+# digest made it look verified, which is worse than recording nothing.
+#
+# These are the four ways that can happen, each of which must now fail.
+
+def test_adapter_path_that_is_not_an_adapter_is_refused(config, tmp_path):
+    """(1) a directory that hashes is not an adapter."""
+    fake = tmp_path / "not-an-adapter"; fake.mkdir()
+    (fake / "weights.bin").write_bytes(b"placeholder")
+    proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
+               stage="after", adapter=fake)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "not a LoRA adapter directory" in proc.stderr
+
+
+def test_adapter_config_without_weights_is_refused(config, tmp_path):
+    """(1b) config present, nothing to load."""
+    half = tmp_path / "half"; half.mkdir()
+    (half / "adapter_config.json").write_text("{}")
+    proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
+               stage="after", adapter=half)
+    assert proc.returncode == 2
+    assert "no weights" in proc.stderr
+
+
+def test_after_without_an_adapter_model_id_is_refused(config, tmp_path):
+    """(2) no id means the gates would request the base model id."""
+    proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
+               stage="after", adapter=make_adapter(tmp_path / "a"),
+               adapter_model_id=None)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "--adapter-model-id" in proc.stderr
+
+
+def test_adapter_model_id_equal_to_the_base_is_refused(config, tmp_path):
+    """(2b) vLLM serves the LoRA alongside the base; asking for the base id
+    returns base answers from the same process."""
+    cfg = yaml.safe_load(config.read_text())
+    base = cfg["base_model"]
+    proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
+               stage="after", adapter=make_adapter(tmp_path / "a"),
+               adapter_model_id=base)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "is the BASE model id" in proc.stderr
+
+
+def test_report_records_which_model_id_produced_the_answers(config, tmp_path):
+    """The positive case: the report must be able to prove what it measured."""
+    proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
+               stage="after", adapter=make_adapter(tmp_path / "a"))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    report = json.loads((tmp_path / "after.json").read_text())
+    assert report["adapter"]["evaluated"] is True
+    assert report["adapter"]["model_id"] == ADAPTER_ID
+    for g in report["gates"]:
+        if g["model_dependent"]:
+            assert g["generated_by_model_id"] == ADAPTER_ID
+
+
+def test_compare_refuses_an_after_report_generated_from_the_base(config, tmp_path):
+    """(3) the endpoint never served the adapter, so the answers are the base's.
+
+    Simulated by doctoring the report, because the honest version of this needs
+    a live endpoint — and a doctored report is exactly what a stale or
+    hand-edited artifact looks like.
+    """
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+    doctored = json.loads(after.read_text())
+    base = doctored["model"]["expected"] or doctored["model"]["teacher"]
+    for g in doctored["gates"]:
+        if g["model_dependent"]:
+            g["generated_by_model_id"] = base
+    after.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "not from the adapter id" in proc.stderr
+
+
+def test_compare_refuses_an_after_report_with_only_a_digest(config, tmp_path):
+    """(4) the shape of every report produced before this check existed."""
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+    doctored = json.loads(after.read_text())
+    doctored["adapter"] = {"path": doctored["adapter"]["path"],
+                           "sha256": doctored["adapter"]["sha256"]}
+    after.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "no adapter identity" in proc.stderr
+
+
+def test_missing_adapter_directory_is_refused(config, tmp_path):
+    """(4b) --adapter pointing at nothing."""
+    proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
+               stage="after", adapter=tmp_path / "does-not-exist")
+    assert proc.returncode == 2
+    assert "missing" in proc.stderr
+
+
+def test_endpoint_not_serving_the_adapter_is_refused(monkeypatch, tmp_path):
+    """(3b) the live check: /v1/models does not list the adapter id."""
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+    import config as config_module
+
+    class Resp:
+        @staticmethod
+        def json():
+            return {"data": [{"id": "Qwen/Qwen3.5-9B-Instruct"}]}   # base only
+
+    monkeypatch.setattr(config_module, "resolve",
+                        lambda t, h: {"HOST_BASE_URL": "http://x/v1"})
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp())
+    with pytest.raises(SystemExit) as e:
+        run_gates.verify_adapter_served(
+            make_adapter(tmp_path / "a"), ADAPTER_ID,
+            "Qwen/Qwen3.5-9B-Instruct", "student-serve", "office-student-9b",
+            live=True)
+    assert e.value.code == 2
+
+
+def test_endpoint_serving_the_adapter_is_accepted(monkeypatch, tmp_path):
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+    import config as config_module
+
+    class Resp:
+        @staticmethod
+        def json():
+            return {"data": [{"id": "Qwen/Qwen3.5-9B-Instruct"},
+                             {"id": ADAPTER_ID}]}
+
+    monkeypatch.setattr(config_module, "resolve",
+                        lambda t, h: {"HOST_BASE_URL": "http://x/v1"})
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp())
+    got = run_gates.verify_adapter_served(
+        make_adapter(tmp_path / "a"), ADAPTER_ID, "Qwen/Qwen3.5-9B-Instruct",
+        "student-serve", "office-student-9b", live=True)
+    assert got["model_id"] == ADAPTER_ID and ADAPTER_ID in got["served"]

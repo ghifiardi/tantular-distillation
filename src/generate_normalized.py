@@ -215,7 +215,7 @@ async def run(args: argparse.Namespace) -> None:
     if not base_v1:
         sys.exit(f"host '{args.host}' has no base_url")
     base = base_v1.rsplit("/v1", 1)[0]
-    model = resolved["TEACHER_REPO"]
+    model = args.model_id or resolved["TEACHER_REPO"]
     runtime = "ollama" if args.host.endswith("ollama") else "openai"
     timeout = float(resolved["HOST_REQUEST_TIMEOUT_S"])
     concurrency = args.concurrency or int(resolved["HOST_CONCURRENCY"])
@@ -320,6 +320,11 @@ async def run(args: argparse.Namespace) -> None:
             "provenance": {
                 "teacher": resolved["TEACHER_NAME"],
                 "repo": model,
+                # What was actually asked of the endpoint, and whether that
+                # differs from the config's own repo. An adapter run must show
+                # the adapter id here or it did not measure the adapter.
+                "model_id_requested": model,
+                "model_id_is_override": bool(args.model_id),
                 "license": resolved["TEACHER_LICENSE"],
                 "host": resolved["HOST_NAME"],
                 "quantization": resolved["HOST_QUANTIZATION"],
@@ -388,6 +393,14 @@ async def run(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--teacher", default="muse-glimmer")
+    # Serving-side model id override. vLLM registers a LoRA adapter as its own
+    # model id alongside the base, and asking for the base id returns BASE
+    # answers from the same process — which is how an "after" run silently
+    # re-measures the base model and labels it the adapter. The id is therefore
+    # explicit, and recorded in provenance so a trace can be attributed.
+    parser.add_argument("--model-id", default=None,
+                        help="model id to REQUEST from the endpoint (e.g. a LoRA "
+                             "adapter id), instead of the config's repo")
     parser.add_argument("--host", required=True)
     parser.add_argument("--prompts", required=True)
     parser.add_argument("--out", required=True)

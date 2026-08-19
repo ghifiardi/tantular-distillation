@@ -165,7 +165,12 @@ def run_gates(stage: str, out: Path, adapter: Path | None, args, expect: str) ->
            "--teacher", args.student_model, "--expect-model", expect,
            "--out", str(out)]
     if adapter:
-        cmd += ["--adapter", str(adapter)]
+        # The adapter must be SERVED under this id before the after gates run,
+        # or they measure the base model:
+        #   ./scripts/serve_student.sh office-student-9b student-serve \
+        #       <adapter> <id>
+        cmd += ["--adapter", str(adapter),
+                "--adapter-model-id", args.adapter_model_id]
     print(f"\n=== GATES [{stage}] ===")
     proc = subprocess.run(cmd, cwd=ROOT)
     if proc.returncode == 2:
@@ -256,6 +261,9 @@ def main() -> None:
                         help="host serving the BASE STUDENT named in the config")
     parser.add_argument("--student-model", default=None,
                         help="model key for that host")
+    parser.add_argument("--adapter-model-id", default="tantular-office-9b-v1",
+                        help="model id the endpoint must register the trained "
+                             "adapter under, distinct from the base")
     parser.add_argument("--train-host", default=None,
                         help="host config for the machine that will TRAIN. Must "
                              "declare training_allowed: true, and must not be "
@@ -355,6 +363,18 @@ def main() -> None:
         print(f"\n  baseline below target on: {', '.join(before['below_target'])} "
               "— recorded, continuing.")
     adapter = train(config, run_dir, args)
+    print(f"\n=== SERVE THE ADAPTER BEFORE THE AFTER GATES ===")
+    print(f"  On {args.student_host}, restart the endpoint with the adapter "
+          "registered:\n"
+          f"    ./scripts/serve_student.sh {args.student_model} "
+          f"{args.student_host} \\\n        {adapter} {args.adapter_model_id}")
+    input_msg = ("  Press Enter once /v1/models lists "
+                 f"{args.adapter_model_id}, or Ctrl-C to stop. ")
+    try:
+        input(input_msg)
+    except EOFError:
+        print("\n  (no tty — continuing; the after gates will refuse if the "
+              "adapter is not served)")
     after = run_gates("after", run_dir / "gates.after.json", adapter, args, base_model)
 
     proc = subprocess.run(
@@ -373,6 +393,8 @@ def main() -> None:
         "baseline_verdict": before.get("verdict"),
         "baseline_below_target": before.get("below_target", []),
         "after_verdict": after.get("verdict"),
+        "adapter_model_id": args.adapter_model_id,
+        "adapter_evaluated": after.get("adapter", {}).get("evaluated"),
         # Promotion needs the absolute thresholds AND no regression; `compare`
         # is the only thing that checks both, so its exit code is the answer.
         "promote_adapter": proc.returncode == 0,

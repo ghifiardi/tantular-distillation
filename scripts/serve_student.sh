@@ -15,6 +15,17 @@ set -euo pipefail
 
 MODEL="${1:-office-student-9b}"
 HOST="${2:-student-serve}"
+# Optional third/fourth arguments serve a trained LoRA ALONGSIDE the base.
+#
+#   ./scripts/serve_student.sh office-student-9b student-serve \
+#       ~/tantular-runs/v1/adapter tantular-office-9b-v1
+#
+# The adapter gets its OWN model id. That is the whole point: vLLM keeps both in
+# one process, and a request naming the base id returns base answers even while
+# the LoRA is loaded. run_gates --stage after asks for the adapter id and
+# refuses to run if /v1/models does not list it.
+ADAPTER_PATH="${3:-}"
+ADAPTER_ID="${4:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 eval "$(python3 "$ROOT/src/config.py" --shell "$MODEL" "$HOST")"
@@ -23,6 +34,24 @@ if [[ "$HOST_QUANTIZATION" != "bf16" ]]; then
   echo "REFUSING: host '$HOST' asks for quantization '$HOST_QUANTIZATION'." >&2
   echo "The student baseline is served bf16 or not at all." >&2
   exit 2
+fi
+
+LORA_ARGS=()
+if [[ -n "$ADAPTER_PATH" ]]; then
+  [[ -n "$ADAPTER_ID" ]] || { echo "an adapter path needs an adapter id (arg 4)" >&2; exit 2; }
+  [[ -f "$ADAPTER_PATH/adapter_config.json" ]] || {
+    echo "REFUSING: $ADAPTER_PATH has no adapter_config.json — not a LoRA adapter." >&2
+    exit 2; }
+  if [[ "$ADAPTER_ID" == "$TEACHER_REPO" ]]; then
+    echo "REFUSING: the adapter id must differ from the base id ($TEACHER_REPO)." >&2
+    echo "Serving both under one id makes the after gates unable to address the adapter." >&2
+    exit 2
+  fi
+  # --max-lora-rank must be >= the r in train/qlora_9b.yaml (32) or vLLM
+  # refuses the adapter at load time, after the base is already resident.
+  LORA_ARGS=(--enable-lora --max-lora-rank 32
+             --lora-modules "$ADAPTER_ID=$ADAPTER_PATH")
+  echo "  adapter: $ADAPTER_ID -> $ADAPTER_PATH"
 fi
 
 echo "Serving STUDENT $MODEL on $HOST"
@@ -38,6 +67,7 @@ echo "  url    : http://0.0.0.0:$TEACHER_PORT/v1"
 exec vllm serve "$TEACHER_REPO" \
   --served-model-name "$TEACHER_REPO" "$MODEL" \
   --dtype bfloat16 \
+  "${LORA_ARGS[@]+"${LORA_ARGS[@]}"}" \
   --port "$TEACHER_PORT" \
   --tensor-parallel-size "$HOST_TENSOR_PARALLEL_SIZE" \
   --gpu-memory-utilization "$HOST_GPU_MEMORY_UTILIZATION" \

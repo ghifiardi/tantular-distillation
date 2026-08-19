@@ -140,6 +140,95 @@ def verify_served_model(expect: str, host: str, teacher: str) -> dict:
             "quantization": resolved.get("HOST_QUANTIZATION")}
 
 
+def requested_model_id(args) -> str:
+    """The id the gates ASK the endpoint for. At `after` that is the adapter's
+    own id — never the base, which would return base answers."""
+    if args.stage == "after":
+        return args.adapter_model_id
+    return args.expect_model or args.teacher or ""
+
+
+ADAPTER_REQUIRED_FILES = ("adapter_config.json",)
+ADAPTER_WEIGHT_FILES = ("adapter_model.safetensors", "adapter_model.bin")
+
+
+def list_served(host: str, teacher: str) -> tuple[list, str]:
+    sys.path.insert(0, str(ROOT / "src"))
+    from config import base_url, resolve
+    try:
+        resolved = resolve(teacher, host)
+    except SystemExit as e:
+        fail(f"cannot resolve host '{host}' / model '{teacher}': {e}")
+    url = resolved.get("HOST_BASE_URL") or base_url(resolved)
+    try:
+        import httpx
+        served = [m.get("id") for m in
+                  httpx.get(f"{url}/models", timeout=30).json().get("data", [])]
+    except Exception as e:
+        fail(f"cannot reach {url} to list served models: {e}")
+    return served, url
+
+
+def verify_adapter_served(adapter: Path, adapter_id: str, base_id: str,
+                          host: str, teacher: str, live: bool) -> dict:
+    """Refuse to call an 'after' run an adapter evaluation unless it is one.
+
+    Until 2026-08-19 --adapter was only existence-checked and hashed: the gates
+    then generated from the SAME model id as the baseline. Every after run would
+    have re-measured the base model, recorded the adapter's digest beside it, and
+    reported a complete before/after comparison of a model against itself. The
+    digest made it look verified, which is worse than not recording one.
+
+    An adapter evaluation now has to prove four things:
+
+      it is an adapter    the directory holds adapter_config.json and weights,
+                          not merely some directory that hashes
+      it has its own id   the id requested from the endpoint differs from the
+                          base; asking for the base id returns BASE answers even
+                          when a LoRA is loaded in the same process
+      it is loaded        /v1/models lists that id
+      it was used         each model-dependent gate records the id it requested
+
+    The fourth lives in the gate results, not here.
+    """
+    detail = {"path": str(adapter), "model_id": adapter_id, "base_id": base_id}
+
+    missing = [f for f in ADAPTER_REQUIRED_FILES if not (adapter / f).is_file()]
+    if missing:
+        fail(f"{adapter} is not a LoRA adapter directory: missing "
+             f"{', '.join(missing)}.\nA directory that hashes is not an adapter; "
+             "the digest would document nothing.")
+    if not any((adapter / f).is_file() for f in ADAPTER_WEIGHT_FILES):
+        fail(f"{adapter} has an adapter_config.json but no weights "
+             f"({' or '.join(ADAPTER_WEIGHT_FILES)}). Nothing would be loaded.")
+
+    if not adapter_id:
+        fail("--stage after needs --adapter-model-id: the id the endpoint "
+             "registered the adapter under.\nWithout it the gates request the "
+             "base model id and measure the base model, with the adapter's "
+             "digest recorded beside the result.")
+    if adapter_id == base_id or adapter_id == Path(base_id).name:
+        fail(f"--adapter-model-id is the BASE model id ({adapter_id!r}).\n"
+             "vLLM serves a LoRA under its own id alongside the base; asking for "
+             "the base id returns base answers from the same process.")
+
+    if live:
+        served, url = list_served(host, teacher)
+        detail["served"] = served
+        detail["endpoint"] = url
+        if adapter_id not in served:
+            fail(f"the endpoint does not serve {adapter_id!r}.\n"
+                 f"  serves: {served}\n"
+                 "Serve the base with --enable-lora and register the adapter "
+                 "with --lora-modules <id>=<path>, or the after run measures the "
+                 "base model.")
+        print(f"  adapter identity OK: {adapter_id} served at {url}")
+    else:
+        detail["served"] = None
+        detail["fixtures"] = True
+    return detail
+
+
 # --- gate implementations ---------------------------------------------------
 
 def gate_indonesian_voice(spec: dict, stage: str, args, out_dir: Path) -> dict:
@@ -158,8 +247,10 @@ def gate_indonesian_voice(spec: dict, stage: str, args, out_dir: Path) -> dict:
     else:
         cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
                "--teacher", args.teacher, "--host", args.host,
+               "--model-id", requested_model_id(args),
                "--prompts", str(items), "--out", str(traces), "--resume"]
-        print(f"  generating {stage} answers -> {traces.name}")
+        print(f"  generating {stage} answers from {requested_model_id(args)} "
+              f"-> {traces.name}")
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             fail(f"generation failed for indonesian_voice:\n{proc.stderr[-500:]}")
@@ -251,6 +342,7 @@ def gate_edit_contract_output(spec: dict, stage: str, args, out_dir: Path) -> di
     else:
         cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
                "--teacher", args.teacher, "--host", args.host,
+               "--model-id", requested_model_id(args),
                "--prompts", str(items), "--out", str(traces_path), "--resume"]
         print(f"  generating {stage} edit answers -> {traces_path.name}")
         proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -323,8 +415,20 @@ def cmd_run(args) -> None:
         fail(f"--adapter given but missing: {adapter}")
 
     model_identity = None
+    adapter_identity = None
     needs_model = any(g.get("name") in MODEL_DEPENDENT for g in specs)
     using_fixtures = bool(args.traces or args.edit_traces)
+    if args.stage == "after" and needs_model:
+        # Checked even with fixtures: a fixture run still asserts, in its report,
+        # that an adapter was evaluated. The directory and id checks hold in both
+        # modes; only the /v1/models lookup needs a live endpoint.
+        # The base id comes from the CONFIG, not from --expect-model: the check
+        # has to hold in fixture runs too, where --expect-model is absent, and
+        # the config is the thing that actually names the base model.
+        base_id = cfg.get("base_model") or args.expect_model or args.teacher or ""
+        adapter_identity = verify_adapter_served(
+            adapter, args.adapter_model_id, base_id,
+            args.host, args.teacher, live=not using_fixtures)
     if needs_model and not using_fixtures:
         if not args.expect_model:
             fail("--expect-model is required when model-dependent gates will call "
@@ -348,6 +452,12 @@ def cmd_run(args) -> None:
         # `passed` keeps its meaning at BOTH stages: rate >= threshold, nothing
         # else. What changes with the stage is the consequence, not the label —
         # a baseline below target is still a baseline below target.
+        # Which model id produced these answers. Without this the report cannot
+        # distinguish an adapter evaluation from a base evaluation carrying an
+        # adapter's digest.
+        if result["model_dependent"]:
+            result["generated_by_model_id"] = requested_model_id(args)
+            result["from_fixtures"] = bool(args.traces or args.edit_traces)
         result["status"] = (
             ("MET_TARGET" if result["passed"] else "BASELINE_BELOW_TARGET")
             if args.stage == "before" else
@@ -363,7 +473,12 @@ def cmd_run(args) -> None:
         "model": {"teacher": args.teacher, "host": args.host,
                   "expected": args.expect_model, "identity": model_identity},
         "adapter": {"path": str(adapter) if adapter else None,
-                    "sha256": digest_tree(adapter) if adapter else None},
+                    "sha256": digest_tree(adapter) if adapter else None,
+                    "model_id": args.adapter_model_id,
+                    "identity": adapter_identity,
+                    # A digest alone never proved an adapter was evaluated; this
+                    # says whether the endpoint was asked for the adapter's id.
+                    "evaluated": bool(adapter_identity)},
         "gates": results,
         # Reaching this line means every gate EXECUTED: each implementation
         # fail()s with exit 2 on a missing endpoint, scorer, source or output,
@@ -429,6 +544,34 @@ def cmd_compare(args) -> None:
              "would attribute a config change to the adapter")
     if a["adapter"]["sha256"] is None:
         fail("the 'after' report has no adapter — nothing was trained to compare")
+
+    # A digest is not evidence of an evaluation. These three refusals exist
+    # because the after run used to hash the adapter and then generate from the
+    # base model id, producing a complete-looking comparison of a model with
+    # itself.
+    if not a["adapter"].get("evaluated"):
+        fail("the 'after' report records an adapter digest but no adapter "
+             "identity.\nIt was produced before adapter serving was verified, or "
+             "by a runner that never asked the endpoint for the adapter.")
+    base_id = (a["adapter"].get("identity") or {}).get("base_id") \
+        or a["model"].get("expected") or a["model"].get("teacher")
+    adapter_id = a["adapter"].get("model_id")
+    if not adapter_id or adapter_id == base_id:
+        fail(f"the 'after' run requested model id {adapter_id!r}, which is the "
+             f"base ({base_id!r}).\nThose answers came from the base model.")
+    for g in a["gates"]:
+        if not g["model_dependent"]:
+            continue
+        got = g.get("generated_by_model_id")
+        if got != adapter_id:
+            fail(f"gate '{g['name']}' generated from {got!r}, not from the "
+                 f"adapter id {adapter_id!r}.\nThe comparison would attribute "
+                 "base-model answers to the adapter.")
+    for g in b["gates"]:
+        if g["model_dependent"] and g.get("generated_by_model_id") == adapter_id:
+            fail(f"the BASELINE gate '{g['name']}' also generated from the "
+                 f"adapter id {adapter_id!r} — before and after are the same "
+                 "model.")
 
     print("=== BEFORE / AFTER ===")
     print(f"  config  {b['config']['sha256'][:16]}…  (identical in both)")
@@ -511,6 +654,10 @@ def main() -> None:
     r.add_argument("--expect-model", default=None,
                    help="the config's base_model; gates refuse a different one")
     r.add_argument("--adapter", default=None)
+    r.add_argument("--adapter-model-id", default=None,
+                   help="the model id the endpoint registered the adapter under "
+                        "(vLLM --lora-modules <id>=<path>). Required at --stage "
+                        "after: without it the gates ask for the base model.")
     r.add_argument("--traces", default=None,
                    help="pre-generated voice traces instead of calling the model")
     r.add_argument("--edit-traces", default=None,
