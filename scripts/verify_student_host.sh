@@ -67,6 +67,52 @@ elif (( DRV_MAJOR < 580 )); then
       CUDA 12.x vLLM image; a CUDA 13 build will fail to launch." >&2
 fi
 
+# Is the card actually OURS? Everything above describes the silicon; none of it
+# says whether another tenant is already using it. A co-tenanted L40S reports
+# full memory free and zero processes — a container cannot see processes in
+# other containers — while sitting at 100% utilisation and ~106W. The first
+# cudaMalloc then fails with cudaErrorDevicesUnavailable.
+#
+# Measured on a RunPod L40S, 2026-08-19: that pod passed every check above,
+# downloaded 19.3GB of weights, and only then failed at model load. This check
+# exists so the next one fails in sixty seconds instead.
+echo "checking whether this GPU is exclusively ours..."
+BUSY=0
+for _ in 1 2 3; do
+  UTIL="$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits | head -1 | xargs)"
+  USED="$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1 | xargs)"
+  echo "  utilisation ${UTIL}%  memory used ${USED} MiB"
+  # Busy while WE have nothing resident means someone else is driving the card.
+  if [[ "${UTIL:-0}" -ge 50 && "${USED:-0}" -le 64 ]]; then BUSY=$((BUSY + 1)); fi
+  sleep 2
+done
+if (( BUSY >= 2 )); then
+  fail "this GPU is busy for someone else.
+         Sustained high utilisation with no memory resident and no visible
+         processes means a co-tenant outside this container is using the card.
+         The first CUDA allocation will fail with cudaErrorDevicesUnavailable,
+         and nothing on our side can fix it. Stop this pod and rent a DEDICATED
+         GPU rather than a shared or community instance."
+fi
+
+# The direct proof, when a torch is available: a co-tenanted card fails here,
+# before any download. nvidia-smi alone cannot establish this.
+if [[ -x ./.venv/bin/python ]]; then
+  if ./.venv/bin/python -c "import torch" 2>/dev/null; then
+    if ./.venv/bin/python -c "import torch; torch.ones(8, device='cuda').sum().item()" 2>/tmp/cudacheck.err; then
+      echo "CUDA allocation: OK"
+    else
+      fail "a minimal CUDA allocation FAILED on a card that passed every static
+         check: $(tail -2 /tmp/cudacheck.err | tr '\n' ' ')
+         If this is cudaErrorDevicesUnavailable the card is not exclusively
+         ours. Stop the pod and rent a dedicated GPU."
+    fi
+  else
+    echo "NOTE: torch not installed yet — allocation not proven. Re-run this" >&2
+    echo "      script after installing requirements-train.txt." >&2
+  fi
+fi
+
 cat > "$OUT" <<JSON
 {
   "gpu": "$NAME",
@@ -77,6 +123,7 @@ cat > "$OUT" <<JSON
   "memory_total_mib": $MEM_MIB,
   "memory_free_mib": $FREE_MIB,
   "bf16_capable": true,
+  "exclusive_use_checked": true,
   "verdict": "OK for serving the 9B student at bf16"
 }
 JSON

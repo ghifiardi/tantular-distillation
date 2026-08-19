@@ -6,6 +6,14 @@ decision to train v1 is separate and comes after this passes.
 One NVIDIA GPU, **48GB, Ampere or newer. FP8 is not needed** — do not pay for
 Ada. Not ai19 (`training_allowed: false`, enforced by `training_guard()`).
 
+**It must be a DEDICATED GPU, not a shared or community instance.** A
+co-tenanted card passes every static check — full memory free, no processes,
+right capability, right driver — because a container cannot see processes in
+other containers. It then fails at the first `cudaMalloc` with
+`cudaErrorDevicesUnavailable`. That cost one rental and a 19.3GB download on
+2026-08-19; `verify_student_host.sh` now samples utilisation and attempts a
+real allocation, so it fails in sixty seconds instead.
+
 ## Why this rental exists
 
 `src/train_qlora.py` has never executed a training step. Its GPU imports are
