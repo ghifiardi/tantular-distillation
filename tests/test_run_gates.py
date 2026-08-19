@@ -386,9 +386,21 @@ def test_declaring_a_rental_does_not_help_when_running_ON_ai19():
     assert "this machine" in str(e.value)
 
 
-def test_trainer_refuses_ai19_end_to_end():
+def test_trainer_refuses_ai19_end_to_end(tmp_path):
+    run_manifest = tmp_path / "RUN.json"
+    freeze = subprocess.run(
+        [PY, str(ROOT / "src" / "freeze_training_run.py"),
+         "--corpus", "data/v3-candidate/traces.r0.jsonl",
+         "--config", "train/qlora_9b.yaml",
+         "--promotion-manifest", "train/RUN_MANIFEST.v1-mechanical.json",
+         "--waiver", "calibration/INT4_WAIVER.md",
+         "--out", str(run_manifest),
+         "--frozen-at", "2026-08-19T12:00:00+07:00", "--write"],
+        capture_output=True, text=True, cwd=ROOT)
+    assert freeze.returncode == 0, freeze.stdout + freeze.stderr
     proc = subprocess.run(
-        [PY, str(ROOT / "src" / "train_qlora.py"), "--dry-run", "--train-host", "ai19"],
+        [PY, str(ROOT / "src" / "train_qlora.py"), "--dry-run",
+         "--run-manifest", str(run_manifest), "--train-host", "ai19"],
         capture_output=True, text=True, cwd=ROOT)
     assert proc.returncode != 0
     assert "not declared as a training host" in proc.stdout + proc.stderr
@@ -562,7 +574,21 @@ def test_adapter_model_id_equal_to_the_base_is_refused(config, tmp_path):
                stage="after", adapter=make_adapter(tmp_path / "a"),
                adapter_model_id=base)
     assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert "is the BASE model id" in proc.stderr
+    assert "is a BASE model id/alias" in proc.stderr
+
+
+def test_adapter_model_id_equal_to_the_served_base_alias_is_refused(config, tmp_path):
+    """The server registers the base as both the repo id and office-student-9b.
+
+    /v1/models therefore already lists the short alias before any LoRA is
+    loaded. Accepting that alias as the adapter id would recreate the original
+    defect: the loaded check passes and generation still addresses the base.
+    """
+    proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
+               stage="after", adapter=make_adapter(tmp_path / "a"),
+               adapter_model_id="office-student-9b")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "is a BASE model id/alias" in proc.stderr
 
 
 def test_report_records_which_model_id_produced_the_answers(config, tmp_path):

@@ -11,11 +11,12 @@ Reads train/qlora_9b.yaml and trains ONLY from data/promoted/{train,eval}.jsonl.
 
 WHAT THIS REFUSES TO DO, and why each refusal exists:
 
-  corpus not matching its manifest   RUN_MANIFEST.v1-mechanical.json records the
-                                     sha256 of every promoted file. A corpus
-                                     that changed after promotion was never
-                                     reviewed, so training on it would attribute
-                                     a reviewed provenance to unreviewed data.
+  stale or incomplete run freeze     RUN_MANIFEST.v1.json pins the config,
+                                     candidate corpus, mechanical promotion
+                                     manifest, promoted train/eval bytes, corpus
+                                     gate result, and signed waiver. Any missing
+                                     field or changed digest aborts before gates
+                                     or GPU imports.
 
   eval prompts inside the corpus     The voice and edit gates are held out. If
                                      an eval item reached training, its gate
@@ -55,6 +56,8 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = str(ROOT / ".venv" / "bin" / "python")
+RUN_MANIFEST_SCHEMA_VERSION = 2
+REQUIRED_INT4_WAIVER = ROOT / "calibration" / "INT4_WAIVER.md"
 
 
 def digest_file(path: Path) -> str | None:
@@ -67,21 +70,61 @@ def die(msg: str, code: int = 2) -> None:
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(l) for l in
-            path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    try:
+        return [json.loads(l) for l in
+                path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    except (OSError, json.JSONDecodeError) as e:
+        die(f"invalid JSONL at {path}: {e}")
+
+
+def load_json(path: Path, label: str) -> dict:
+    if not path.is_file():
+        die(f"{label} missing: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        die(f"{label} is not readable JSON: {path}: {e}")
+    if not isinstance(payload, dict):
+        die(f"{label} must contain a JSON object: {path}")
+    return payload
+
+
+def rooted(path_value: str, label: str) -> Path:
+    if not isinstance(path_value, str) or not path_value.strip():
+        die(f"{label} path is missing from the run freeze")
+    path = Path(path_value)
+    return path if path.is_absolute() else ROOT / path
+
+
+def require_digest(path: Path, expected: str, label: str) -> str:
+    if not path.is_file():
+        die(f"{label} missing: {path}")
+    actual = digest_file(path)
+    if not isinstance(expected, str) or actual != expected:
+        die(f"{label} is STALE or changed.\n"
+            f"  freeze  {expected}\n"
+            f"  on disk {actual}\n"
+            "Re-run src/freeze_training_run.py after all intended changes.")
+    return actual
 
 
 # --- preflight checks -------------------------------------------------------
 
 def check_corpus_matches_manifest(manifest_path: Path) -> dict:
-    if not manifest_path.is_file():
-        die(f"promotion manifest missing: {manifest_path}\n"
-            "Run src/promote_corpus.py first — training must not read a corpus "
-            "whose promotion was never recorded.")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    """Validate the mechanical promotion manifest and promoted output bytes."""
+    manifest = load_json(manifest_path, "promotion manifest")
     print("=== CORPUS vs PROMOTION MANIFEST ===")
-    for split, entry in manifest["promoted"].items():
-        path = ROOT / entry["path"]
+    try:
+        promoted = manifest["promoted"]
+        recorded = manifest["splits"]["fingerprint"]
+    except (KeyError, TypeError):
+        die("promotion manifest is malformed: expected promoted and "
+            "splits.fingerprint")
+    for split in ("train", "eval"):
+        entry = promoted.get(split)
+        if not isinstance(entry, dict):
+            die(f"promotion manifest has no promoted.{split} object")
+        path = rooted(entry.get("path"), f"promoted {split}")
         if not path.is_file():
             die(f"promoted {split} missing: {path}")
         actual = digest_file(path)
@@ -100,13 +143,177 @@ def check_corpus_matches_manifest(manifest_path: Path) -> dict:
     sys.path.insert(0, str(ROOT / "src"))
     import splits as splits_module
     live = splits_module.load()["fingerprint"]
-    recorded = manifest["splits"]["fingerprint"]
     if live != recorded:
         die(f"split fingerprint changed: manifest {recorded}, live {live}.\n"
             "Families may now sit in different splits than when the corpus was "
             "generated, which would leak train into eval.")
     print(f"  split fingerprint {recorded}  OK")
     return manifest
+
+
+def run_corpus_gate(corpus: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [PY, str(ROOT / "src" / "verify_corpus.py"), str(corpus), "--gate"],
+        capture_output=True, text=True, cwd=ROOT)
+
+
+def corpus_gate_errors(corpus: Path) -> list[str]:
+    sys.path.insert(0, str(ROOT / "src"))
+    import splits as splits_module
+    import verify_corpus
+
+    manifest = splits_module.load()
+    records = verify_corpus.load_corpus([corpus])
+    return verify_corpus.check(records, manifest, gate=True)
+
+
+def check_run_freeze(run_manifest_path: Path, config_path: Path,
+                     promotion_manifest_path: Path) -> dict:
+    """Enforce the exact, versioned freeze before any endpoint or GPU work.
+
+    A waiver does not turn the int4 gate into a pass. The expected shape is a
+    recorded non-zero gate result plus an unchanged signed waiver; both are
+    verified independently here.
+    """
+    freeze = load_json(run_manifest_path, "run manifest")
+    version = freeze.get("schema_version")
+    if version != RUN_MANIFEST_SCHEMA_VERSION:
+        die(
+            f"run manifest schema is stale or unsupported: {version!r}; expected "
+            f"{RUN_MANIFEST_SCHEMA_VERSION}.\n"
+            "This freeze predates promotion-manifest enforcement. Re-run "
+            "src/freeze_training_run.py after the training smoke test."
+        )
+
+    try:
+        config_entry = freeze["training_config"]
+        corpus_entry = freeze["corpus"]
+        promotion_entry = freeze["promotion_manifest"]
+        gate_entry = freeze["gate"]
+        waiver_entry = freeze["waiver"]
+    except (KeyError, TypeError) as e:
+        die(f"run manifest is incomplete: missing or malformed {e}")
+
+    frozen_config = rooted(config_entry.get("path"), "training config")
+    if frozen_config.resolve() != config_path.resolve():
+        die("run manifest names a different training config.\n"
+            f"  freeze  {frozen_config}\n"
+            f"  command {config_path}")
+    require_digest(config_path, config_entry.get("sha256"), "training config")
+
+    corpus = rooted(corpus_entry.get("path"), "source corpus")
+    require_digest(corpus, corpus_entry.get("sha256"), "source corpus")
+    rows = load_jsonl(corpus)
+    families = len({row.get("family") for row in rows})
+    if len(rows) != corpus_entry.get("traces") or families != corpus_entry.get("families"):
+        die("source corpus counts do not match the run freeze.\n"
+            f"  freeze traces/families {corpus_entry.get('traces')}/"
+            f"{corpus_entry.get('families')}\n"
+            f"  actual traces/families {len(rows)}/{families}")
+
+    frozen_promotion = rooted(promotion_entry.get("path"), "promotion manifest")
+    if frozen_promotion.resolve() != promotion_manifest_path.resolve():
+        die("run manifest names a different promotion manifest.\n"
+            f"  freeze  {frozen_promotion}\n"
+            f"  command {promotion_manifest_path}")
+    require_digest(promotion_manifest_path, promotion_entry.get("sha256"),
+                   "promotion manifest")
+    promotion = check_corpus_matches_manifest(promotion_manifest_path)
+
+    try:
+        promoted_snapshot = promotion_entry["promoted"]
+        promotion_source = promotion["source_corpus"]
+        promotion_split = promotion["splits"]["fingerprint"]
+    except (KeyError, TypeError) as e:
+        die(f"promotion pin in run manifest is incomplete: {e}")
+    if promotion_source.get("sha256") != corpus_entry.get("sha256"):
+        die("promotion manifest source corpus does not match the frozen corpus")
+    if promotion_entry.get("source_corpus_sha256") != corpus_entry.get("sha256"):
+        die("run manifest promotion pin names a different source corpus")
+    frozen_split = corpus_entry.get("provenance", {}).get("split_fingerprint")
+    if not frozen_split or promotion_split != frozen_split or \
+            promotion_entry.get("split_fingerprint") != frozen_split:
+        die("split fingerprint disagrees between corpus freeze and promotion "
+            f"manifest: corpus={frozen_split!r}, promotion={promotion_split!r}, "
+            f"pin={promotion_entry.get('split_fingerprint')!r}")
+
+    for split in ("train", "eval"):
+        live = promotion["promoted"].get(split)
+        pinned = promoted_snapshot.get(split) if isinstance(promoted_snapshot, dict) else None
+        if not isinstance(live, dict) or not isinstance(pinned, dict):
+            die(f"run manifest lacks the promoted {split} snapshot")
+        for field in ("path", "sha256", "traces"):
+            if pinned.get(field) != live.get(field):
+                die(f"promoted {split} {field} disagrees between the run freeze "
+                    "and promotion manifest")
+
+    current_gate = run_corpus_gate(corpus)
+    current_errors = corpus_gate_errors(corpus)
+    recorded_exit = gate_entry.get("exit_code")
+    recorded_verdict = gate_entry.get("verdict")
+    if not isinstance(recorded_exit, int):
+        die("run manifest gate.exit_code is missing or not an integer")
+    expected_verdict = "FAILED" if recorded_exit else "passed"
+    if recorded_verdict != expected_verdict:
+        die("run manifest gate verdict contradicts its exit code: "
+            f"exit={recorded_exit}, verdict={recorded_verdict!r}")
+    if current_gate.returncode != recorded_exit:
+        die("corpus gate result changed since the run was frozen.\n"
+            f"  freeze exit {recorded_exit}\n"
+            f"  current exit {current_gate.returncode}\n"
+            "Refresh the freeze; do not reinterpret an old authorization.")
+    recorded_errors = gate_entry.get("violations")
+    if not isinstance(recorded_errors, list):
+        die("run manifest gate.violations is missing or not a list")
+    if current_errors != recorded_errors:
+        die("corpus gate violations changed since the run was frozen.\n"
+            f"  freeze  {recorded_errors}\n"
+            f"  current {current_errors}")
+    if bool(current_errors) != bool(recorded_exit):
+        die("run manifest gate exit code disagrees with its violation list")
+
+    waiver_path_value = waiver_entry.get("path")
+    waiver_sha = waiver_entry.get("sha256")
+    if recorded_exit != 0:
+        if not waiver_path_value or not waiver_sha:
+            die("the corpus gate FAILED but the run manifest has no signed waiver")
+        waiver = rooted(waiver_path_value, "waiver")
+        if waiver.resolve() != REQUIRED_INT4_WAIVER.resolve():
+            die("the failed int4 gate is not authorized by an arbitrary waiver.\n"
+                f"  required {REQUIRED_INT4_WAIVER}\n"
+                f"  freeze   {waiver}")
+        import verify_corpus
+        if not verify_corpus.waiver_covers(current_errors):
+            die("the signed int4 waiver does not cover the current gate "
+                "violations:\n  " + "\n  ".join(current_errors))
+        require_digest(waiver, waiver_sha, "signed waiver")
+        waiver_status = {"path": str(waiver), "sha256": waiver_sha,
+                         "authorises_failed_gate": True}
+    else:
+        if waiver_path_value or waiver_sha:
+            if not waiver_path_value or not waiver_sha:
+                die("waiver pin is incomplete: path and sha256 must appear together")
+            waiver = rooted(waiver_path_value, "waiver")
+            require_digest(waiver, waiver_sha, "waiver")
+        waiver_status = {"path": waiver_path_value, "sha256": waiver_sha,
+                         "authorises_failed_gate": False}
+
+    print("\n=== RUN FREEZE ===")
+    print(f"  schema             {version}")
+    print(f"  run manifest       {digest_file(run_manifest_path)[:16]}…")
+    print(f"  config             {config_entry['sha256'][:16]}…")
+    print(f"  source corpus      {corpus_entry['sha256'][:16]}…")
+    print(f"  promotion manifest {promotion_entry['sha256'][:16]}…")
+    print(f"  corpus gate        exit {recorded_exit} "
+          f"({'waiver verified' if recorded_exit else 'passed'})")
+    return {
+        "manifest": freeze,
+        "manifest_path": str(run_manifest_path),
+        "manifest_sha256": digest_file(run_manifest_path),
+        "corpus": corpus,
+        "promotion": promotion,
+        "waiver": waiver_status,
+    }
 
 
 def check_eval_held_out(config: dict) -> dict:
@@ -250,7 +457,14 @@ def train(config: dict, run_dir: Path, args) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="train/qlora_9b.yaml")
-    parser.add_argument("--manifest", default="train/RUN_MANIFEST.v1-mechanical.json")
+    parser.add_argument("--run-manifest", default="train/RUN_MANIFEST.v1.json",
+                        help="complete versioned freeze: config, corpus, promotion, "
+                             "gate verdict, and waiver")
+    parser.add_argument("--promotion-manifest", "--manifest",
+                        dest="promotion_manifest",
+                        default="train/RUN_MANIFEST.v1-mechanical.json",
+                        help="mechanical promotion decision; --manifest is retained "
+                             "as a compatibility alias")
     parser.add_argument("--run-dir", default="~/tantular-runs/v1")
     # The gates must measure the STUDENT the config names. These previously
     # defaulted to the teacher (muse-glimmer @ ai19-ollama), which would have made
@@ -283,7 +497,12 @@ def main() -> None:
     print(f"config    {args.config}  {digest_file(config_path)[:16]}…")
     print(f"base      {config['base_model']}\n")
 
-    manifest = check_corpus_matches_manifest(ROOT / args.manifest)
+    run_manifest_path = rooted(args.run_manifest, "run manifest argument")
+    promotion_manifest_path = rooted(args.promotion_manifest,
+                                     "promotion manifest argument")
+    freeze = check_run_freeze(run_manifest_path, config_path,
+                              promotion_manifest_path)
+    manifest = freeze["promotion"]
     held_out = check_eval_held_out(config)
     run_dir_kind = check_run_dir_outside_git(run_dir)
 
@@ -384,8 +603,11 @@ def main() -> None:
 
     (run_dir / "RUN.json").write_text(json.dumps({
         "config": {"path": args.config, "sha256": digest_file(config_path)},
-        "corpus_manifest": {"path": args.manifest,
-                            "sha256": digest_file(ROOT / args.manifest)},
+        "run_manifest": {"path": args.run_manifest,
+                         "sha256": freeze["manifest_sha256"]},
+        "promotion_manifest": {"path": args.promotion_manifest,
+                               "sha256": digest_file(promotion_manifest_path)},
+        "waiver": freeze["waiver"],
         "held_out_verification": held_out,
         "run_dir_kind": run_dir_kind,
         "adapter": str(adapter),

@@ -144,10 +144,10 @@ Current: **26/26 kinds covered, 0 blocked** — but every stratum is
 material supports pipeline generation and behavioural training, and supports
 **no claim about performance on real Office documents**.
 
-Read `260/260 families ready` carefully. It counts resolution, not
-distinctness: 260 families share **78** source documents (mean 3.33, max 8 per
-document). Per-family artifacts do not exist yet. See
-`calibration/SOURCE_COVERAGE.md`.
+Source pack v3 now has **260 distinct source documents for 260 families**, with
+zero digest reuse and zero documents crossing splits. The older 78-document
+source-pack-v2 result remains documented in `calibration/SOURCE_COVERAGE.md` as
+history, not current readiness.
 
 ## Corpus status
 
@@ -166,6 +166,8 @@ single-session reproducibility.
 | `data/raw/` | authoritative corpus — **empty**, awaiting approved sources |
 | `data/expanded/`, `data/expanded-r2/` | prompt set v1, two passes |
 | `data/v2-pass-a/`, `data/v2-pass-b/` | prompt set v2, two passes (B resumed) |
+| `data/v3-candidate/` | prompt set/source pack v3, 260 distinct synthetic families |
+| `data/promoted/` | mechanically promoted train/eval outputs; gitignored |
 | `data/validation/` | pipeline-validation artifacts, never corpus |
 | `data/crossover/control/` | 3 int4 replicates, control noise floor |
 | `data/calibration/` | deployment baseline + parity validation |
@@ -177,13 +179,15 @@ Remaining sequence:
 
 1. ~~Approve and redact sources for the 14 blocked strata~~ — 0 blocked, but
    all 26 strata are synthetic; real Office claims still need approved material
-2. **Per-family artifacts** — 260 families currently share 78 documents
-   (`calibration/SOURCE_COVERAGE.md`)
+2. ~~Per-family artifacts~~ — source pack v3 has 260/260 distinct documents
 3. ~~Generate through ai19 under the waiver~~ — done for prompt sets v1 and v2
 4. ~~Exclude the gateway canaries~~ — done, preserved in `data/validation/`
 5. **Rotate the gateway key** before production use
 
-Everything generated so far is `synthetic_candidate`. **Not training-ready.**
+The mechanically verifiable subset is promoted: 136 train, 47 eval, and 27
+challenge examples. Fifty subjective prose examples remain excluded. Training
+still requires the pinned-environment smoke and a fresh schema-v2 run freeze;
+see `train/TRAINING_BLOCKED.md`.
 
 ## Gates
 
@@ -192,3 +196,8 @@ reliably buys reasoning while quietly costing Indonesian voice and JSON
 contract adherence — and Studio breaks outright when the edit contract
 drifts. Run evals before and after; don't promote an adapter that regresses
 either.
+
+The after stage addresses the vLLM LoRA by its own model id. It refuses a
+directory without PEFT config/weights, an id colliding with any base alias, an
+endpoint that does not list the adapter, or a report whose model-dependent
+answers were not requested from that adapter id.

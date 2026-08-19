@@ -1,80 +1,66 @@
-# v1 training: BLOCKED
+# v1 training: BLOCKED pending smoke and final freeze
 
-**Decision 2026-08-19.** The corpus is promoted and frozen; training may not
-start. One gate the config requires does not exist.
+**Current state: 2026-08-19.**
 
-## The blocker
+The corpus, trainer, model-dependent gates, adapter-serving path, and manifest
+enforcement exist. Training has not started and no adapter has been produced.
 
-`train/qlora_9b.yaml` declares two eval gates and says of them:
+## Critical path
 
-> GATE EVERY RUN ON THIS. Distillation reliably buys reasoning while quietly
-> costing Indonesian voice and JSON-contract adherence — and the Studio features
-> break outright when the edit contract drifts.
+1. **Pin the GPU training environment** and run the 2–4-example smoke:
+   model/tokenizer load, NF4, LoRA attach, forward/backward, optimizer step,
+   save, reload, and vLLM LoRA serving under a distinct model id.
+2. **Write the final schema-v2 freeze immediately after that smoke**, once no
+   further config or environment change is expected:
 
-| gate | source | status |
-|---|---|---|
-| `office_json_contract` | `../tantular_office_addin/tests` | present, 32 entries |
-| `indonesian_voice` | `prompts/voice_eval.v1.jsonl` | **RESOLVED 2026-08-19** — 40 items, rubric v2, wired |
+   ```bash
+   ./.venv/bin/python src/freeze_training_run.py \
+       --corpus data/v3-candidate/traces.r0.jsonl \
+       --config train/qlora_9b.yaml \
+       --promotion-manifest train/RUN_MANIFEST.v1-mechanical.json \
+       --waiver calibration/INT4_WAIVER.md \
+       --out train/RUN_MANIFEST.v1.json \
+       --frozen-at <ISO-8601> --write
+   ```
 
-`../tantular/data/eval` does not exist, and `tantular/data/` is gitignored, so it
-was never in version control and cannot be recovered from history.
+3. Run `src/train_qlora.py --dry-run`. It must verify the complete freeze.
+4. Make the explicit v1 decision and pass `--confirm-run-v1`.
 
-## What the cited commit actually added
+The checked-in `train/RUN_MANIFEST.v1.json` deliberately remains stale until
+step 2. The trainer refuses it: it predates schema-v2 promotion-manifest
+enforcement and its config digest no longer matches.
 
-The config points at commit `55d10e8` ("add eval set"). That commit added
-`eval_sets/id_factual_calibration.jsonl` — **5 entries**, category
-`factual_calibration`, of the form *"nama ibukota indonesia"* with
-`required_terms` / `forbidden_terms`. The file is absent from disk but is
-recoverable from git.
+## What the freeze enforces
 
-It is **not** a substitute for `indonesian_voice`:
+- exact `train/qlora_9b.yaml` bytes;
+- exact 260-trace candidate corpus and provenance;
+- exact `RUN_MANIFEST.v1-mechanical.json` bytes;
+- exact promoted train/eval bytes and counts;
+- one split fingerprint across corpus and promotion;
+- the real `verify_corpus.py --gate` result and exact violation list;
+- the accepted `calibration/INT4_WAIVER.md` digest.
 
-- it measures **factual calibration**, not voice or register;
-- **5 items cannot support a `0.95` threshold** — a single failure scores 0.80;
-- reusing it under the voice gate's name would report one property while
-  measuring another.
+The expected corpus gate is still **FAILED** because the teacher is int4. The
+waiver authorizes proceeding despite the sole quantized-teacher violation; it
+does not turn that result into a pass and cannot authorize unrelated failures.
 
-## Decision
+## Ready
 
-`id_factual_calibration.jsonl` may be recovered and added as a **separate**
-factual-calibration gate, with its own name, path and metric. It must not be
-repointed at, renamed to, or counted as `indonesian_voice`.
+- `data/promoted/train.jsonl` — 136 traces
+- `data/promoted/eval.jsonl` — 47 traces
+- challenge — 27 held out of both
+- 40-item Indonesian-voice gate
+- 20-item model-dependent edit-contract gate
+- add-in build-health suite
+- before/after comparison with absolute thresholds and no-regression policy
+- vLLM LoRA serving with a distinct adapter id
+- fail-closed checks that the adapter exists, is loaded, and was requested
 
-A real Indonesian-voice eval must be authored from product requirements or
-reviewed test fixtures. Until it exists and is wired in as its own gate,
-**the trainer is not to be run.**
+## Non-blocking follow-up
 
-### RESOLVED 2026-08-19 — but training remains blocked for other reasons
-
-`indonesian_voice` now points at `prompts/voice_eval.v1.jsonl` (40 held-out
-items, `249acd7c65ce5c58…`), scored by `src/score_voice.py` at rubric v2,
-threshold 0.95 (38/40). Approved after product review.
-
-`id_factual_calibration.jsonl` was NOT repointed at this gate, as decided.
-
-**Two blockers remain, and neither is the eval:**
-
-1. **There is no trainer.** Nothing reads `qlora_9b.yaml`. `office_json_contract`
-   has a source but no runner either — "all gates executable" is not yet true.
-2. **No explicit decision to run v1.** Required before any training starts.
-
-**Also: `train/RUN_MANIFEST.v1.json` is now STALE.** It froze the config at
-`79fd7bd376eb724e…`; wiring the gate changed it to `afb6cdd52f56b998…`. That
-freeze predates the gate and must NOT be used for a run. Re-run
-`src/freeze_training_run.py` immediately before training so the record matches
-what actually executes.
-
-## What is ready, and stays ready
-
-- `data/promoted/train.jsonl` — 136 traces, `79c7b6aca182ceeb…`
-- `data/promoted/eval.jsonl` — 47 traces, `636f78642152246e…`
-- `challenge` — 27, held out of both
-- `train/RUN_MANIFEST.v1-mechanical.json` — promoted families, rejections, audits
-- `train/RUN_MANIFEST.v1.json` — the full 260-trace corpus as generated
-
-Also outstanding, and not blocking on their own:
-
-- **28 non-router near-duplicates** await human review (the other 56 flags are
-  router closed-set labels, expected by construction).
-- **5 prose strata are excluded**, awaiting an independent judge or human review.
-  Muse Glimmer was not used to judge its own output.
+- 28 non-router near-duplicate flags await human review.
+- 50 examples in five subjective prose strata remain excluded pending an
+  independent judge or human review.
+- All sources are synthetic. No claim about performance on real Office
+  documents is supported.
+- FP8 equivalence remains unmeasured.

@@ -66,6 +66,16 @@ UNTRAINABLE_QUANTIZATION = {"remote", "int4", "int4_mlx", "int4_ollama"}
 # specific teacher on a specific host; a trace from anywhere else is
 # unauthorised rather than merely quantized.
 WAIVER_COVERED = {("int4_ollama", "ai19-ollama")}
+QUANTIZED_TEACHER_ERROR = "trace(s) from a quantized teacher"
+
+
+def waiver_covers(errors: list[str]) -> bool:
+    """The signed int4 waiver covers one violation, and only that violation.
+
+    It cannot authorize leakage, missing strata, empty completions, foreign
+    quantization/hosts, or any other error that happens to share exit code 1.
+    """
+    return len(errors) == 1 and QUANTIZED_TEACHER_ERROR in errors[0]
 
 
 def volatile_families() -> dict[str, list[str]]:

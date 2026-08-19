@@ -42,8 +42,16 @@ if [[ -n "$ADAPTER_PATH" ]]; then
   [[ -f "$ADAPTER_PATH/adapter_config.json" ]] || {
     echo "REFUSING: $ADAPTER_PATH has no adapter_config.json — not a LoRA adapter." >&2
     exit 2; }
-  if [[ "$ADAPTER_ID" == "$TEACHER_REPO" ]]; then
-    echo "REFUSING: the adapter id must differ from the base id ($TEACHER_REPO)." >&2
+  [[ -f "$ADAPTER_PATH/adapter_model.safetensors" ||
+     -f "$ADAPTER_PATH/adapter_model.bin" ]] || {
+    echo "REFUSING: $ADAPTER_PATH has no adapter weights." >&2
+    exit 2; }
+  # The base is registered under BOTH names below. Reusing either one for the
+  # LoRA makes /v1/models look satisfactory while requests naming that id can
+  # still address the base.
+  if [[ "$ADAPTER_ID" == "$TEACHER_REPO" || "$ADAPTER_ID" == "$MODEL" ]]; then
+    echo "REFUSING: the adapter id must differ from every base id." >&2
+    echo "  base ids: $TEACHER_REPO, $MODEL" >&2
     echo "Serving both under one id makes the after gates unable to address the adapter." >&2
     exit 2
   fi

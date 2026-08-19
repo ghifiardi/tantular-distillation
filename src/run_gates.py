@@ -152,6 +152,28 @@ ADAPTER_REQUIRED_FILES = ("adapter_config.json",)
 ADAPTER_WEIGHT_FILES = ("adapter_model.safetensors", "adapter_model.bin")
 
 
+def configured_base_aliases(base_id: str, teacher: str | None) -> set[str]:
+    """Return every configured id that can address the same base weights.
+
+    Fixture-mode runs may omit --teacher/--host, but they still write a report
+    claiming that an adapter id is distinct from the base. Derive aliases from
+    the model configs rather than weakening that assertion when no endpoint is
+    involved.
+    """
+    aliases = {base_id, Path(base_id).name, teacher or ""}
+    for path in (ROOT / "configs" / "teachers").glob("*.yaml"):
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        repos = set((payload.get("repos") or {}).values())
+        if base_id not in repos and payload.get("served_model_name") != base_id:
+            continue
+        aliases.update({
+            path.stem,
+            payload.get("name", ""),
+            payload.get("served_model_name", ""),
+        })
+    return {alias for alias in aliases if alias}
+
+
 def list_served(host: str, teacher: str) -> tuple[list, str]:
     sys.path.insert(0, str(ROOT / "src"))
     from config import base_url, resolve
@@ -183,9 +205,10 @@ def verify_adapter_served(adapter: Path, adapter_id: str, base_id: str,
 
       it is an adapter    the directory holds adapter_config.json and weights,
                           not merely some directory that hashes
-      it has its own id   the id requested from the endpoint differs from the
-                          base; asking for the base id returns BASE answers even
-                          when a LoRA is loaded in the same process
+      it has its own id   the id requested from the endpoint differs from EVERY
+                          id under which the base is served; asking for either
+                          the repo id or its short alias returns BASE answers
+                          even when a LoRA is loaded in the same process
       it is loaded        /v1/models lists that id
       it was used         each model-dependent gate records the id it requested
 
@@ -207,10 +230,17 @@ def verify_adapter_served(adapter: Path, adapter_id: str, base_id: str,
              "registered the adapter under.\nWithout it the gates request the "
              "base model id and measure the base model, with the adapter's "
              "digest recorded beside the result.")
-    if adapter_id == base_id or adapter_id == Path(base_id).name:
-        fail(f"--adapter-model-id is the BASE model id ({adapter_id!r}).\n"
+    # serve_student.sh deliberately registers the base under both its repo id
+    # and the short config key (`office-student-9b`). Reject every known alias.
+    # Checking only config["base_model"] is insufficient: /v1/models already
+    # lists the short alias for the BASE, so an adapter using that id would look
+    # "loaded" while requests continued to return base answers.
+    base_aliases = configured_base_aliases(base_id, teacher)
+    if adapter_id in base_aliases:
+        fail(f"--adapter-model-id is a BASE model id/alias ({adapter_id!r}).\n"
+             f"  known base ids: {sorted(x for x in base_aliases if x)}\n"
              "vLLM serves a LoRA under its own id alongside the base; asking for "
-             "the base id returns base answers from the same process.")
+             "any base alias returns base answers from the same process.")
 
     if live:
         served, url = list_served(host, teacher)
