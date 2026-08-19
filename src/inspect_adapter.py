@@ -65,6 +65,17 @@ def main() -> None:
     summarise(a_keys, "lora_A")
     peak_b = summarise(b_keys, "lora_B")
 
+    # The names matter as much as the values. vLLM binds a LoRA by module path;
+    # on a multimodal architecture the language model sits under a prefix, and a
+    # checkpoint whose paths do not match what vLLM patches LOADS CLEANLY AND
+    # BINDS TO NOTHING. That is indistinguishable from an untrained adapter at
+    # the API, which is how this went unnoticed until logprobs were compared.
+    print("\n=== MODULE PATHS (first 5) ===")
+    for k in sorted(tensors)[:5]:
+        print(f"  {k}")
+    prefixes = sorted({k.split(".layers.")[0] for k in tensors if ".layers." in k})
+    print(f"\n  distinct prefixes before '.layers.': {prefixes}")
+
     print("\n=== VERDICT ===")
     if peak_b == 0.0:
         print("  lora_B is ALL ZERO — this adapter is UNTRAINED.")
