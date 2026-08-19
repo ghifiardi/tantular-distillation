@@ -266,3 +266,53 @@ def test_both_contract_gates_coexist(config, tmp_path):
     gates = {g["name"]: g for g in json.loads((tmp_path / "b.json").read_text())["gates"]}
     assert gates["office_json_contract"]["model_dependent"] is False
     assert gates["edit_contract_output"]["model_dependent"] is True
+
+
+# --- model identity: the gates must measure the STUDENT ---------------------
+#
+# The runner previously defaulted --host/--teacher to the TEACHER
+# (muse-glimmer @ ai19-ollama). A `before` run with defaults would have measured
+# Muse Glimmer int4 as the student baseline, making the before/after comparison
+# teacher-vs-adapter — a complete run, plausible numbers, and no meaning at all.
+# Nothing downstream could detect that, so it is checked here.
+
+def test_live_run_requires_expect_model(config, tmp_path):
+    """Without fixtures the gates call an endpoint; identity must be asserted."""
+    proc = subprocess.run(
+        [PY, RUNNER, "run", "--config", str(config), "--stage", "before",
+         "--host", "ai19-ollama", "--teacher", "muse-glimmer",
+         "--out", str(tmp_path / "g.json")],
+        capture_output=True, text=True, cwd=ROOT)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "--expect-model is required" in proc.stderr
+
+
+def _identity(monkeypatch, expect, served):
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+    import config as config_module
+
+    class Resp:
+        @staticmethod
+        def json():
+            return {"data": [{"id": s} for s in served]}
+
+    monkeypatch.setattr(config_module, "resolve",
+                        lambda t, h: {"HOST_BASE_URL": "http://x/v1",
+                                      "HOST_QUANTIZATION": "none"})
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp())
+    return run_gates.verify_served_model(expect, "somehost", "somemodel")
+
+
+def test_identity_accepts_the_configured_student(monkeypatch):
+    got = _identity(monkeypatch, "Qwen/Qwen3.5-9B-Instruct",
+                    ["Qwen/Qwen3.5-9B-Instruct"])
+    assert got["expected"] == "Qwen/Qwen3.5-9B-Instruct"
+
+
+def test_identity_rejects_the_teacher_endpoint(monkeypatch):
+    """Pointing the student gates at Muse Glimmer must abort, not proceed."""
+    with pytest.raises(SystemExit) as e:
+        _identity(monkeypatch, "Qwen/Qwen3.5-9B-Instruct", ["muse-glimmer:30b"])
+    assert e.value.code == 2

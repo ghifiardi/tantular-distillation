@@ -1,0 +1,45 @@
+# The STUDENT, not a teacher. It lives in configs/teachers/ because that is the
+# directory src/config.py resolves model configs from; the directory name is a
+# historical artifact of the pipeline having had teachers only.
+#
+# Added 2026-08-19 because there was no config describing the student at all,
+# and the gate runner therefore had nothing to check a served endpoint against.
+# Until this existed, `run_gates.py` defaulted to --teacher muse-glimmer
+# --host ai19-ollama, so a `before` run would have measured the TEACHER as the
+# student baseline and the before/after comparison would have been
+# teacher-vs-adapter. That is now refused; see verify_served_model().
+#
+# This config is what `train/qlora_9b.yaml: base_model` names. If the two ever
+# disagree, the gates abort — they are compared, not assumed.
+
+name: office-student-9b
+port: 8020            # distinct from muse-glimmer's 8010 so both can be up
+served_model_name: Qwen/Qwen3.5-9B-Instruct
+license: apache-2.0
+
+repos:
+  # bf16 ONLY, deliberately.
+  #
+  # QLoRA trains against a bitsandbytes NF4 quantization of these same weights
+  # (train/qlora_9b.yaml: load_in_4bit: true). vLLM cannot serve a bnb-NF4 base,
+  # so the gate endpoint cannot reproduce the training-time quantization exactly.
+  # bf16 is the honest substitute: same weights, same tokenizer, no second
+  # lossy transform layered on top of the one training already applied.
+  #
+  # There is intentionally NO fp8 and NO int4 entry. Serving the base at a
+  # quantization we never trained against would make the "before" number a
+  # measurement of quantization damage rather than of the base model, and the
+  # adapter would then appear to fix something it did not cause. A host that
+  # asks for fp8/int4 will fail to resolve, loudly, which is the correct
+  # outcome — not a silent substitution.
+  bf16: Qwen/Qwen3.5-9B-Instruct
+
+# Tokenizer comes from the same repo. Do not point the server at a different
+# tokenizer revision: prompt_sha256 in the corpus was computed over rendered
+# prompts, and a different chat template silently changes what is measured.
+tokenizer: Qwen/Qwen3.5-9B-Instruct
+
+sampling:
+  temperature: 0.0
+  top_p: 1.0
+  max_tokens: 2048

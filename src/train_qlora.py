@@ -159,9 +159,10 @@ def check_run_dir_outside_git(run_dir: Path) -> str:
     return "gitignored"
 
 
-def run_gates(stage: str, out: Path, adapter: Path | None, args) -> dict:
+def run_gates(stage: str, out: Path, adapter: Path | None, args, expect: str) -> dict:
     cmd = [PY, str(ROOT / "src" / "run_gates.py"), "run",
-           "--stage", stage, "--host", args.host, "--teacher", args.teacher,
+           "--stage", stage, "--host", args.student_host,
+           "--teacher", args.student_model, "--expect-model", expect,
            "--out", str(out)]
     if adapter:
         cmd += ["--adapter", str(adapter)]
@@ -246,8 +247,15 @@ def main() -> None:
     parser.add_argument("--config", default="train/qlora_9b.yaml")
     parser.add_argument("--manifest", default="train/RUN_MANIFEST.v1-mechanical.json")
     parser.add_argument("--run-dir", default="~/tantular-runs/v1")
-    parser.add_argument("--host", default="ai19-ollama")
-    parser.add_argument("--teacher", default="muse-glimmer")
+    # The gates must measure the STUDENT the config names. These previously
+    # defaulted to the teacher (muse-glimmer @ ai19-ollama), which would have made
+    # the "before" run measure Muse Glimmer int4 and turned the before/after
+    # comparison into teacher-vs-adapter. No defaults now: the serving host must
+    # be stated, and its identity is verified against config["base_model"].
+    parser.add_argument("--student-host", default=None,
+                        help="host serving the BASE STUDENT named in the config")
+    parser.add_argument("--student-model", default=None,
+                        help="model key for that host")
     parser.add_argument("--dry-run", action="store_true",
                         help="verify everything and stop before gates or training")
     parser.add_argument("--confirm-run-v1", action="store_true",
@@ -270,21 +278,46 @@ def main() -> None:
     gate_names = [g["name"] for g in config.get("eval_gates", [])]
     print(f"\n=== GATES DECLARED ===\n  {', '.join(gate_names)}")
 
+    base_model = config["base_model"]
+    print(f"\n=== STUDENT ENDPOINT ===")
+    if not (args.student_host and args.student_model):
+        print(f"  config base_model : {base_model}")
+        print("  NOT CONFIGURED — no --student-host/--student-model given.")
+        print("  The gates need an endpoint serving the STUDENT, not the teacher.")
+        print("  Serve it with:")
+        print("    configs/teachers/office-student-9b.yaml  (bf16, tokenizer pinned)")
+        print("    configs/hosts/student-serve.yaml         (a rental, NOT ai19)")
+        print("  then pass --student-host student-serve "
+              "--student-model office-student-9b.")
+        student_ready = False
+    else:
+        print(f"  {args.student_model} @ {args.student_host}, expecting {base_model}")
+        student_ready = True
+
     if args.dry_run:
         print("\nDRY RUN OK — configuration, corpus integrity, held-out status and "
               "run directory all verified.\nNothing was generated, trained, or "
               "written. Gates were NOT executed: that needs a served model.")
+        if not student_ready:
+            print("\nSTILL BLOCKED: no student endpoint. Training cannot start "
+                  "until an endpoint serves\n" + f"  {base_model}\n"
+                  "and --student-host/--student-model point at it. Pointing the "
+                  "gates at the teacher\nwould measure the wrong model entirely.")
         return
 
+    if not student_ready:
+        die("no student endpoint configured. The gates would otherwise be pointed "
+            "at whatever is default — the teacher — and the before/after "
+            "comparison would be meaningless.")
     if not args.confirm_run_v1:
         die("refusing to train without --confirm-run-v1.\n"
             "Every check above can pass and the decision to spend a GPU on v1 is "
             "still a human one.", code=1)
 
     run_dir.mkdir(parents=True, exist_ok=True)
-    before = run_gates("before", run_dir / "gates.before.json", None, args)
+    before = run_gates("before", run_dir / "gates.before.json", None, args, base_model)
     adapter = train(config, run_dir, args)
-    after = run_gates("after", run_dir / "gates.after.json", adapter, args)
+    after = run_gates("after", run_dir / "gates.after.json", adapter, args, base_model)
 
     proc = subprocess.run(
         [PY, str(ROOT / "src" / "run_gates.py"), "compare",

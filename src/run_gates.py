@@ -80,6 +80,45 @@ def fail(msg: str) -> None:
     sys.exit(2)
 
 
+def verify_served_model(expect: str, host: str, teacher: str) -> dict:
+    """Refuse to gate a model that is not the one the config names.
+
+    The gates measure whatever endpoint they are pointed at. Nothing else in the
+    pipeline notices if that endpoint is serving the TEACHER rather than the
+    student: the run completes, the numbers look plausible, and the before/after
+    comparison silently becomes teacher-vs-adapter, which measures nothing.
+
+    So identity is checked against the config's base_model before any
+    model-dependent gate runs.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from config import base_url, resolve
+    try:
+        resolved = resolve(teacher, host)
+    except SystemExit as e:
+        fail(f"cannot resolve host '{host}' / model '{teacher}': {e}\n"
+             "The student is configs/teachers/office-student-9b.yaml served on "
+             "configs/hosts/student-serve.yaml; the teachers are not it.")
+    url = resolved.get("HOST_BASE_URL") or base_url(resolved)
+    try:
+        import httpx
+        served = [m.get("id") for m in
+                  httpx.get(f"{url}/models", timeout=30).json().get("data", [])]
+    except Exception as e:
+        fail(f"cannot reach {url} to verify model identity: {e}")
+
+    if not any(expect == s or expect.split("/")[-1].lower() in str(s).lower()
+               for s in served):
+        fail(f"the endpoint is NOT serving the model the config names.\n"
+             f"  config base_model : {expect}\n"
+             f"  endpoint serves   : {served}\n"
+             "Gating a different model would make before/after meaningless — most "
+             "likely this is pointed at the teacher rather than the student.")
+    print(f"  model identity OK: {expect} served at {url}")
+    return {"expected": expect, "served": served, "endpoint": url,
+            "quantization": resolved.get("HOST_QUANTIZATION")}
+
+
 # --- gate implementations ---------------------------------------------------
 
 def gate_indonesian_voice(spec: dict, stage: str, args, out_dir: Path) -> dict:
@@ -262,6 +301,16 @@ def cmd_run(args) -> None:
     if adapter is not None and not adapter.exists():
         fail(f"--adapter given but missing: {adapter}")
 
+    model_identity = None
+    needs_model = any(g.get("name") in MODEL_DEPENDENT for g in specs)
+    using_fixtures = bool(args.traces or args.edit_traces)
+    if needs_model and not using_fixtures:
+        if not args.expect_model:
+            fail("--expect-model is required when model-dependent gates will call "
+                 "a live endpoint. Pass the config's base_model so the gates "
+                 "cannot silently measure the teacher instead of the student.")
+        model_identity = verify_served_model(args.expect_model, args.host, args.teacher)
+
     print(f"=== GATE RUN [{args.stage}] ===")
     print(f"  config  {config}  {digest_file(config)[:16]}…")
     print(f"  model   {args.teacher} @ {args.host}")
@@ -284,7 +333,8 @@ def cmd_run(args) -> None:
     report = {
         "stage": args.stage,
         "config": {"path": str(config), "sha256": digest_file(config)},
-        "model": {"teacher": args.teacher, "host": args.host},
+        "model": {"teacher": args.teacher, "host": args.host,
+                  "expected": args.expect_model, "identity": model_identity},
         "adapter": {"path": str(adapter) if adapter else None,
                     "sha256": digest_tree(adapter) if adapter else None},
         "gates": results,
@@ -353,8 +403,12 @@ def main() -> None:
     r = sub.add_parser("run", help="run every gate at one stage")
     r.add_argument("--config", default="train/qlora_9b.yaml")
     r.add_argument("--stage", choices=("before", "after"), required=True)
-    r.add_argument("--host", default="ai19-ollama")
-    r.add_argument("--teacher", default="muse-glimmer")
+    # No defaults: the teacher was the default here and would have made the
+    # "before" gates measure Muse Glimmer instead of the student.
+    r.add_argument("--host", required=False, default=None)
+    r.add_argument("--teacher", required=False, default=None)
+    r.add_argument("--expect-model", default=None,
+                   help="the config's base_model; gates refuse a different one")
     r.add_argument("--adapter", default=None)
     r.add_argument("--traces", default=None,
                    help="pre-generated voice traces instead of calling the model")

@@ -1,0 +1,20 @@
+# A rented GPU serving the BASE STUDENT for the before/after gates.
+#
+# Explicitly NOT ai19. ai19 runs production services; the operating decision
+# (2026-08-19) is that neither training nor student serving happens there.
+# configs/hosts/ai19.yaml still carries `role: training` from an earlier plan —
+# that role is superseded and should not be used for the v1 run.
+#
+# 9B at bf16 is ~18GB of weights, so a single 48GB card serves it with room for
+# KV cache. Any Ada/Hopper/Ampere card of that size works; nothing here needs
+# FP8, because the student is served at bf16 on purpose (see the student config).
+
+gpu: "1x 48GB (Ada / Hopper / Ampere all acceptable)"
+compute_capability: "8.0+"
+supports_fp8: true          # irrelevant here: the student is served at bf16
+quantization: bf16
+gpu_memory_utilization: 0.90
+
+# Reached over an SSH tunnel like the other rentals; set HOST_BASE_URL when the
+# pod exists. Left unset deliberately so a run against a stale address fails to
+# connect rather than quietly gating whatever now answers on that port.
