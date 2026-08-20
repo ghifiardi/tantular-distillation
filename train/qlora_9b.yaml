@@ -16,13 +16,41 @@ lora:
   r: 32
   alpha: 64
   dropout: 0.05
-  # Attention + MLP projections. Attention-only converges faster but retains
-  # less of the structured-output behaviour the Studio features depend on.
+  # Qwen3.5-9B is a HYBRID: config.json's layer_types is three
+  # `linear_attention` layers then one `full_attention`, repeated eight times.
+  # Only 8 of 32 layers have q/k/v/o_proj at all. The original list was written
+  # for a dense model and reached attention in a quarter of the layers; the 24
+  # linear-attention layers got LoRA on their MLP alone. Measured on the smoke
+  # rental: 128 lora_A tensors = 8x4 attention + 32x3 MLP = 58,195,968 params.
+  #
+  # NAMES MATTER HERE. transformers exposes the linear-attention input
+  # projections SPLIT — in_proj_qkv, in_proj_z, in_proj_b, in_proj_a — while
+  # vLLM fuses the first two into a runtime `in_proj_qkvz`. Targeting
+  # `in_proj_qkvz` would name a module that does not exist during training and
+  # silently train nothing. Verified against transformers 5.15.0
+  # (models/qwen3_5/modeling_qwen3_5.py lines 422-429), the version pinned in
+  # requirements-train.txt.
+  #
+  # in_proj_a / in_proj_b are deliberately EXCLUDED: they exist in transformers
+  # but vLLM's LoRA support does not accept the split names, so training them
+  # would produce tensors the serving path cannot faithfully evaluate — the same
+  # class of silent mismatch that cost the smoke rental. A_log and dt_bias are
+  # plain parameters rather than nn.Linear projections, so they are outside a
+  # conventional LoRA target set.
+  #
+  # Projected: 80,216,064 trainable (+37.8%). Everything else in this file is
+  # held fixed for v1 so an outcome can be attributed to coverage alone.
   target_modules:
+    # full-attention layers: 8 of 32
     - q_proj
     - k_proj
     - v_proj
     - o_proj
+    # linear-attention layers: 24 of 32
+    - in_proj_qkv
+    - in_proj_z
+    - out_proj
+    # MLP: all 32
     - gate_proj
     - up_proj
     - down_proj
