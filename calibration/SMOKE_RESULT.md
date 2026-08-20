@@ -52,25 +52,58 @@ from "never applied".
 
 ## Fixes
 
-1. `scripts/serve_student.sh` pins the text-only architecture with
-   `--hf-overrides '{"architectures": ["Qwen3_5ForCausalLM"]}'`. vLLM registers
-   that class separately and it `SupportsLoRA`, so the served tree matches the
-   trained tree. It also skips the vision tower, which a text-only Office
-   student never uses. Applied **unconditionally** — before and after must be
-   the same architecture, or the baseline is a different model from the thing
-   compared against it.
-2. `run_gates.py` gained `adapter_changes_the_distribution()`, run at
-   `--stage after` before any gate: it probes both ids with `logprobs=1` and
-   **fails closed** if every token is bit-identical.
+**Attempt 1, tried and REJECTED.** Pinning the text-only architecture with
+`--hf-overrides '{"architectures": ["Qwen3_5ForCausalLM"]}'` swaps the model
+class but not the weight-name mapping. The architecture did resolve —
+`Resolved architecture: Qwen3_5ForCausalLM` — and then the base itself failed to
+load:
+
+```
+ValueError: There is no module or parameter named 'language_model' in
+Qwen3_5Model
+```
+
+The weights on disk are named `model.language_model.…`, so the text-only class
+cannot read them. This is the mirror image of the adapter problem, and it rules
+the approach out rather than leaving it as an option.
+
+**Attempt 2, the actual fix.** `src/convert_adapter_for_vllm.py` rewrites the
+adapter's keys, inserting the `language_model.` segment so they match the served
+tree. Names only: every tensor is copied and then verified byte-identical after
+the write, because a converter that silently altered weights would be a worse
+version of the bug it exists to fix. It is idempotent, and it refuses an adapter
+whose layout it does not recognise rather than reporting a vacuous success.
+
+**The gate, regardless of fix.** `run_gates.py` gained
+`adapter_changes_the_distribution()`, run at `--stage after` before any gate: it
+probes both ids with `logprobs=1` and **fails closed** if every token is
+bit-identical.
 
 ## Still unproven
 
-The fix has not been tested. Step 6 must be re-run on the paused pod:
-`--hf-overrides` may not accept a multimodal config's architecture swap, in
-which case the fallback is to rewrite the adapter's keys with the
-`language_model.` segment inserted.
+The conversion has not been served. Step 6 must be re-run: convert the smoke
+adapter, serve the converted directory, and confirm the logprobs differ.
 
 **Nothing here authorises the v1 run.**
+
+## A separate finding: the target modules miss most of the model
+
+The failed load printed the served parameter list, which shows Qwen3.5-9B is a
+**hybrid**: only 8 of 32 layers have `self_attn`. The other 24 use `linear_attn`
+(`in_proj_qkvz`, `out_proj`, `A_log`, `dt_bias`).
+
+That reconciles exactly with the adapter's 128 `lora_A` tensors:
+
+    8 layers x 4 attention projections (q,k,v,o)  =  32
+    32 layers x 3 MLP projections (gate,up,down)  =  96
+                                                     128
+
+So `target_modules` in `train/qlora_9b.yaml` — `q_proj, k_proj, v_proj, o_proj,
+gate_proj, up_proj, down_proj` — reaches attention in only a quarter of the
+layers, and the 24 linear-attention layers get LoRA on their MLP alone. This is
+not a bug and does not block anything; it is a config written for a dense
+architecture applied to a hybrid one. Worth a decision before v1, separately
+from the serving fix.
 
 ## Incidental findings
 
