@@ -1,4 +1,4 @@
-# Smoke rental result — 2026-08-19
+# Smoke rental result — round 1, 2026-08-19
 
 One L40S, ~1 hour, two pods. Steps 1–6 of the seven-step plan ran. **Step 6
 found a defect that would have invalidated the entire v1 `after` gate.**
@@ -132,3 +132,87 @@ from the serving fix.
   venv's binaries.
 - `transformers` 5.x removed `warmup_ratio`. Found by reading the wheels while
   the pod was busy; `trainer.train()` on the pod then confirmed the fix.
+
+
+---
+
+# Qualification round 2 — 2026-08-20/21
+
+Round 1 proved the training path and found the adapter-binding defect. Round 2
+re-qualified everything against the CHANGED config (expanded `target_modules`)
+and on DIFFERENT hardware, because neither carries over from an earlier run.
+
+Two hosts, both RTX A6000 48GB:
+
+| | Pod A — training | Pod B — endpoint |
+|---|---|---|
+| driver | 570.211.01 (max CUDA 12.8) | 580.159.04 (CUDA 13.0) |
+| torch | 2.13.0+**cu129** | 2.13.0+cu130 |
+| stack | `requirements-train.txt` | `requirements-serve.txt`, vLLM **0.27.1** |
+
+The split CUDA builds are deliberate: the hosts communicate over HTTP only, and
+the driver dictates the build tag while the pinned RELEASE is identical.
+
+## Results
+
+| check | result |
+|---|---|
+| Pod A smoke, steps 1–4 | **PASS** |
+| expanded LoRA targets attach | **PASS — 80,216,064 trainable** (was 58,195,968) |
+| NF4 load | `BitsAndBytesConfig` |
+| real TRL `trainer.train()` | completed; loss 2.1266, grad norm 8.9728 |
+| Pod B serves base bf16 | `Qwen/Qwen3.5-9B`, `office-student-9b` |
+| converted adapter binds | **PASS** — `Loaded new LoRA adapter`, all three ids served |
+| **adapter is APPLIED** | **PASS** — output differs from base; check exit 0 |
+| final dry run | exit 0 (verified locally; the Pod A run through the tunnel was reported by the operator and not observed in-session) |
+| **v1 training** | **NOT PERFORMED. `--confirm-run-v1` never used.** |
+
+The binding evidence, in full — same prompt, greedy decoding:
+
+    base    ...ditunda pekan depan karena data belum lengkap.
+    adapter ...ditunda pekan depan karena data realisasi belum lengkap. ...
+
+The expanded targets were confirmed by arithmetic BEFORE the run and by
+measurement after: 8 full-attention layers x 4 projections + 32 layers x 3 MLP
++ 24 linear-attention layers x 3 projections = 80,216,064.
+
+## Defects this round found
+
+Every one of these would have cost paid time or produced a false result:
+
+1. **vLLM bundled into the training requirements.** It pulls the CUDA 13
+   runtime, which a driver-570 host cannot run — turning a perfectly usable
+   training pod into an unusable one. vLLM is not a training dependency; the
+   gates reach the endpoint over HTTP. Split into `requirements-serve.txt`.
+2. **A broken partial install.** `accelerate` was present as a version number
+   with only one subpackage on disk, on an NFS-backed volume. Imports failed
+   with a message pointing at `AutoModel`, three layers from the cause. Repaired
+   and now checked per-module after install.
+3. **The endpoint probe went through the corpus generator**, which enforces
+   split-manifest membership — a rule about corpus attribution, not smoke
+   probes. It reported a healthy endpoint as broken and stopped before the
+   baseline gates.
+4. **`office_json_contract` could hang forever.** `node --test a b c` runs files
+   in parallel; the add-in's bridge test waits a fixed 300ms for its worker's
+   ready banner and, under contention, waits forever. The gate produced no
+   verdict for 15 minutes while every file passed in isolation. Now serialised
+   with a per-file timeout: a hang becomes a loud failure.
+
+## Two host failures, neither ours
+
+Both passed every static check and would have been caught by
+`verify_student_host.sh` in sixty seconds:
+
+- an L40S at 100% utilisation with 0 MiB used and no visible processes — busy
+  for a co-tenant, failing at the first `cudaMalloc` after a 19.3GB download;
+- an RTX PRO 6000 Blackwell, idle, matching libcuda and kernel module, where
+  `cuInit` returned **999** and `cuDeviceGetCount` reported 0 devices.
+
+`nvidia-smi` speaks NVML and succeeded on both. Only a real allocation, or
+`cuInit` directly, distinguishes a working GPU from a broken one.
+
+## What is still unknown
+
+Everything above concerns plumbing. **Nothing here says whether 136 mechanically
+promoted traces can lift Indonesian voice to 0.95 without regressing the edit
+contract.** The v1 run was made measurable, not likely to succeed.

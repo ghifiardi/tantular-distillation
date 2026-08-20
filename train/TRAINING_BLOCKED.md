@@ -1,34 +1,36 @@
-# v1 training: BLOCKED pending smoke and final freeze
+# v1 training: infrastructure QUALIFIED, run NOT started
 
-**Current state: 2026-08-19.**
+**Current state: 2026-08-21. Repository at `6b07cf8`.**
 
-The corpus, trainer, model-dependent gates, adapter-serving path, and manifest
-enforcement exist. Training has not started and no adapter has been produced.
+Every technical blocker to starting v1 has been cleared and verified on
+hardware. **No training has been performed and no adapter has been produced.**
+What remains is a budget/product decision, not an engineering one.
 
-## Critical path
+## What is qualified
 
-1. **Pin the GPU training environment** and run the 2–4-example smoke:
-   model/tokenizer load, NF4, LoRA attach, forward/backward, optimizer step,
-   save, reload, and vLLM LoRA serving under a distinct model id.
-2. **Write the final schema-v2 freeze immediately after that smoke**, once no
-   further config or environment change is expected:
+| | evidence |
+|---|---|
+| training path executes | Pod A smoke: NF4 load, LoRA attach, real TRL `trainer.train()`, save, reload |
+| expanded LoRA targets attach | **80,216,064** trainable, exactly the projected figure (was 58,195,968) |
+| adapter is APPLIED when served | Pod B, vLLM 0.27.1: converted adapter's output differs from the base; binding check exit 0 |
+| schema-v2 freeze verified | config, corpus, promotion bytes, gate exit 1, signed waiver |
+| held-out sets held out | both model-dependent eval sets |
+| host guards | training host accepted; ai19 refused |
 
-   ```bash
-   ./.venv/bin/python src/freeze_training_run.py \
-       --corpus data/v3-candidate/traces.r0.jsonl \
-       --config train/qlora_9b.yaml \
-       --promotion-manifest train/RUN_MANIFEST.v1-mechanical.json \
-       --waiver calibration/INT4_WAIVER.md \
-       --out train/RUN_MANIFEST.v1.json \
-       --frozen-at <ISO-8601> --write
-   ```
+The freeze in `train/RUN_MANIFEST.v1.json` is CURRENT and accepted by the
+trainer. It was regenerated against the expanded-target config.
 
-3. Run `src/train_qlora.py --dry-run`. It must verify the complete freeze.
-4. Make the explicit v1 decision and pass `--confirm-run-v1`.
+## The remaining step
 
-The checked-in `train/RUN_MANIFEST.v1.json` deliberately remains stale until
-step 2. The trainer refuses it: it predates schema-v2 promotion-manifest
-enforcement and its config digest no longer matches.
+Make the explicit v1 decision and pass `--confirm-run-v1`. That flag is the
+irreversible transition from verification to training; nothing before it spends
+GPU time on a real run.
+
+## Qualification detail
+
+See `calibration/SMOKE_RESULT.md` for the full record, including the four
+defects the smoke rentals found — one of which would have produced a complete,
+plausible, and entirely false adapter evaluation.
 
 ## What the freeze enforces
 
