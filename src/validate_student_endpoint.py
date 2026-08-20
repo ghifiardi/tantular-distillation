@@ -130,28 +130,43 @@ DEGENERATE = re.compile(r"^(?:(.{1,20}?)\1{4,})$", re.DOTALL)
 
 
 def check_4_generation(host: str, model: str, out_dir: Path) -> Check:
+    """One prompt must come back as usable text.
+
+    Calls /v1/completions DIRECTLY rather than going through
+    generate_normalized.py. That script enforces split-manifest membership,
+    which is a rule about CORPUS GENERATION — every trace must belong to a known
+    family so it can be attributed and held out. A smoke probe has no family and
+    never enters a corpus, so routing it through that path failed with
+    "family '' is not in the split manifest" and reported a healthy endpoint as
+    broken. Measured 2026-08-20.
+    """
     c = Check(4, "one prompt returns valid text")
-    prompt = out_dir / "smoke.jsonl"
-    prompt.write_text(json.dumps({
-        "id": "student-smoke-1",
-        "user": "Sebutkan tiga hal yang perlu diperiksa sebelum menyetujui "
-                "laporan anggaran bulanan.",
-    }, ensure_ascii=False) + "\n", encoding="utf-8")
-    traces = out_dir / "smoke.traces.jsonl"
-    proc = subprocess.run(
-        [PY, str(ROOT / "src" / "generate_normalized.py"),
-         "--teacher", model, "--host", host,
-         "--prompts", str(prompt), "--out", str(traces)],
-        capture_output=True, text=True, cwd=ROOT)
-    if not traces.is_file():
-        return c.failed(f"generation produced nothing:\n{proc.stderr[-400:]}")
-    rows = [json.loads(l) for l in traces.read_text().splitlines() if l.strip()]
-    if not rows:
-        return c.failed("generation wrote an empty file")
-    text = (rows[0].get("completion") or "").strip()
+    sys.path.insert(0, str(ROOT / "src"))
+    from config import base_url, resolve
+    try:
+        resolved = resolve(model, host)
+    except SystemExit as e:
+        return c.failed(f"config will not resolve: {e}")
+    url = resolved.get("HOST_BASE_URL") or base_url(resolved)
+    served_name = resolved.get("TEACHER_REPO") or model
+
+    prompt = ("Ringkas kalimat berikut menjadi satu kalimat: Rapat anggaran "
+              "ditunda ke pekan depan karena data realisasi belum lengkap.")
+    try:
+        import httpx
+        r = httpx.post(f"{url}/completions", timeout=300, json={
+            "model": served_name, "prompt": prompt,
+            "max_tokens": 128, "temperature": 0})
+        payload = r.json()
+    except Exception as e:
+        return c.failed(f"request to {url} failed: {type(e).__name__}: {e}")
+    if "choices" not in payload:
+        return c.failed(f"no completion returned: {str(payload)[:300]}")
+
+    text = (payload["choices"][0].get("text") or "").strip()
+    (out_dir / "smoke.completion.txt").write_text(text, encoding="utf-8")
     if not text:
-        # This is exactly how the FP8 arm failed: the endpoint answered, and
-        # every completion was empty or a lone control token.
+        # Exactly how the FP8 arm failed: the endpoint answers, with nothing.
         return c.failed("the completion is EMPTY. The endpoint answers but "
                         "produces no text — the same failure mode that killed "
                         "the FP8 arm. Stop the pod.")
@@ -159,7 +174,8 @@ def check_4_generation(host: str, model: str, out_dir: Path) -> Check:
         return c.failed(f"the completion is {len(text)} chars: {text!r}")
     if DEGENERATE.match(text):
         return c.failed(f"the completion is a repeating loop: {text[:120]!r}")
-    return c.passed(f"{len(text)} chars, first line: {text.splitlines()[0][:80]!r}")
+    return c.passed(f"{len(text)} chars, first line: "
+                    f"{text.splitlines()[0][:80]!r}")
 
 
 def check_5_baseline(host: str, model: str, expect: str, out_dir: Path) -> tuple[Check, dict | None]:
