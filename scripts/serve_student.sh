@@ -71,16 +71,38 @@ if [[ -n "$ADAPTER_PATH" ]]; then
   echo "  adapter: $ADAPTER_ID -> $ADAPTER_PATH"
 fi
 
-# Refuse to start a SECOND server on a port that already has one. This is not
-# hypothetical: on the endpoint pod 2026-08-20, a second `serve_student.sh` was
-# launched while the first was still loading the model. The second vLLM lost the
-# race for VRAM and died with "Free memory on device (25.22/44.42 GiB) ... is
-# less than desired", and — because both were pointed at the same log file — its
-# traceback interleaved MID-LINE into the first engine's successful startup,
-# making a healthy server look crashed. The wasted attempt also burns minutes of
-# a paid rental. A listening port is the honest signal that a server already owns
-# this GPU; check it before consuming anything. Set SERVE_STUDENT_FORCE=1 to
-# override deliberately (e.g. a known-dead socket in TIME_WAIT).
+# Refuse to start a SECOND server. This is not hypothetical: on the endpoint
+# pod 2026-08-20, a second `serve_student.sh` was launched while the first was
+# still loading the model. The second vLLM lost the race for VRAM and died with
+# "Free memory on device (25.22/44.42 GiB) ... is less than desired", and —
+# because both were pointed at the same log file — its traceback interleaved
+# MID-LINE into the first engine's successful startup, making a healthy server
+# look crashed. The wasted attempt also burns minutes of a paid rental.
+#
+# The lock is the primary guard. A port-only check is NOT enough: vLLM can spend
+# minutes importing, loading weights, compiling kernels and capturing graphs
+# before the API socket accepts connections. fd 9 remains open across the final
+# `exec vllm`, so the kernel releases the lock automatically when that server
+# exits; there is no stale PID or lock-directory cleanup to get wrong.
+LOCK_FILE="${SERVE_STUDENT_LOCK_FILE:-/tmp/tantular-serve-student-${TEACHER_PORT}.lock}"
+command -v flock >/dev/null 2>&1 || {
+  echo "REFUSING: 'flock' is unavailable, so concurrent student-server launches" >&2
+  echo "cannot be prevented safely. Install util-linux and retry." >&2
+  exit 3
+}
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "REFUSING: another serve_student.sh already holds $LOCK_FILE." >&2
+  echo "It may still be loading before port $TEACHER_PORT opens. Do not launch a" >&2
+  echo "second vLLM process; wait for Application startup complete or inspect it:" >&2
+  echo "  pgrep -af '[v]llm'" >&2
+  echo "  curl -s http://127.0.0.1:$TEACHER_PORT/v1/models" >&2
+  exit 3
+fi
+
+# The port check also catches a server started outside this script (and thus
+# outside the lock). Set SERVE_STUDENT_FORCE=1 only to override a known,
+# unrelated listener; it deliberately does NOT override a live lock holder.
 if [[ "${SERVE_STUDENT_FORCE:-}" != "1" ]]; then
   if "$PYTHON_BIN" - "$TEACHER_PORT" <<'PY'
 import socket, sys
@@ -97,7 +119,8 @@ PY
     echo "one races for VRAM, fails, and corrupts a shared log — exactly the" >&2
     echo "duplicate-launch that made a healthy endpoint look crashed on 2026-08-20." >&2
     echo "Check it first:  curl -s http://127.0.0.1:$TEACHER_PORT/v1/models" >&2
-    echo "To start anyway (known-dead socket), re-run with SERVE_STUDENT_FORCE=1." >&2
+    echo "To start anyway (known unrelated listener), re-run with" >&2
+    echo "SERVE_STUDENT_FORCE=1." >&2
     exit 3
   fi
 fi

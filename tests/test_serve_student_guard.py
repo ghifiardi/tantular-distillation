@@ -3,11 +3,14 @@
 A second `serve_student.sh` launched while the first is still loading was the
 concrete failure on the endpoint pod (2026-08-20): the second vLLM lost the
 race for VRAM, died, and interleaved its traceback into the first engine's log,
-making a healthy server look crashed. The guard refuses to start when the
-target port is already listening, unless SERVE_STUDENT_FORCE=1 is set.
+making a healthy server look crashed. The guard holds a process-lifetime lock
+(covering the long interval before the API port opens) and also refuses when
+the target port is already listening, unless SERVE_STUDENT_FORCE=1 is set for
+an unrelated listener.
 
-These tests exercise the guard's control flow with a stubbed port probe so they
-need no real GPU, no vLLM, and no socket bind (which CI sandboxes often forbid).
+These tests exercise the guard's control flow with stubbed lock and port probes
+so they need no real GPU, no vLLM, and no socket bind (which CI sandboxes often
+forbid).
 """
 from __future__ import annotations
 
@@ -28,10 +31,19 @@ def _guard_block() -> str:
     return text[start:end].rstrip() + "\n"
 
 
-def _harness(tmp_path: Path, probe_exit: int) -> tuple[list[str], dict[str, str]]:
+def _harness(
+    tmp_path: Path, probe_exit: int, lock_exit: int = 0
+) -> tuple[list[str], dict[str, str]]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+
     probe = tmp_path / "py"
     probe.write_text(f"#!/usr/bin/env bash\nexit {probe_exit}\n", encoding="utf-8")
     probe.chmod(probe.stat().st_mode | stat.S_IEXEC)
+
+    flock = bin_dir / "flock"
+    flock.write_text(f"#!/usr/bin/env bash\nexit {lock_exit}\n", encoding="utf-8")
+    flock.chmod(flock.stat().st_mode | stat.S_IEXEC)
 
     runner = tmp_path / "run.sh"
     runner.write_text(
@@ -42,7 +54,10 @@ def _harness(tmp_path: Path, probe_exit: int) -> tuple[list[str], dict[str, str]
         'echo "REACHED_EXEC"\n',
         encoding="utf-8",
     )
-    return ["bash", str(runner)], os.environ.copy()
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["SERVE_STUDENT_LOCK_FILE"] = str(tmp_path / "serve.lock")
+    return ["bash", str(runner)], env
 
 
 def test_guard_allows_when_port_is_free(tmp_path: Path) -> None:
@@ -60,9 +75,27 @@ def test_guard_refuses_when_port_is_busy(tmp_path: Path) -> None:
     assert re.search(r"port 8020 is already accepting", result.stderr)
 
 
+def test_guard_refuses_while_first_server_loads_before_port_opens(
+    tmp_path: Path,
+) -> None:
+    cmd, env = _harness(tmp_path, probe_exit=1, lock_exit=1)
+    result = subprocess.run(cmd, env=env, text=True, capture_output=True)
+    assert result.returncode == 3
+    assert "REACHED_EXEC" not in result.stdout
+    assert "may still be loading before port 8020 opens" in result.stderr
+
+
 def test_force_overrides_busy_port(tmp_path: Path) -> None:
     cmd, env = _harness(tmp_path, probe_exit=0)
     env["SERVE_STUDENT_FORCE"] = "1"
     result = subprocess.run(cmd, env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
     assert "REACHED_EXEC" in result.stdout
+
+
+def test_force_does_not_override_live_launch_lock(tmp_path: Path) -> None:
+    cmd, env = _harness(tmp_path, probe_exit=1, lock_exit=1)
+    env["SERVE_STUDENT_FORCE"] = "1"
+    result = subprocess.run(cmd, env=env, text=True, capture_output=True)
+    assert result.returncode == 3
+    assert "REACHED_EXEC" not in result.stdout
