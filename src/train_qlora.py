@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -390,7 +391,10 @@ def run_gates(stage: str, out: Path, adapter: Path | None, args, expect: str) ->
         cmd += ["--adapter", str(adapter),
                 "--adapter-model-id", args.adapter_model_id]
     print(f"\n=== GATES [{stage}] ===")
-    proc = subprocess.run(cmd, cwd=ROOT)
+    env = os.environ.copy()
+    if args.student_base_url:
+        env["HOST_BASE_URL"] = args.student_base_url
+    proc = subprocess.run(cmd, cwd=ROOT, env=env)
     if proc.returncode == 2:
         die(f"a gate could not be executed at stage '{stage}'. Not training past "
             "an unrunnable gate: the adapter would be unchecked and the report "
@@ -415,6 +419,47 @@ def make_lora_config(config: dict):
         target_modules=lora["target_modules"],
         task_type="CAUSAL_LM",
     )
+
+
+def verify_target_module_coverage(model, targets: list[str]) -> dict[str, int]:
+    """Prove every configured target exists before PEFT constructs an adapter.
+
+    Qwen3.5's fused-vs-split projection names are load-bearing. A typo here can
+    silently leave most layers untouched while the run still trains. The v1
+    target expansion is unproven on hardware, so fail before the optimizer if
+    any configured suffix matches zero modules.
+    """
+    names = [name for name, _ in model.named_modules()]
+    counts = {target: sum(name.endswith(f".{target}") or name == target
+                          for name in names)
+              for target in targets}
+    missing = [target for target, count in counts.items() if count == 0]
+    if missing:
+        die("configured LoRA target module(s) matched nothing: "
+            + ", ".join(missing))
+    print("\n=== LORA TARGET COVERAGE ===")
+    for target, count in counts.items():
+        print(f"  {target:<18} {count:>3} module(s)")
+    return counts
+
+
+def verify_attached_lora_coverage(model, targets: list[str]) -> tuple[dict[str, int], int]:
+    """Prove PEFT attached trainable LoRA tensors to every configured target."""
+    names = [name for name, parameter in model.named_parameters()
+             if parameter.requires_grad and "lora_" in name]
+    counts = {
+        target: sum(f".{target}.lora_" in name for name in names)
+        for target in targets
+    }
+    missing = [target for target, count in counts.items() if count == 0]
+    if missing:
+        die("PEFT attached no trainable LoRA tensors to: " + ", ".join(missing))
+    trainable = sum(parameter.numel() for parameter in model.parameters()
+                    if parameter.requires_grad)
+    print(f"  trainable parameters {trainable:,}")
+    for target, count in counts.items():
+        print(f"  {target:<18} {count:>3} trainable LoRA tensor(s)")
+    return counts, trainable
 
 
 def build_sft_trainer(config: dict, model, train_dataset, eval_dataset,
@@ -510,8 +555,11 @@ def train(config: dict, run_dir: Path, args) -> Path:
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True))
 
+    targets = config["lora"]["target_modules"]
+    verify_target_module_coverage(model, targets)
     trainer = build_sft_trainer(
         config, model, train_ds, eval_ds, tok, run_dir / "checkpoints")
+    verify_attached_lora_coverage(trainer.model, targets)
     trainer.train()
     trainer.save_model(str(adapter_dir))
     tok.save_pretrained(str(adapter_dir))
@@ -539,6 +587,10 @@ def main() -> None:
                         help="host serving the BASE STUDENT named in the config")
     parser.add_argument("--student-model", default=None,
                         help="model key for that host")
+    parser.add_argument("--student-base-url", default=None,
+                        help="OpenAI-compatible /v1 URL of the student endpoint. "
+                             "Required for a remote rental unless HOST_BASE_URL "
+                             "is exported or the host YAML has base_url.")
     parser.add_argument("--adapter-model-id", default="tantular-office-9b-v1",
                         help="model id the endpoint must register the trained "
                              "adapter under, distinct from the base")
@@ -606,8 +658,20 @@ def main() -> None:
               "--student-model office-student-9b.")
         student_ready = False
     else:
+        sys.path.insert(0, str(ROOT / "src"))
+        from config import resolve
+        resolved_student = resolve(args.student_model, args.student_host)
+        student_url = (args.student_base_url
+                       or os.environ.get("HOST_BASE_URL", "").strip()
+                       or resolved_student.get("HOST_BASE_URL"))
         print(f"  {args.student_model} @ {args.student_host}, expecting {base_model}")
-        student_ready = True
+        if student_url:
+            print(f"  endpoint          : {student_url}")
+            student_ready = True
+        else:
+            print("  ENDPOINT URL MISSING — pass --student-base-url or export "
+                  "HOST_BASE_URL.")
+            student_ready = False
 
     if args.dry_run:
         print("\nDRY RUN OK — configuration, corpus integrity, held-out status and "

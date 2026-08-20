@@ -15,9 +15,10 @@ supports_fp8: true          # irrelevant here: the student is served at bf16
 quantization: bf16
 gpu_memory_utilization: 0.90
 
-# Reached over an SSH tunnel like the other rentals; set HOST_BASE_URL when the
-# pod exists. Left unset deliberately so a run against a stale address fails to
-# connect rather than quietly gating whatever now answers on that port.
+# Reached over an SSH tunnel or private pod address. Pass
+# `--student-base-url http://<reachable-host>:8020/v1` to train_qlora.py, or set
+# HOST_BASE_URL when the pod exists. Left unset deliberately so a stale rental
+# address cannot be committed and silently reused.
 
 # src/config.py: training_guard()
 training_allowed: false

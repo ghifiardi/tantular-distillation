@@ -12,6 +12,7 @@ to discover after a 20-minute model load:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -144,7 +145,14 @@ def resolve(teacher_name: str, host_name: str) -> dict:
         "HOST_VALIDATE_ONLY": "1" if host.get("validate_only") else "",
         "HOST_MAX_PROMPTS": str(host.get("max_prompts", 0)),
         "HOST_DATA_EGRESS": host.get("data_egress", "external"),
-        "HOST_BASE_URL": host.get("base_url", ""),
+        # Runtime endpoint override. student-serve deliberately has no committed
+        # address because rental addresses are ephemeral; the runbook has always
+        # said to export HOST_BASE_URL, but resolve() previously ignored it.
+        # That let /v1/models fall back to localhost while normalized generation
+        # aborted with "host has no base_url". An explicit environment value wins
+        # over YAML so a tunnel or a new rental address needs no source edit.
+        "HOST_BASE_URL": os.environ.get("HOST_BASE_URL", "").strip()
+                         or host.get("base_url", ""),
         "HOST_API_KEY_ENV": host.get("api_key_env", ""),
         "HOST_CONCURRENCY": str(host.get("concurrency", 16)),
         "HOST_REQUEST_TIMEOUT_S": str(host.get("request_timeout_s", 600)),

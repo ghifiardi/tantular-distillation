@@ -76,11 +76,13 @@ def test_freeze_v2_pins_promotion_outputs_and_failed_gate(valid_freeze):
     assert payload["waiver"]["sha256"]
 
 
-def test_checked_in_stale_freeze_is_refused():
+def test_checked_in_v1_freeze_is_current_and_accepted():
     proc = subprocess.run([PY, TRAINER, "--dry-run"],
                           capture_output=True, text=True, cwd=ROOT)
-    assert proc.returncode == 2
-    assert "schema is stale" in proc.stderr
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "schema             2" in proc.stdout
+    assert "waiver verified" in proc.stdout
+    assert "DRY RUN OK" in proc.stdout
 
 
 def test_valid_v2_freeze_allows_complete_cpu_dry_run(valid_freeze):
