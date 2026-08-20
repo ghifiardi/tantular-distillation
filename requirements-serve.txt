@@ -16,3 +16,8 @@ torch==2.13.0
 transformers==5.15.0
 tokenizers==0.22.2
 safetensors==0.8.0
+
+# serve_student.sh resolves configs through this venv's python, so the config
+# loader's own dependency has to be here. vLLM happens to pull pyyaml today;
+# relying on that would make the serve script fail the day it stops.
+pyyaml>=6.0
