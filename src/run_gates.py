@@ -383,18 +383,46 @@ def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> di
     if not tests:
         fail(f"office_json_contract found no *.test.mjs under {suite}")
 
-    proc = subprocess.run(["node", "--test", *[str(t) for t in tests]],
-                          capture_output=True, text=True, cwd=project)
-    out = proc.stdout + proc.stderr
-    if "# tests " not in out:
-        fail("office_json_contract runner produced no test summary — "
-             "is node installed? failing closed rather than skipping")
-    def field(key: str) -> int:
-        for line in out.splitlines():
-            if line.startswith(f"# {key} "):
-                return int(line.split()[-1])
-        fail(f"office_json_contract summary missing '{key}'")
-    total, passed = field("tests"), field("pass")
+    # ONE FILE AT A TIME, EACH WITH A TIMEOUT.
+    #
+    # `node --test a.mjs b.mjs ...` runs files in PARALLEL. The add-in's
+    # bridge test waits a fixed 300ms for its worker's ready banner before
+    # sending an RPC; under parallel load on a contended host the worker misses
+    # that window and the test waits forever. Measured 2026-08-20 on the
+    # training pod: the whole gate sat for 15 minutes with no output, while
+    # every file passed in isolation (bridge 4/4 in 1.7s, workspaceClient 16/16
+    # in 0.2s).
+    #
+    # A hanging gate is worse than a failing one: it produces no verdict at all
+    # and stalls the run it was supposed to protect. Serialising removes the
+    # contention, and the per-file timeout converts any remaining hang into a
+    # loud failure. Totals are summed across files, which is what the parallel
+    # runner reported anyway.
+    per_file_timeout = int(spec.get("timeout_s", 300))
+    total = passed = 0
+    for test_file in tests:
+        try:
+            proc = subprocess.run(["node", "--test", str(test_file)],
+                                  capture_output=True, text=True, cwd=project,
+                                  timeout=per_file_timeout)
+        except subprocess.TimeoutExpired:
+            fail(f"office_json_contract: {test_file.name} did not finish in "
+                 f"{per_file_timeout}s. Failing closed rather than waiting: a "
+                 "gate that hangs yields no verdict and stalls the run.")
+        out = proc.stdout + proc.stderr
+        if "# tests " not in out:
+            fail(f"office_json_contract: {test_file.name} produced no test "
+                 "summary — is node installed? failing closed rather than "
+                 "skipping")
+
+        def field(key: str, text: str = out, name: str = test_file.name) -> int:
+            for line in text.splitlines():
+                if line.startswith(f"# {key} "):
+                    return int(line.split()[-1])
+            fail(f"office_json_contract: {name} summary missing '{key}'")
+
+        total += field("tests")
+        passed += field("pass")
     rate = passed / total if total else 0.0
     return {
         "name": "office_json_contract",
