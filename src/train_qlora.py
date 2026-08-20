@@ -64,6 +64,17 @@ def digest_file(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
+def digest_tree(path: Path) -> str | None:
+    """sha256 over a directory's file names and bytes, order-independent."""
+    if not path.is_dir():
+        return None
+    sha = hashlib.sha256()
+    for f in sorted(p for p in path.rglob("*") if p.is_file()):
+        sha.update(str(f.relative_to(path)).encode())
+        sha.update(f.read_bytes())
+    return sha.hexdigest()
+
+
 def die(msg: str, code: int = 2) -> None:
     print(f"\nTRAINER ABORTED: {msg}", file=sys.stderr)
     sys.exit(code)
@@ -635,11 +646,27 @@ def main() -> None:
         print(f"\n  baseline below target on: {', '.join(before['below_target'])} "
               "— recorded, continuing.")
     adapter = train(config, run_dir, args)
+    # The adapter PEFT writes cannot be bound by vLLM as-is: training resolves
+    # Qwen3_5ForCausalLM (layers at model.*) while serving resolves
+    # Qwen3_5ForConditionalGeneration (layers at model.language_model.*). vLLM
+    # loads the mismatched keys, binds nothing, and answers with the base model.
+    # Proven on the smoke rental 2026-08-19/20; see calibration/SMOKE_RESULT.md.
+    served_adapter = adapter.parent / f"{adapter.name}-vllm"
+    print(f"\n=== CONVERT THE ADAPTER FOR SERVING ===")
+    proc = subprocess.run(
+        [PY, str(ROOT / "src" / "convert_adapter_for_vllm.py"),
+         str(adapter), str(served_adapter), "--force"], cwd=ROOT)
+    if proc.returncode != 0:
+        die("adapter conversion failed. Serving the unconverted adapter would "
+            "make the after gates measure the base model.")
+
     print(f"\n=== SERVE THE ADAPTER BEFORE THE AFTER GATES ===")
     print(f"  On {args.student_host}, restart the endpoint with the adapter "
           "registered:\n"
           f"    ./scripts/serve_student.sh {args.student_model} "
-          f"{args.student_host} \\\n        {adapter} {args.adapter_model_id}")
+          f"{args.student_host} \\\n        {served_adapter} "
+          f"{args.adapter_model_id}")
+    print("  Serve the CONVERTED directory, not the raw one.")
     input_msg = ("  Press Enter once /v1/models lists "
                  f"{args.adapter_model_id}, or Ctrl-C to stop. ")
     try:
@@ -669,6 +696,10 @@ def main() -> None:
         "baseline_below_target": before.get("below_target", []),
         "after_verdict": after.get("verdict"),
         "adapter_model_id": args.adapter_model_id,
+        "adapter_served": {"path": str(served_adapter),
+                           "sha256": digest_tree(served_adapter),
+                           "_note": "key-converted copy; tensors identical to "
+                                    "the trained adapter"},
         "adapter_evaluated": after.get("adapter", {}).get("evaluated"),
         # Promotion needs the absolute thresholds AND no regression; `compare`
         # is the only thing that checks both, so its exit code is the answer.
