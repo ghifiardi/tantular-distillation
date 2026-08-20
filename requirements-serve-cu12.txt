@@ -1,0 +1,49 @@
+# ENDPOINT host on a pre-580 driver. Alternative to requirements-serve.txt.
+#
+# WHY THIS EXISTS. requirements-serve.txt pins vllm 0.27.1, whose wheel is built
+# against CUDA 13 and therefore needs driver >= 580. In August 2026 that fleet
+# (L40S/L40) had no capacity, while 48GB Ampere cards with driver 570 were
+# plentiful. vLLM 0.26.0 still registers Qwen3_5ForConditionalGeneration — the
+# architecture the student is served as — and pins torch 2.11.0, which HAS
+# cu128/cu129 builds. So the same endpoint runs on any driver >= 525.
+#
+# WHAT THIS COSTS, stated plainly: the adapter-binding fix (converted
+# language_model.* keys, vLLM actually applying the LoRA, logprobs differing
+# from the base) was proven on 0.27.1 and on nothing else. Using this file
+# REQUIRES re-verifying binding before a real run:
+#
+#   1. regenerate a throwaway adapter on the training host
+#        ./.venv/bin/python src/smoke_train.py --out /workspace/runs/smoke
+#   2. convert it
+#        ./.venv/bin/python src/convert_adapter_for_vllm.py \
+#            /workspace/runs/smoke/adapter /workspace/runs/smoke/adapter-vllm
+#   3. serve it here under a distinct id, then
+#        ./.venv/bin/python src/check_adapter_serving.py --adapter-id tantular-smoke
+#   4. require max |logprob delta| > 0. Bit-identical means the LoRA is loaded
+#      and inert, which is what cost the first smoke rental.
+#
+# INSTALL ORDER. torch and its companions must come from the CUDA 12 index
+# FIRST, or pip resolves the default (CUDA 13) wheels:
+#
+#   ./.venv/bin/pip install --index-url https://download.pytorch.org/whl/cu128 \
+#       torch==2.11.0 torchaudio==2.11.0 torchvision==0.26.0
+#   ./.venv/bin/pip install -r requirements-serve-cu12.txt
+
+vllm==0.26.0
+
+# Pinned by vllm 0.26.0 exactly. Install from the cu128 index (see above); the
+# release is what is pinned, the build tag is what the driver dictates.
+torch==2.11.0
+torchaudio==2.11.0
+torchvision==0.26.0
+
+# Identical to the training host and to requirements-serve.txt, so every host
+# agrees on the shared releases. vllm 0.26.0 requires transformers>=5.5.3 and
+# tokenizers>=0.21.1; transformers 5.15.0 in turn caps tokenizers at <=0.23.0,
+# and there is no 0.23.0 final on PyPI — hence 0.22.2.
+transformers==5.15.0
+tokenizers==0.22.2
+safetensors==0.8.0
+
+# serve_student.sh resolves configs through this venv's python.
+pyyaml>=6.0
