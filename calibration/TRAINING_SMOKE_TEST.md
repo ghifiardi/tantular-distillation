@@ -47,7 +47,23 @@ different libraries.
 | accelerate | 1.14.0 | |
 | bitsandbytes | 0.50.1 | NF4 |
 | safetensors | 0.8.0 | |
-| vllm | 0.27.1 | steps 5–6 only |
+| vllm | 0.27.1 | **endpoint host only** — see below |
+
+**vLLM is not a training dependency.** It lives in `requirements-serve.txt`
+because it pulls the entire CUDA 13 runtime (`nvidia-*-cu13`), which a driver
+older than 580 cannot run. A training pod reaches the endpoint over HTTP and
+needs none of it. Discovered 2026-08-20 on an A6000 pod with driver 570.211.01,
+where the training stack itself was perfectly usable.
+
+**Driver, and which wheel to install:**
+
+| driver | training host | endpoint host |
+|---|---|---|
+| ≥ 580 | default index (`torch 2.13.0+cu130`) | fine |
+| 525–579 | install torch from the **cu129** index first, then `requirements-train.txt` | **not usable** — the vllm 0.27.1 wheel is built against CUDA 13 |
+
+There is no cu128 build of torch 2.13.0; cu129 is the lowest available, and
+CUDA 12.x builds run on any r525+ driver by minor-version compatibility.
 
 Consistency was checked against each package's own declared constraints on
 PyPI, not assumed.

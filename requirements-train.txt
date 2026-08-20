@@ -1,4 +1,5 @@
-# Training + serving dependencies. GPU HOST ONLY — do not install on the Mac.
+# TRAINING dependencies. GPU HOST ONLY — do not install on the Mac.
+# The endpoint host installs requirements-serve.txt instead.
 #
 # EXACT pins, not floors. A floor ("transformers>=4.48") resolves to whatever
 # happened to be current on the day the pod was created, so two runs a week
@@ -6,7 +7,8 @@
 # attributed. These versions were resolved 2026-08-19 against PyPI and are
 # mutually consistent by their own declared constraints:
 #
-#   vllm 0.27.1        pins torch==2.13.0 exactly, and needs transformers>=5.5.3
+#   torch 2.13.0       the version vllm 0.27.1 pins exactly, so the training and
+#                      serving hosts run the same torch release
 #   transformers 5.15  requires tokenizers>=0.22.0,<=0.23.0. There is no 0.23.0
 #                      final on PyPI — only 0.23.0rc0 and then 0.23.1, which the
 #                      ceiling excludes. The highest usable release is 0.22.2.
@@ -28,5 +30,22 @@ accelerate==1.14.0
 bitsandbytes==0.50.1
 safetensors==0.8.0
 
-# Serving, for the adapter-id check at the end of the smoke test.
-vllm==0.27.1
+# vLLM is NOT here. It belongs to the ENDPOINT host, and it is in
+# requirements-serve.txt. Keeping it in this file forced every training pod to
+# install the CUDA 13 runtime (nvidia-*-cu13), which a driver older than 580
+# cannot run — discovered 2026-08-20 on an A6000 pod with driver 570.211.01,
+# where the training stack itself was perfectly usable.
+
+# CUDA BUILD SELECTION. The pins above are RELEASES; the wheel's build tag
+# depends on the driver:
+#
+#   driver >= 580   default index is fine (torch 2.13.0+cu130)
+#   driver 525-579  install torch first from the cu129 index:
+#                     ./.venv/bin/pip install --index-url \
+#                         https://download.pytorch.org/whl/cu129 torch==2.13.0
+#                   then this file. CUDA 12.x builds run on any r525+ driver by
+#                   minor-version compatibility. There is NO cu128 build of
+#                   torch 2.13.0 — cu129 is the lowest available.
+#
+# Verify what actually loaded rather than what was asked for; smoke_train.py
+# prints the build tag and compares releases only.

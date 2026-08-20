@@ -97,14 +97,22 @@ def main() -> None:
     step(1, "CUDA and dependency versions")
     try:
         import accelerate, bitsandbytes, datasets, peft, safetensors
-        import torch, transformers, trl, vllm
+        import torch, transformers, trl
     except ImportError as e:
         die(f"a pinned dependency is missing: {e}\n"
             "Install requirements-train.txt on the pod.")
     import tokenizers
-    versions = {m.__name__: getattr(m, "__version__", "?") for m in
-                (torch, transformers, tokenizers, trl, peft, datasets,
-                 accelerate, bitsandbytes, safetensors, vllm)}
+    modules = [torch, transformers, tokenizers, trl, peft, datasets,
+               accelerate, bitsandbytes, safetensors]
+    # vLLM belongs to the ENDPOINT host and is not a training dependency; a
+    # training pod on a pre-580 driver cannot install it at all. Report it when
+    # present, do not require it.
+    try:
+        import vllm
+        modules.append(vllm)
+    except ImportError:
+        print("  vllm           not installed (endpoint-host dependency)")
+    versions = {m.__name__: getattr(m, "__version__", "?") for m in modules}
     report["versions"] = versions
     for name, ver in versions.items():
         print(f"  {name:<14} {ver}")
@@ -117,10 +125,13 @@ def main() -> None:
     def release(v: str) -> str:
         return str(v).split("+", 1)[0]
 
+    # An absent OPTIONAL package is not a mismatch; an absent required one
+    # already aborted at the import above.
     mismatched = {
         name: (EXPECTED_VERSIONS[name], versions.get(name))
         for name in EXPECTED_VERSIONS
-        if release(versions.get(name)) != release(EXPECTED_VERSIONS[name])
+        if name in versions
+        and release(versions[name]) != release(EXPECTED_VERSIONS[name])
     }
     builds = {n: v for n, v in versions.items() if "+" in str(v)}
     if builds:

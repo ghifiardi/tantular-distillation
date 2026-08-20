@@ -1,0 +1,18 @@
+# ENDPOINT host only — serves the base student and the trained adapter.
+#
+# Separate from requirements-train.txt because vLLM pulls the entire CUDA 13
+# runtime (nvidia-*-cu13), which a driver older than 580 cannot run. A training
+# pod does not need vLLM at all: the gates reach the endpoint over HTTP.
+#
+# REQUIRES DRIVER >= 580. Unlike the training stack, this one has no CUDA 12
+# fallback: the vllm 0.27.1 wheel is built against CUDA 13.
+
+vllm==0.27.1
+
+# vllm pins torch==2.13.0 exactly and requires transformers>=5.5.3; both are
+# resolved by the pins below, kept identical to requirements-train.txt so the
+# two hosts agree on every shared release.
+torch==2.13.0
+transformers==5.15.0
+tokenizers==0.22.2
+safetensors==0.8.0
