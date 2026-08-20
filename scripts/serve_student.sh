@@ -71,6 +71,37 @@ if [[ -n "$ADAPTER_PATH" ]]; then
   echo "  adapter: $ADAPTER_ID -> $ADAPTER_PATH"
 fi
 
+# Refuse to start a SECOND server on a port that already has one. This is not
+# hypothetical: on the endpoint pod 2026-08-20, a second `serve_student.sh` was
+# launched while the first was still loading the model. The second vLLM lost the
+# race for VRAM and died with "Free memory on device (25.22/44.42 GiB) ... is
+# less than desired", and — because both were pointed at the same log file — its
+# traceback interleaved MID-LINE into the first engine's successful startup,
+# making a healthy server look crashed. The wasted attempt also burns minutes of
+# a paid rental. A listening port is the honest signal that a server already owns
+# this GPU; check it before consuming anything. Set SERVE_STUDENT_FORCE=1 to
+# override deliberately (e.g. a known-dead socket in TIME_WAIT).
+if [[ "${SERVE_STUDENT_FORCE:-}" != "1" ]]; then
+  if "$PYTHON_BIN" - "$TEACHER_PORT" <<'PY'
+import socket, sys
+port = int(sys.argv[1])
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(1.0)
+rc = s.connect_ex(("127.0.0.1", port))
+s.close()
+sys.exit(0 if rc == 0 else 1)   # exit 0 == something is already listening
+PY
+  then
+    echo "REFUSING: port $TEACHER_PORT is already accepting connections on this host." >&2
+    echo "Another server almost certainly already owns this GPU. Starting a second" >&2
+    echo "one races for VRAM, fails, and corrupts a shared log — exactly the" >&2
+    echo "duplicate-launch that made a healthy endpoint look crashed on 2026-08-20." >&2
+    echo "Check it first:  curl -s http://127.0.0.1:$TEACHER_PORT/v1/models" >&2
+    echo "To start anyway (known-dead socket), re-run with SERVE_STUDENT_FORCE=1." >&2
+    exit 3
+  fi
+fi
+
 # NOTE on architecture, measured 2026-08-19/20 across two smoke sessions.
 #
 # Qwen3.5-9B's config declares Qwen3_5ForConditionalGeneration and its weights
