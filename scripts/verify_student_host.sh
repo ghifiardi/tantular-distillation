@@ -95,6 +95,71 @@ if (( BUSY >= 2 )); then
          GPU rather than a shared or community instance."
 fi
 
+# cuInit(0) -> CUDA_SUCCESS, proven WITHOUT torch. nvidia-smi speaks NVML, not
+# the CUDA driver API, so a card can look perfect to nvidia-smi and still fail
+# the very first driver call: a stubbed or mismatched libcuda in the container
+# (a CUDA-13 image on a pre-580 driver is the classic case), or a co-tenant
+# holding the device (cudaErrorDevicesUnavailable). Without this, that failure
+# only surfaces AFTER the ~20-minute image/dependency install — exactly the cost
+# this sixty-second check exists to avoid. libcuda.so.1 ships with the driver,
+# so this needs nothing pip has not installed yet, and it is the "cuInit -> 0"
+# gate the Pod B acceptance criterion asks for.
+echo "checking cuInit(0) against the driver directly (no torch needed)..."
+CUINIT_PY="$(command -v python3 || command -v python || true)"
+if [[ -n "$CUINIT_PY" ]]; then
+  "$CUINIT_PY" - <<'PY'
+import ctypes, sys
+
+lib = None
+for name in ("libcuda.so.1", "libcuda.so",
+             "/usr/lib/x86_64-linux-gnu/libcuda.so.1", "cuda.dll"):
+    try:
+        lib = ctypes.CDLL(name)
+        break
+    except OSError:
+        lib = None
+if lib is None:
+    print("  libcuda not found — this container has no usable CUDA driver library")
+    sys.exit(3)
+
+rc = lib.cuInit(0)
+if rc != 0:
+    detail = "unknown"
+    try:
+        name = ctypes.c_char_p()
+        if lib.cuGetErrorName(rc, ctypes.byref(name)) == 0 and name.value:
+            detail = name.value.decode()
+    except Exception:
+        pass
+    print(f"  cuInit(0) returned {rc} ({detail}) — the CUDA driver refused to initialise")
+    sys.exit(4)
+
+count = ctypes.c_int(0)
+lib.cuDeviceGetCount(ctypes.byref(count))
+print(f"  cuInit(0) -> 0 (CUDA_SUCCESS); the driver reports {count.value} device(s)")
+sys.exit(0 if count.value >= 1 else 5)
+PY
+  CUINIT_RC=$?
+  case "$CUINIT_RC" in
+    0) : ;;
+    3) fail "cuInit check: libcuda.so is missing. This container has no usable CUDA
+         driver library — typically a CUDA 13 image on a pre-580 driver, or a broken
+         base image. Pick a different pod template; pip cannot install a driver." ;;
+    4) fail "cuInit(0) did NOT return CUDA_SUCCESS. nvidia-smi looked fine, but the
+         CUDA driver API refuses to initialise — a driver/library mismatch or a
+         co-tenant holding the device. Stop this pod; installing dependencies on top
+         of a driver that will not init only wastes the ~20-minute install." ;;
+    5) fail "cuInit(0) succeeded but the driver reports zero usable devices — do not
+         serve on this pod." ;;
+    *) fail "the cuInit(0) check failed to run (exit $CUINIT_RC)." ;;
+  esac
+else
+  fail "no python3/python is available to run the torch-free cuInit(0) probe.
+         The acceptance check cannot claim this pod is usable without proving
+         that the CUDA driver API initialises. Pick a normal PyTorch/CUDA image
+         (which includes Python) rather than continuing on an unverified host."
+fi
+
 # The direct proof, when a torch is available: a co-tenanted card fails here,
 # before any download. nvidia-smi alone cannot establish this.
 if [[ -x ./.venv/bin/python ]]; then
@@ -123,6 +188,7 @@ cat > "$OUT" <<JSON
   "memory_total_mib": $MEM_MIB,
   "memory_free_mib": $FREE_MIB,
   "bf16_capable": true,
+  "cuinit_ok": true,
   "exclusive_use_checked": true,
   "verdict": "OK for serving the 9B student at bf16"
 }
