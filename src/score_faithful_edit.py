@@ -78,8 +78,18 @@ def score_edit_item(item: dict, completion: str, contract: dict) -> dict:
     findings: dict[str, list[str]] = {}
 
     # 5. contract — everything else depends on the edit having applied at all.
+    #
+    # When it has not, there is no applied document to inspect, and scoring the
+    # raw JSON against `must_preserve` reports four extra failures that are all
+    # one defect. The item still FAILS (a finding is present), but the dependent
+    # properties are recorded as not measured rather than counted as failures,
+    # so the per-property view says where the real problem is. Measured on the
+    # pilot: every failing item showed contract + preserves + no_new_facts, and
+    # only contract was real.
     if not contract.get("contract_ok"):
-        findings["contract"] = [contract.get("error") or "contract not applied"]
+        return {"contract": [contract.get("error") or "contract not applied"],
+                "_not_measured": ["lands", "preserves", "structure",
+                                  "no_new_facts", "voice"]}
     text = applied if applied else completion
 
     # 1. lands: the target changed, the protected spans did not.
@@ -111,7 +121,8 @@ def score_edit_item(item: dict, completion: str, contract: dict) -> dict:
         findings["no_new_facts"] = [f"{k}: {v}" for k, v in introduced.items()]
 
     # 6. voice — on what the MODEL wrote, not on the untouched source around it.
-    written = " ".join(e.get("replace", "") for e in contract.get("edits") or [])
+    written = " ".join(e.get("replace", "")
+                       for e in contract.get("edit_details") or [])
     findings.update(voice_findings(item, written or completion))
     return findings
 
@@ -121,7 +132,7 @@ def score_absent_item(item: dict, completion: str, contract: dict) -> dict:
     findings: dict[str, list[str]] = {}
     source = item["document"]
 
-    if contract.get("parse_ok") and (contract.get("edits") or []):
+    if contract.get("parse_ok") and (contract.get("edit_details") or contract.get("edits")):
         findings["lands"] = ["emitted edits for information the document does "
                              "not contain"]
     for phrase in item.get("must_state_absence", []):
@@ -213,7 +224,9 @@ def main() -> None:
                     else score_edit_item(item, completion, contract))
         results.append({"id": item["id"], "stratum": item.get("stratum"),
                         "expect": item.get("expect", "edit"),
-                        "passed": not findings, "findings": findings})
+                        "passed": not {k: v for k, v in findings.items()
+                                       if k != "_not_measured"},
+                        "findings": findings})
 
     passed = sum(1 for r in results if r["passed"])
     rate = passed / len(results) if results else 0.0
@@ -221,13 +234,24 @@ def main() -> None:
     print(f"  {passed}/{len(results)} items passed   rate {rate:.4f}")
     print("  (no threshold: set after the pilot and a base measurement)")
 
-    print("\n=== PER-PROPERTY ===")
+    print("\n=== PER-PROPERTY (denominator = items where it could be measured) ===")
     fails = defaultdict(int)
+    measurable = defaultdict(int)
     for r in results:
-        for prop in r["findings"]:
-            fails[prop] += 1
+        skipped = set(r["findings"].get("_not_measured", []))
+        for prop in PROPERTIES:
+            if prop in skipped:
+                continue
+            measurable[prop] += 1
+            if prop in r["findings"]:
+                fails[prop] += 1
     for prop in PROPERTIES:
-        print(f"  {prop:<14}{len(results) - fails[prop]:>3}/{len(results)} pass")
+        total = measurable[prop]
+        if not total:
+            print(f"  {prop:<14}NOT MEASURABLE on any item")
+            continue
+        note = "" if total == len(results) else f"   ({len(results) - total} not measurable)"
+        print(f"  {prop:<14}{total - fails[prop]:>3}/{total} pass{note}")
 
     print("\n=== BY STRATUM ===")
     by_stratum = defaultdict(lambda: [0, 0])
@@ -242,7 +266,8 @@ def main() -> None:
         print(f"\n=== FAILURES ({len(failures)}) ===")
         for r in failures:
             reasons = "; ".join(f"{k}: {', '.join(map(str, v))}"
-                                for k, v in r["findings"].items())
+                                for k, v in r["findings"].items()
+                                if k != "_not_measured")
             print(f"  {r['id']} [{r['stratum']}] {reasons[:200]}")
 
     if args.json_out:
