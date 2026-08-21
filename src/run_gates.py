@@ -401,14 +401,36 @@ def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> di
     per_file_timeout = int(spec.get("timeout_s", 300))
     total = passed = 0
     for test_file in tests:
+        # start_new_session puts node in its OWN process group so a timeout can
+        # kill the WHOLE tree. The add-in's bridge test spawns a long-lived
+        # worker; subprocess timeouts kill only the direct child, and the
+        # orphaned worker then survives to contend with the next attempt. That
+        # is not hypothetical: two orphans from one timed-out gate made the
+        # following run's bridge test hang too, turning one failure into a
+        # cascade. Measured 2026-08-21.
         try:
-            proc = subprocess.run(["node", "--test", str(test_file)],
-                                  capture_output=True, text=True, cwd=project,
-                                  timeout=per_file_timeout)
+            proc = subprocess.Popen(["node", "--test", str(test_file)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, cwd=project, start_new_session=True)
+        except FileNotFoundError:
+            fail("office_json_contract: node is not installed")
+        try:
+            stdout, stderr = proc.communicate(timeout=per_file_timeout)
         except subprocess.TimeoutExpired:
+            import os as _os
+            import signal as _signal
+            try:
+                _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+            proc.communicate()
             fail(f"office_json_contract: {test_file.name} did not finish in "
                  f"{per_file_timeout}s. Failing closed rather than waiting: a "
-                 "gate that hangs yields no verdict and stalls the run.")
+                 "gate that hangs yields no verdict and stalls the run.\n"
+                 "Its whole process group was killed, so nothing is left behind "
+                 "to interfere with the next attempt.")
+        proc = subprocess.CompletedProcess(proc.args, proc.returncode,
+                                           stdout, stderr)
         out = proc.stdout + proc.stderr
         if "# tests " not in out:
             fail(f"office_json_contract: {test_file.name} produced no test "
