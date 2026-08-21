@@ -27,6 +27,7 @@ import asyncio
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 
 try:
@@ -412,6 +413,7 @@ async def run(args: argparse.Namespace) -> None:
             verify=bool(resolved.get("HOST_TLS_VERIFY"))) as client:
         async def worker(index: int) -> None:
             async with semaphore:
+                started = time.monotonic()
                 try:
                     if args.protocol == "chat":
                         results[index] = await complete_chat(
@@ -428,6 +430,13 @@ async def run(args: argparse.Namespace) -> None:
                             temperature=args.temperature, seed=args.seed,
                             max_tokens=args.max_tokens, runtime=runtime,
                             timeout=timeout, stops=stops)
+                    # Per-request latency. Without it the deployment gate
+                    # cannot check a p95 budget, and "not measurable" is not a
+                    # pass — the gate fails closed instead. Added 2026-08-21
+                    # when that gate was first run.
+                    if results[index] is not None:
+                        results[index]["latency_s"] = round(
+                            time.monotonic() - started, 2)
                 except (httpx.HTTPError, httpx.TransportError) as error:
                     # Endpoint failure: never mixed into quality denominators.
                     infrastructure.append({"index": index,
@@ -485,6 +494,7 @@ async def run(args: argparse.Namespace) -> None:
                 "max_tokens": args.max_tokens,
                 "runtime": runtime,
                 "completion_tokens": result["completion_tokens"],
+                "latency_s": result.get("latency_s"),
                 # Termination is recorded as evidence plus a derived category,
                 # never as a claim the runtime did not actually make.
                 "raw_done_reason": result["done_reason"],

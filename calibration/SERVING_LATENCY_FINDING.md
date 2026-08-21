@@ -120,3 +120,62 @@ answer at a fraction of the budget.
 Still true: no capability gap has been demonstrated that would justify training.
 This finding was a serving bug, exactly as diagnosed, and training would not
 have fixed it.
+
+---
+
+# Full gate run on the shipped path — 2026-08-21
+
+All 60 capability items plus the 10-item pilot, generated through the companion
+(`https://localhost:3000/api/chat-completions` → Ollama native `/api/chat`,
+`think: false`) against `tantular-office:0.4-9b`, digest `912936474e07a209` —
+the same weights as `ghifidanukusumo/tantular:latest`. Protocol `plain-chat`,
+`max_tokens 1200`, concurrency 1. Artifacts in `data/gates/companion/`.
+
+## Deployment gate: PASS
+
+| condition | result |
+|---|---|
+| empty answers | **0** / 60 |
+| `finish_reason: length` | **0** / 60 |
+| reasoning characters | **0** |
+| latency | p50 **5.4 s**, p95 **22.8 s**, max 32.1 s (budget 30 s p95) |
+
+The serving defect is closed and stays closed under a 60-item load.
+
+## Capability gates: the shipped artifact is WEAKER than the base
+
+| gate | shipped (Q4_K_M, companion) | bf16 base (vLLM, thinking off) | threshold |
+|---|---|---|---|
+| indonesian_voice | **0.9250 (37/40) — FAIL** | 0.9500 (38/40) | 0.95 |
+| edit_contract_output | **0.9000 (18/20)** — exactly at the bar | 0.9500 (19/20) | 0.90 |
+| faithful editing pilot | 9/10 | 10/10 | none set |
+
+**The shipped model does not pass its own voice gate.**
+
+All three voice failures are terminology, and all are the same class:
+
+    voice::0013  backup -> pencadangan, di-update -> diperbarui
+    voice::0014  disable -> nonaktifkan, maintenance -> pemeliharaan
+    voice::0037  maintenance -> pemeliharaan
+
+Both edit failures are contract violations the base did not make: one `find` of
+203 characters against the 200 limit, and one unparseable JSON.
+
+## Reading this honestly
+
+Every difference is one item, on samples of 40 and 20. That is not a large
+effect and the direction could reverse on a rerun. But it is consistent across
+all three evaluations, and the shipped artifact is on the wrong side of a
+threshold on one of them.
+
+Two differences could explain it, and neither is a capability gap:
+
+1. **Q4_K_M quantization.** int4 degradation is the reason the corpus carries a
+   signed waiver; the base numbers are bf16.
+2. **The profile's system prompt and sampling** — `temperature 0.2`,
+   `presence_penalty 1.5`, `top_k 20` — versus greedy decoding for the base.
+
+The cheap experiments come before any training: serve the same profile at a
+higher precision (Q5/Q6/Q8) and re-run, and re-run at temperature 0. If the gap
+closes, it was quantization or sampling. Only if it survives both is there a
+model-side failure to discuss.
