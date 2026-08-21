@@ -1,0 +1,86 @@
+{
+  "items": 10,
+  "passed": 10,
+  "rate": 1.0,
+  "threshold": null,
+  "per_property_failures": {
+    "lands": 0,
+    "preserves": 0,
+    "structure": 0,
+    "no_new_facts": 0,
+    "contract": 0,
+    "voice": 0
+  },
+  "results": [
+    {
+      "id": "fce::0001",
+      "stratum": "disambiguation",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0002",
+      "stratum": "disambiguation",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0003",
+      "stratum": "figures",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0004",
+      "stratum": "figures",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0005",
+      "stratum": "multi-edit",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0006",
+      "stratum": "structure",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0007",
+      "stratum": "terminology",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0008",
+      "stratum": "long",
+      "expect": "edit",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0009",
+      "stratum": "absent",
+      "expect": "absent",
+      "passed": true,
+      "findings": {}
+    },
+    {
+      "id": "fce::0010",
+      "stratum": "absent",
+      "expect": "absent",
+      "passed": true,
+      "findings": {}
+    }
+  ]
+}

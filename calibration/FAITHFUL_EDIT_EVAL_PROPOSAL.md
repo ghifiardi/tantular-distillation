@@ -105,3 +105,63 @@ base versus adapter on identical prompts, endpoint and protocol.
    (memo, report, minutes) with entirely new content, or use shapes not present
    in training at all? Reusing shapes measures the target capability; avoiding
    them measures generalisation too. I lean to reusing shapes.
+
+
+---
+
+# Pilot result — 2026-08-21
+
+10 items, base model `Qwen/Qwen3.5-9B` at bf16, same endpoint and `plain-chat`
+protocol with `enable_thinking: false` as the v1 baseline. Artifacts in
+`data/gates/fce-pilot/`.
+
+## Result: 10/10, every property, every stratum
+
+| property | pass |
+|---|---|
+| lands | 10/10 |
+| preserves | 10/10 |
+| structure | 10/10 |
+| no_new_facts | 10/10 |
+| contract | 10/10 |
+| voice | 10/10 |
+
+Every stratum passed, including both absent-information items. The answers were
+read by eye, not merely scored: the model states the information is unavailable
+and cites only what the document contains.
+
+**Per the decision of 2026-08-21, this is accepted as a no-regression baseline.
+The items are NOT being hardened to force a gap.**
+
+## What the pilot actually bought
+
+Five defects, all in the instrument, none in the model:
+
+| # | defect | consequence had it shipped |
+|---|---|---|
+| 1 | a declared date licensed the date but not the bare number inside it | correct answers rejected |
+| 2 | the structure check read a key `score_trace` never returns | silent no-op |
+| 3 | the item declared `{"bullets": 3}`, a name `calibrate` ignores | silent no-op |
+| 4 | `fce::0006` asked for a bullet list of a mid-paragraph sentence | unwinnable item |
+| 5 | the document was never in the prompt | the model invented documents; first measurement was 6/10 and meaningless |
+| 6 | the system prompt omitted the 200-character `find` limit the parser enforces | the model penalised for an undisclosed rule |
+
+Defect 5 is the one to remember. It produced a *plausible* number — 6/10, with
+failures concentrated in the strata one would expect to be hardest. Nothing
+about it looked wrong. It was only caught by reading a failing completion and
+noticing the model had invented `Lokasi: Jakarta`, which appears nowhere.
+
+## The open question this leaves
+
+This is now the **third** evaluation where the untrained base already passes:
+voice 0.9500, edit contract 0.9500, faithful editing 10/10. The pattern is
+consistent enough to state plainly: **on the tasks so far chosen, Qwen3.5-9B is
+already good, and no gate yet built can show the corpus adding capability.**
+
+10 items is small — 10/10 is compatible with a true rate anywhere above roughly
+70%, so the full 100 could still separate. But authoring 90 more of the same
+kind is a bet that the remaining 90 differ in character from these 10, and
+nothing in the pilot supports that bet.
+
+That is a product question, not an engineering one, and it is the question
+before the next 90 items are written.
