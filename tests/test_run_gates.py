@@ -838,3 +838,20 @@ def test_eval_prompts_flag_refuses_corpus_prompts(tmp_path):
         env={**os.environ, "HOST_BASE_URL": "http://127.0.0.1:1/v1"})
     assert proc.returncode != 0
     assert "carry a family" in proc.stdout + proc.stderr
+
+
+def test_eval_prompts_are_classified_synthetic():
+    """The egress guard defaults unclassified prompts to `internal`, which a
+    rented (external) endpoint refuses — correctly, since it cannot tell real
+    Office material from authored material. These eval sets were authored for
+    the purpose and reuse nothing from the corpus, so they carry the
+    classification explicitly rather than relying on an --egress-approval
+    waiver, which would suppress the check rather than answer it."""
+    for name in ("voice_eval.v1.jsonl", "edit_contract_eval.v1.jsonl"):
+        rows = [json.loads(l) for l in
+                (ROOT / "prompts" / name).read_text(encoding="utf-8").splitlines()
+                if l.strip()]
+        classes = {r.get("source_class") for r in rows}
+        assert classes == {"synthetic"}, (
+            f"{name} has source_class {classes}; every eval prompt must be "
+            "classified, or a live gate run against an external host aborts")
