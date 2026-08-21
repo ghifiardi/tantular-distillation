@@ -1,4 +1,20 @@
-# v1 training: infrastructure QUALIFIED, run NOT started
+# v1 training: NOT JUSTIFIED — decided 2026-08-21
+
+**The infrastructure is qualified and the training is not warranted.** No model
+capability has been demonstrated that Tantular must provide and Qwen3.5-9B
+cannot: the base passes indonesian_voice (0.9500), edit_contract_output
+(0.9500), office_json_contract (1.0000) and the faithful-editing pilot (10/10).
+
+See `calibration/WHY_TRAINING_IS_NOT_JUSTIFIED.md`, including what evidence
+would reopen the question — a real observed failure, from users, add-in logs or
+an approved real Office corpus. Not a constructed one.
+
+The rest of this document describes the qualified pipeline, which stands ready
+if that evidence appears.
+
+---
+
+# (previous state) infrastructure QUALIFIED, run NOT started
 
 **Current state: 2026-08-21. Repository at `6b07cf8`.**
 
