@@ -240,10 +240,33 @@ async def run(args: argparse.Namespace) -> None:
         print(f"resuming: {len(already)} families already present, "
               f"{len(prompts)} of {before} remaining")
 
+    # Split assignment is a CORPUS rule: every generated trace must belong to a
+    # known family so it can be attributed and held out. Held-out EVAL prompts
+    # are the exact opposite — they deliberately belong to no corpus family, and
+    # requiring them to be in the manifest made every live gate run abort with
+    # "family '' is not in the split manifest". That went unnoticed because every
+    # test drives the gates from --traces fixtures, so the gates had never
+    # generated against a live model until the v1 run. Measured 2026-08-21.
+    #
+    # --eval-prompts is therefore explicit, not a fallback: it is passed only by
+    # run_gates, it refuses to touch anything carrying a family, and it stamps
+    # the traces so they can never be mistaken for corpus.
     manifest = splits_module.load()
     splits_module.verify(manifest)
-    for prompt in prompts:
-        prompt["split"] = splits_module.split_of(prompt.get("family", ""), manifest)
+    if args.eval_prompts:
+        with_family = [p.get("id", "?") for p in prompts if p.get("family")]
+        if with_family:
+            sys.exit(
+                f"--eval-prompts given but {len(with_family)} prompt(s) carry a "
+                f"family ({with_family[:3]}). Eval prompts are held out and "
+                "belong to no family; corpus prompts must be generated without "
+                "this flag so the split manifest governs them.")
+        for prompt in prompts:
+            prompt["split"] = "eval-only"
+            prompt["corpus_role"] = "held_out_eval"
+    else:
+        for prompt in prompts:
+            prompt["split"] = splits_module.split_of(prompt.get("family", ""), manifest)
 
     # Same data-handling gate as generate.py. Omitting it here would have left
     # a second generation path able to send real Office material off-premises
@@ -398,6 +421,10 @@ def main() -> None:
     # answers from the same process — which is how an "after" run silently
     # re-measures the base model and labels it the adapter. The id is therefore
     # explicit, and recorded in provenance so a trace can be attributed.
+    parser.add_argument("--eval-prompts", action="store_true",
+                        help="these prompts are HELD-OUT EVAL items, not corpus: "
+                             "skip split-manifest assignment, which they cannot "
+                             "satisfy by design. Refuses prompts with a family.")
     parser.add_argument("--model-id", default=None,
                         help="model id to REQUEST from the endpoint (e.g. a LoRA "
                              "adapter id), instead of the config's repo")

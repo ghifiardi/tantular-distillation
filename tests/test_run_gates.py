@@ -16,6 +16,7 @@ No model is called: the voice gate is driven with pre-generated traces via
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -788,3 +789,52 @@ def test_missing_logprobs_fail_closed(monkeypatch):
     with pytest.raises(SystemExit) as e:
         _probe(monkeypatch, [], [])
     assert e.value.code == 2
+
+
+# --- eval prompts are not corpus --------------------------------------------
+#
+# The v1 run aborted at the first live gate: generate_normalized assigns every
+# prompt a split from the manifest, and held-out eval prompts belong to no
+# family by design, so it died with "family '' is not in the split manifest".
+#
+# It went unnoticed because every other test drives the gates from --traces
+# fixtures. The gates had never generated against a live model. These cover the
+# flag that separates the two cases.
+
+def test_gates_pass_eval_prompts_flag_to_the_generator():
+    """The gate runner must mark eval generation as eval, or it aborts live."""
+    src = (ROOT / "src" / "run_gates.py").read_text()
+    assert src.count('"--eval-prompts"') == 2, (
+        "both model-dependent gates must pass --eval-prompts; without it a live "
+        "run dies on split-manifest assignment")
+
+
+def test_eval_prompts_have_no_family():
+    """The premise of the flag: these items are held out, not corpus."""
+    for name in ("voice_eval.v1.jsonl", "edit_contract_eval.v1.jsonl"):
+        rows = [json.loads(l) for l in
+                (ROOT / "prompts" / name).read_text(encoding="utf-8").splitlines()
+                if l.strip()]
+        assert rows, f"{name} is empty"
+        assert not [r for r in rows if r.get("family")], (
+            f"{name} carries a family; it would then be governed by the split "
+            "manifest and could collide with training data")
+
+
+def test_eval_prompts_flag_refuses_corpus_prompts(tmp_path):
+    """The flag must not become a way to bypass split rules for real corpus."""
+    corpus_like = tmp_path / "corpus.jsonl"
+    corpus_like.write_text(json.dumps(
+        {"id": "x", "family": "document:email::0001", "user": "halo"}) + "\n",
+        encoding="utf-8")
+    proc = subprocess.run(
+        [PY, str(ROOT / "src" / "generate_normalized.py"),
+         "--teacher", "office-student-9b", "--host", "student-serve",
+         "--eval-prompts", "--prompts", str(corpus_like),
+         "--out", str(tmp_path / "out.jsonl")],
+        capture_output=True, text=True, cwd=ROOT,
+        # A resolvable address so the run reaches the family check; nothing is
+        # ever sent, because the refusal happens before the first request.
+        env={**os.environ, "HOST_BASE_URL": "http://127.0.0.1:1/v1"})
+    assert proc.returncode != 0
+    assert "carry a family" in proc.stdout + proc.stderr
