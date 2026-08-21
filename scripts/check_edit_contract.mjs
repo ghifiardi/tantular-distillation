@@ -100,6 +100,13 @@ const results = cases.map((c) => {
       return row;
     }
     row.contract_ok = true;
+    // The APPLIED document, so a caller can check what the edit actually did:
+    // which span changed, which spans must not have, and whether any figure or
+    // name moved. contract_ok says the edit applied; it says nothing about
+    // whether it applied to the right place or preserved what it must.
+    row.applied = applied.text ?? applied.result ?? null;
+    row.edits = parsed.edits.map((e) => ({ find: e.find, replace: e.replace,
+                                           occurrence: e.occurrence }));
   } catch (e) {
     row.error = `apply: ${e.message}`;
   }

@@ -117,6 +117,12 @@ def score_trace(record: dict) -> dict:
         applicable.append(sentences(text) <= checks["max_sentences"])
     if "max_bullets" in checks:
         applicable.append(0 < bullets(text) <= checks["max_bullets"])
+    if "exact_bullets" in checks:
+        # "Exactly three bullets" is a real Office instruction; max_bullets
+        # cannot express it, and a rewrite that returns prose or four bullets
+        # has not followed the instruction. Added 2026-08-21 for the
+        # faithful-editing eval.
+        applicable.append(bullets(text) == checks["exact_bullets"])
     if "must_contain" in checks:
         applicable.append(all(s.lower() in text.lower() for s in checks["must_contain"]))
     if "must_contain_any" in checks:
