@@ -28,6 +28,11 @@ acceptable non-zero rate for them:
                        non-zero value means the routing regressed.
   latency p95          under an agreed threshold, passed explicitly. No default
                        is baked in: a laptop and a server do not share one.
+  latency max          OPTIONAL and separate. p95 says nothing about the worst
+                       request, and a single 32-second wait is a bad Office
+                       experience even when p95 is comfortable. Off unless
+                       --latency-max is passed, so the choice is deliberate
+                       rather than inherited.
 
 Reads the same trace files the capability gates read, so no separate run is
 needed — the same generation is scored twice, for two different questions.
@@ -57,6 +62,10 @@ def main() -> None:
     p.add_argument("--latency-p95", type=float, required=True,
                    help="agreed p95 latency budget in seconds. Required and "
                         "explicit: no default can be right for every host.")
+    p.add_argument("--latency-max", type=float, default=None,
+                   help="optional per-request ceiling in seconds. p95 permits a "
+                        "slow tail by construction; this bounds it. Off unless "
+                        "given.")
     p.add_argument("--json-out", type=Path)
     args = p.parse_args()
 
@@ -87,9 +96,11 @@ def main() -> None:
     print(f"  reasoning chars   {sum(reasoning.values())} across "
           f"{len(reasoning)} trace(s)  (must be 0)")
     if latencies:
+        ceiling = (f", max budget {args.latency_max}s"
+                   if args.latency_max is not None else ", no max budget set")
         print(f"  latency           p50 {statistics.median(latencies):.1f}s  "
               f"p95 {percentile(latencies, 95):.1f}s  max {max(latencies):.1f}s"
-              f"   (p95 budget {args.latency_p95}s)")
+              f"   (p95 budget {args.latency_p95}s{ceiling})")
     else:
         print("  latency           NOT RECORDED")
 
@@ -107,7 +118,12 @@ def main() -> None:
                         "cannot be checked")
     elif percentile(latencies, 95) > args.latency_p95:
         failures.append(f"p95 latency {percentile(latencies, 95):.1f}s exceeds "
-                        f"the {args.latency_p95}s budget")
+                        f"the {args.latency_p95}s p95 budget")
+    if (args.latency_max is not None and latencies
+            and max(latencies) > args.latency_max):
+        slowest = max(latencies)
+        failures.append(f"slowest request {slowest:.1f}s exceeds the "
+                        f"{args.latency_max}s per-request ceiling")
 
     verdict = "PASS" if not failures else "FAIL"
     if args.json_out:
@@ -118,7 +134,9 @@ def main() -> None:
             "reasoning_chars_total": sum(reasoning.values()),
             "latency_p50": statistics.median(latencies) if latencies else None,
             "latency_p95": percentile(latencies, 95) if latencies else None,
+            "latency_max": max(latencies) if latencies else None,
             "latency_budget_p95": args.latency_p95,
+            "latency_budget_max": args.latency_max,
             "failures": failures,
         }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"\nwrote {args.json_out}")

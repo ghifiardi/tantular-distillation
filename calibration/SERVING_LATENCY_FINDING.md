@@ -179,3 +179,45 @@ The cheap experiments come before any training: serve the same profile at a
 higher precision (Q5/Q6/Q8) and re-run, and re-run at temperature 0. If the gap
 closes, it was quantization or sampling. Only if it survives both is there a
 model-side failure to discuss.
+
+
+---
+
+# Experiment 1 — sampling is NOT the cause (2026-08-21)
+
+Built `tantular-greedy:0.4-9b` from the SAME blob as the shipped profile
+(`sha256-dec52a44...`), changing only sampling: temperature 0, `top_k 0`,
+`top_p 1.0`, `presence_penalty 0`, `repeat_penalty 1.0`. Same system prompt,
+same weights, same companion path, same 60 items.
+
+| gate | shipped sampling | greedy |
+|---|---|---|
+| indonesian_voice | 0.9250 (37/40) | **0.9250 (37/40)** |
+| edit_contract_output | 0.9000 (18/20) | **0.9000 (18/20)** |
+
+Not merely the same rates — **the same failing items**: `voice::0013`,
+`voice::0014`, `voice::0037`, `edit::0007`, `edit::0010`, with the same
+findings.
+
+`presence_penalty 1.5` was the most plausible sampling explanation, since
+penalising repeated tokens pushes a model toward synonyms and the failures are
+all terminology. It makes no difference here. The hypothesis is eliminated.
+
+One hypothesis remains: **Q4_K_M quantization**. The base numbers are bf16.
+
+A note on what our requests already controlled: the companion's bridge passes
+`temperature` and `num_predict` and nothing else, so every earlier run was
+already at temperature 0 while the Modelfile's penalties still applied. This
+experiment removed the penalties too.
+
+## Latency: p95 versus per-request
+
+The gate compares p95 only, and printed `(p95 budget 30.0s)`; a 32.1 s slowest
+request did not fail it. That was correct behaviour and ambiguous prose in the
+summary, which said "budget" without qualification.
+
+`--latency-max` is now a separate, optional ceiling. p95 permits a slow tail by
+construction, and a single 32-second wait is a poor Office experience even when
+p95 is comfortable. With `--latency-max 30` the same 60 traces FAIL on the
+outlier; with p95 alone they pass. The choice is now explicit rather than
+implied.
