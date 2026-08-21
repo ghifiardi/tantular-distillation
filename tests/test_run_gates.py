@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -915,3 +916,27 @@ def test_harmony_remains_the_default():
     """Corpus generation must not silently change protocol."""
     src = (ROOT / "src" / "generate_normalized.py").read_text()
     assert 'choices=("harmony", "chat"), default="harmony"' in src
+
+
+def test_chat_mode_returns_the_same_shape_as_channel_parsing():
+    """Both protocols feed one record builder, so they must agree on the shape.
+
+    The chat branch first shipped without `malformed` and the v1 run died with
+    KeyError after it had already generated.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import generate_normalized as gn
+    chat = gn.parse_chat("Ringkasan singkat.")
+    channels = gn.parse_channels("no channels here")
+    assert set(chat) == set(channels), (
+        f"chat returns {sorted(chat)}, channels return {sorted(channels)}")
+    assert chat["answer"] == "Ringkasan singkat."
+    assert chat["malformed"] is False
+
+
+def test_an_empty_chat_response_is_malformed():
+    """An endpoint that answers with nothing is the FP8 failure mode."""
+    sys.path.insert(0, str(ROOT / "src"))
+    import generate_normalized as gn
+    for empty in ("", "   ", "\n\n"):
+        assert gn.parse_chat(empty)["malformed"] is True

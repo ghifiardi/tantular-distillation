@@ -142,6 +142,20 @@ def parse_channels(raw: str) -> dict:
             "malformed": not answer.strip()}
 
 
+def parse_chat(raw: str) -> dict:
+    """Chat responses carry no channels: the response IS the answer.
+
+    Returns the SAME shape as parse_channels — the two feed one record builder,
+    and the chat branch first shipped without `malformed`, which killed the v1
+    run with KeyError after it had already generated.
+
+    An empty response is malformed. An endpoint that answers with nothing is the
+    FP8 failure mode, and must never become a valid empty completion.
+    """
+    answer = (raw or "").strip()
+    return {"answer": answer, "reasoning": "", "malformed": not answer}
+
+
 async def complete_chat(client: httpx.AsyncClient, base: str, model: str,
                         system: str, user: str, *, temperature: float, seed: int,
                         max_tokens: int, timeout: float) -> dict:
@@ -377,8 +391,8 @@ async def run(args: argparse.Namespace) -> None:
         # In chat mode the response IS the answer: there are no channels to
         # separate, and running parse_channels over it would discard everything
         # as "no final channel".
-        parsed = ({"answer": result["raw"], "reasoning": ""}
-                  if args.protocol == "chat" else parse_channels(result["raw"]))
+        parsed = (parse_chat(result["raw"]) if args.protocol == "chat"
+                  else parse_channels(result["raw"]))
         termination = classify_termination(result["raw"], result["done_reason"])
         record = {
             "family": prompt["family"],
