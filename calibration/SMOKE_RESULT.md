@@ -279,3 +279,62 @@ The training path, expanded LoRA targets (80,216,064) and adapter binding all
 remain verified from qualification round 2. What does NOT exist is **a valid v1
 baseline**. The gates have still never produced one, and no comparison can be
 made until they do.
+
+
+---
+
+# Valid v1 baseline — 2026-08-21
+
+Measured with `run_gates run --stage before` alone. No trainer, no
+`--confirm-run-v1`. Artifacts in `data/gates/v1-baseline/`.
+
+## Trace integrity
+
+| check | result |
+|---|---|
+| voice traces | 40/40 |
+| edit traces | 20/20 |
+| `thinking_disabled` | `True` on every trace |
+| protocol | `plain-chat` on every trace |
+| empty completions | 0 |
+| completions containing a reasoning preamble | 0 |
+
+## Rates
+
+| gate | rate | threshold | verdict |
+|---|---|---|---|
+| office_json_contract | 1.0000 (382/382) | 0.98 | MET_TARGET (model-independent) |
+| edit_contract_output | 0.9500 (19/20) | 0.90 | MET_TARGET |
+| indonesian_voice | 0.9500 (38/40) | 0.95 | MET_TARGET |
+
+Report verdict: **`BASELINE_MEETS_TARGET`**, `below_target: []`.
+
+## THE FINDING: the gates are saturated
+
+**The untrained base model already meets every threshold.** This is the opposite
+of what the whole gate design assumed — `BASELINE_MEASURED_BELOW_TARGET` was
+built as the expected outcome, on the reasoning that a base model with no
+Indonesian office training would score far below 0.95.
+
+Consequences for v1, stated plainly:
+
+- **These gates cannot show that v1 helps.** There is no room above the bar for
+  improvement to register. They can only show that v1 does not hurt.
+- **Indonesian voice sits EXACTLY at its threshold.** One item flipping is
+  0.025, which takes 0.9500 to 0.9250 and fails the after gate. v1 must not
+  lose a single voice item to be promotable.
+- The promotion criteria are therefore an extremely tight *no-harm* test, not a
+  demonstration of value.
+
+The available headroom is precise and small: the two voice failures are both
+TERMINOLOGY — `voice::0013` (backup, user) and `voice::0037` (maintenance) —
+which is exactly what fine-tuning on Indonesian office material might fix. The
+best possible outcome on this gate is 40/40; the worst promotable one is 38/40.
+
+The edit gate has one failure of 20, at a threshold of 0.90, so it has one item
+of slack in each direction.
+
+**This is a question about what v1 is for, not an engineering problem.** The
+plumbing works and the baseline is valid. Whether to spend GPU time on a run
+whose best case is "two terminology items and no regressions" is a product
+decision.

@@ -1,0 +1,170 @@
+{
+  "items": 20,
+  "parse_ok": 19,
+  "fields_ok": 19,
+  "contract_ok": 19,
+  "rate": 0.95,
+  "_rate_is": "contract_ok / items — parsed AND located AND applied",
+  "results": [
+    {
+      "id": "edit::0001",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0002",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 2,
+      "error": null
+    },
+    {
+      "id": "edit::0003",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0004",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0005",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0006",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0007",
+      "parse_ok": false,
+      "fields_ok": false,
+      "contract_ok": false,
+      "edits": 0,
+      "error": "parse: JSON edit dari model tidak bisa dibaca."
+    },
+    {
+      "id": "edit::0008",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0009",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0010",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0011",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0012",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0013",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0014",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0015",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0016",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0017",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0018",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0019",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    },
+    {
+      "id": "edit::0020",
+      "parse_ok": true,
+      "fields_ok": true,
+      "contract_ok": true,
+      "edits": 1,
+      "error": null
+    }
+  ]
+}

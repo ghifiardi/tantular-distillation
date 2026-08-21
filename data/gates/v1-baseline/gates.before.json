@@ -1,0 +1,95 @@
+{
+  "stage": "before",
+  "config": {
+    "path": "train/qlora_9b.yaml",
+    "sha256": "41f303f1d687c933a1af5a2f5124381967b8a942ffd1fad3991051e215d88c0e"
+  },
+  "model": {
+    "teacher": "office-student-9b",
+    "host": "student-serve",
+    "expected": "Qwen/Qwen3.5-9B",
+    "identity": {
+      "expected": "Qwen/Qwen3.5-9B",
+      "served": [
+        "Qwen/Qwen3.5-9B",
+        "office-student-9b"
+      ],
+      "endpoint": "http://localhost:8020/v1",
+      "quantization": "bf16"
+    }
+  },
+  "adapter": {
+    "path": null,
+    "sha256": null,
+    "model_id": null,
+    "identity": null,
+    "evaluated": false
+  },
+  "gates": [
+    {
+      "name": "office_json_contract",
+      "model_dependent": false,
+      "_model_independent_note": "Runs the add-in's own JS suite with globalThis.fetch mocked. It never calls a model, so before and after are identical by construction and this gate CANNOT detect an adapter regression.",
+      "rate": 1.0,
+      "threshold": 0.98,
+      "passed": true,
+      "items": 382,
+      "hashes": {
+        "suite": "6fa347a259c7c6a802127cc515cf268c7b646eb93f343bff6013a6c9669e40e9"
+      },
+      "status": "MET_TARGET"
+    },
+    {
+      "name": "edit_contract_output",
+      "model_dependent": true,
+      "rate": 0.95,
+      "threshold": 0.9,
+      "passed": true,
+      "items": 20,
+      "breakdown": {
+        "parse_ok": 19,
+        "fields_ok": 19,
+        "contract_ok": 19
+      },
+      "hashes": {
+        "eval_set": "463efb1847e5cd7ada12d57cfe3cd1f42ffdbc81a00b3a2cd2f594588563f098",
+        "checker": "332471429544997594b4bb9aaaf380cf03ad8cf96b27d093261f90cf95fddb5a",
+        "addin_parser": "df613fcbb80e9b70085339900225ad99e36e751a838be229a49bccfa9aa527e9"
+      },
+      "artifacts": {
+        "traces": "/workspace/runs/baseline/edit.before.traces.jsonl",
+        "report": "/workspace/runs/baseline/edit.before.score.json"
+      },
+      "generated_by_model_id": "Qwen/Qwen3.5-9B",
+      "from_fixtures": false,
+      "status": "MET_TARGET"
+    },
+    {
+      "name": "indonesian_voice",
+      "model_dependent": true,
+      "rate": 0.95,
+      "threshold": 0.95,
+      "passed": true,
+      "items": 40,
+      "per_dimension_failures": {
+        "terminology": 2
+      },
+      "hashes": {
+        "eval_set": "dd059d7cb1e53c5c8d085ed5017d2949b94fac5afe0aea224f32941f624e48bb",
+        "scorer": "42925034b86bd82ee1933eacf24b4970e434c582e407459c101153a66510fec8"
+      },
+      "artifacts": {
+        "traces": "/workspace/runs/baseline/voice.before.traces.jsonl",
+        "report": "/workspace/runs/baseline/voice.before.score.json"
+      },
+      "generated_by_model_id": "Qwen/Qwen3.5-9B",
+      "from_fixtures": false,
+      "status": "MET_TARGET"
+    }
+  ],
+  "measured": true,
+  "all_passed": true,
+  "below_target": [],
+  "verdict": "BASELINE_MEETS_TARGET",
+  "promotable": false
+}
