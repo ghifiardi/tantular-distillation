@@ -893,3 +893,25 @@ def test_eval_prompts_require_an_id(tmp_path):
         env={**os.environ, "HOST_BASE_URL": "http://127.0.0.1:1/v1"})
     assert proc.returncode != 0
     assert "have no id" in proc.stdout + proc.stderr
+
+
+def test_gates_generate_over_the_chat_protocol():
+    """The student speaks chat, not normalized-harmony.
+
+    The v1 baseline came back as 20 malformed traces, every one
+    "no final channel": generate_normalized renders harmony channel markers and
+    parses them back out, which Muse Glimmer emits and Qwen3.5 does not. The
+    harmony protocol belongs to CORPUS generation from the teacher; the gates
+    measure the student, and the product talks to it over chat completions —
+    the same shape data/promoted was rendered in for training.
+    """
+    src = (ROOT / "src" / "run_gates.py").read_text()
+    assert src.count('"--protocol", "chat"') == 2, (
+        "both model-dependent gates must generate over the chat protocol, or "
+        "every completion parses as empty")
+
+
+def test_harmony_remains_the_default():
+    """Corpus generation must not silently change protocol."""
+    src = (ROOT / "src" / "generate_normalized.py").read_text()
+    assert 'choices=("harmony", "chat"), default="harmony"' in src

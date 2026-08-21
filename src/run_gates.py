@@ -344,7 +344,7 @@ def gate_indonesian_voice(spec: dict, stage: str, args, out_dir: Path) -> dict:
     else:
         cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
                "--teacher", args.teacher, "--host", args.host,
-               "--model-id", requested_model_id(args), "--eval-prompts",
+               "--model-id", requested_model_id(args), "--eval-prompts", "--protocol", "chat",
                "--prompts", str(items), "--out", str(traces), "--resume"]
         print(f"  generating {stage} answers from {requested_model_id(args)} "
               f"-> {traces.name}")
@@ -489,7 +489,7 @@ def gate_edit_contract_output(spec: dict, stage: str, args, out_dir: Path) -> di
     else:
         cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
                "--teacher", args.teacher, "--host", args.host,
-               "--model-id", requested_model_id(args), "--eval-prompts",
+               "--model-id", requested_model_id(args), "--eval-prompts", "--protocol", "chat",
                "--prompts", str(items), "--out", str(traces_path), "--resume"]
         print(f"  generating {stage} edit answers -> {traces_path.name}")
         proc = subprocess.run(cmd, capture_output=True, text=True)

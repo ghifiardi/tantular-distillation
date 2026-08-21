@@ -142,6 +142,37 @@ def parse_channels(raw: str) -> dict:
             "malformed": not answer.strip()}
 
 
+async def complete_chat(client: httpx.AsyncClient, base: str, model: str,
+                        system: str, user: str, *, temperature: float, seed: int,
+                        max_tokens: int, timeout: float) -> dict:
+    """Ordinary chat completion — the protocol the STUDENT actually speaks.
+
+    normalized-harmony renders channel markers client-side and parses
+    `<|channel|>final` back out. Muse Glimmer emits those; Qwen3.5 does not, so
+    every gate completion parsed as empty with "no final channel" and the whole
+    baseline came back as 20 malformed traces. Measured on the v1 run,
+    2026-08-21.
+
+    This path applies the model's OWN chat template server-side, which is also
+    how data/promoted was rendered for training and how the add-in talks to the
+    model — so the gates measure the student the way the product uses it.
+    """
+    messages = ([{"role": "system", "content": system}] if system else []) + \
+               [{"role": "user", "content": user}]
+    response = await client.post(
+        f"{base}/v1/chat/completions",
+        json={"model": model, "messages": messages, "temperature": temperature,
+              "seed": seed, "max_tokens": max_tokens},
+        timeout=timeout)
+    response.raise_for_status()
+    payload = response.json()
+    choice = payload["choices"][0]
+    return {"raw": (choice.get("message") or {}).get("content") or "",
+            "completion_tokens": (payload.get("usage") or {}).get("completion_tokens"),
+            "done_reason": choice.get("finish_reason"),
+            "stop_reason": choice.get("stop_reason", "__absent__")}
+
+
 async def complete(client: httpx.AsyncClient, base: str, model: str, prompt: str,
                    *, temperature: float, seed: int, max_tokens: int,
                    runtime: str, timeout: float, stops: list[str]) -> dict:
@@ -319,11 +350,19 @@ async def run(args: argparse.Namespace) -> None:
         async def worker(index: int) -> None:
             async with semaphore:
                 try:
-                    results[index] = await complete(
-                        client, base, model, rendered[index],
-                        temperature=args.temperature, seed=args.seed,
-                        max_tokens=args.max_tokens, runtime=runtime, timeout=timeout,
-                        stops=stops)
+                    if args.protocol == "chat":
+                        results[index] = await complete_chat(
+                            client, base, model,
+                            prompts[index].get("system", ""),
+                            prompts[index]["user"],
+                            temperature=args.temperature, seed=args.seed,
+                            max_tokens=args.max_tokens, timeout=timeout)
+                    else:
+                        results[index] = await complete(
+                            client, base, model, rendered[index],
+                            temperature=args.temperature, seed=args.seed,
+                            max_tokens=args.max_tokens, runtime=runtime,
+                            timeout=timeout, stops=stops)
                 except (httpx.HTTPError, httpx.TransportError) as error:
                     # Endpoint failure: never mixed into quality denominators.
                     infrastructure.append({"index": index,
@@ -335,7 +374,11 @@ async def run(args: argparse.Namespace) -> None:
     for index, (prompt, result) in enumerate(zip(prompts, results)):
         if result is None:
             continue
-        parsed = parse_channels(result["raw"])
+        # In chat mode the response IS the answer: there are no channels to
+        # separate, and running parse_channels over it would discard everything
+        # as "no final channel".
+        parsed = ({"answer": result["raw"], "reasoning": ""}
+                  if args.protocol == "chat" else parse_channels(result["raw"]))
         termination = classify_termination(result["raw"], result["done_reason"])
         record = {
             "family": prompt["family"],
@@ -363,7 +406,8 @@ async def run(args: argparse.Namespace) -> None:
                 "license": resolved["TEACHER_LICENSE"],
                 "host": resolved["HOST_NAME"],
                 "quantization": resolved["HOST_QUANTIZATION"],
-                "protocol": "normalized-harmony-raw",
+                "protocol": ("plain-chat" if args.protocol == "chat"
+                             else "normalized-harmony-raw"),
                 "template_sha256": template_hash,
                 "prompt_sha256": sha256(rendered[index]),
                 "prompt_bytes": len(rendered[index].encode("utf-8")),
@@ -433,6 +477,12 @@ def main() -> None:
     # answers from the same process — which is how an "after" run silently
     # re-measures the base model and labels it the adapter. The id is therefore
     # explicit, and recorded in provenance so a trace can be attributed.
+    parser.add_argument("--protocol", choices=("harmony", "chat"), default="harmony",
+                        help="'harmony' renders channel markers client-side and "
+                             "parses them back (the TEACHER speaks this). 'chat' "
+                             "uses /v1/chat/completions and the model's own "
+                             "template — required for the student, which emits "
+                             "no channels.")
     parser.add_argument("--eval-prompts", action="store_true",
                         help="these prompts are HELD-OUT EVAL items, not corpus: "
                              "skip split-manifest assignment, which they cannot "
