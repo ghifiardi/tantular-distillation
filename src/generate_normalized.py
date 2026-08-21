@@ -261,9 +261,21 @@ async def run(args: argparse.Namespace) -> None:
                 f"family ({with_family[:3]}). Eval prompts are held out and "
                 "belong to no family; corpus prompts must be generated without "
                 "this flag so the split manifest governs them.")
+        missing_id = [i for i, pr in enumerate(prompts) if not pr.get("id")]
+        if missing_id:
+            sys.exit(f"--eval-prompts: {len(missing_id)} prompt(s) have no id. "
+                     "Eval items are joined to their scores by id; without one a "
+                     "completion cannot be attributed to the item it answers.")
         for prompt in prompts:
             prompt["split"] = "eval-only"
             prompt["corpus_role"] = "held_out_eval"
+            # Downstream — the resume filter, the trace record, and both scorers
+            # — joins on `family`. Eval items have no corpus family and must not
+            # acquire one, so their own id becomes the join key. The scorers
+            # already match on family OR id, so this changes nothing they see.
+            # Checked AFTER the no-family refusal above, so this can never
+            # overwrite a real family.
+            prompt["family"] = prompt["id"]
     else:
         for prompt in prompts:
             prompt["split"] = splits_module.split_of(prompt.get("family", ""), manifest)

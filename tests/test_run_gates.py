@@ -855,3 +855,41 @@ def test_eval_prompts_are_classified_synthetic():
         assert classes == {"synthetic"}, (
             f"{name} has source_class {classes}; every eval prompt must be "
             "classified, or a live gate run against an external host aborts")
+
+
+def test_eval_prompts_get_their_id_as_join_key(tmp_path):
+    """Eval items have no corpus family, but everything downstream joins on one.
+
+    The v1 run's third abort was KeyError: 'family' while building the trace
+    record. The id becomes the join key — the scorers already match on family
+    OR id, so nothing they see changes.
+    """
+    items = tmp_path / "eval.jsonl"
+    items.write_text(json.dumps({"id": "edit::0001", "user": "halo",
+                                 "source_class": "synthetic"}) + "\n",
+                     encoding="utf-8")
+    proc = subprocess.run(
+        [PY, str(ROOT / "src" / "generate_normalized.py"),
+         "--teacher", "office-student-9b", "--host", "student-serve",
+         "--eval-prompts", "--prompts", str(items),
+         "--out", str(tmp_path / "out.jsonl")],
+        capture_output=True, text=True, cwd=ROOT,
+        env={**os.environ, "HOST_BASE_URL": "http://127.0.0.1:1/v1"})
+    combined = proc.stdout + proc.stderr
+    # It cannot reach a real endpoint here; what matters is that it got PAST
+    # split assignment and trace construction to the connection attempt.
+    assert "family" not in combined or "KeyError" not in combined, combined[:400]
+
+
+def test_eval_prompts_require_an_id(tmp_path):
+    items = tmp_path / "noid.jsonl"
+    items.write_text(json.dumps({"user": "halo"}) + "\n", encoding="utf-8")
+    proc = subprocess.run(
+        [PY, str(ROOT / "src" / "generate_normalized.py"),
+         "--teacher", "office-student-9b", "--host", "student-serve",
+         "--eval-prompts", "--prompts", str(items),
+         "--out", str(tmp_path / "out.jsonl")],
+        capture_output=True, text=True, cwd=ROOT,
+        env={**os.environ, "HOST_BASE_URL": "http://127.0.0.1:1/v1"})
+    assert proc.returncode != 0
+    assert "have no id" in proc.stdout + proc.stderr
