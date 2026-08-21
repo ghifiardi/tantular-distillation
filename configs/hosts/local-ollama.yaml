@@ -1,0 +1,24 @@
+# Ollama on this machine. Used to measure the SHIPPED product locally.
+#
+# data_egress: internal is truthful here and matters — nothing leaves the
+# machine, so the egress guard permits prompts that a rented endpoint would
+# refuse. It is the honest classification for localhost, not a way around the
+# check.
+
+data_egress: internal
+name: local-ollama
+runtime: gateway              # OpenAI-compatible HTTP; no weights to resolve
+base_url: http://localhost:11434/v1
+gpu: "local machine"
+supports_fp8: false
+quantization: int4_ollama
+
+# One at a time. The profile takes ~2 minutes per short prompt on this
+# hardware because of the reasoning it emits; parallel requests on a laptop
+# contend for the same cores and make it worse, not better.
+concurrency: 1
+request_timeout_s: 1800
+
+training_allowed: false
+no_training_reason: >-
+  A laptop running Ollama for measurement. Nothing trains here.

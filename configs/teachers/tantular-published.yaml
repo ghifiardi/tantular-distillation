@@ -1,0 +1,38 @@
+# The SHIPPED product: ghifidanukusumo/Tantular:latest, as users download it.
+#
+# Added 2026-08-21. Every number this repository holds was measured against
+# base Qwen3.5-9B at bf16 WITHOUT the Tantular system prompt. What ships is
+# Q4_K_M WITH it. Both differences bear on the gates — int4 is the reason the
+# corpus carries a signed waiver, and the profile's tuned penalties target
+# structured output, which is exactly what the edit-contract gate scores.
+#
+# This config exists so the shipped artifact can be measured instead of
+# inferred from a near neighbour.
+#
+# NOT a fine-tune. Per its model card it is a Modelfile/system-prompt profile
+# over Qwen3.5 — the same category as tantular-office:0.4-9b, and the thing the
+# v1 distillation would have replaced had it been justified.
+
+name: tantular-published
+port: 11434
+served_model_name: ghifidanukusumo/tantular:latest
+license: apache-2.0
+
+repos:
+  # Ollama tag, not a HuggingFace repo. 9.7B, Q4_K_M, 6.6GB.
+  int4_ollama: ghifidanukusumo/tantular:latest
+
+sampling:
+  temperature: 0.0
+  top_p: 1.0
+  # 4096, not the 2048 used for the bf16 student, and this is NOT a free
+  # parameter. Measured 2026-08-21: the profile emits ~8,800 characters of
+  # English reasoning before its answer, and at max_tokens 600 it never reaches
+  # one — finish_reason "length", content empty. An empty completion would be
+  # scored as a failure that is really a budget artefact.
+  #
+  # Ollama's OpenAI-compatible endpoint IGNORES both
+  # chat_template_kwargs.enable_thinking and its own `think: false`, so the
+  # reasoning cannot be suppressed here the way it can on vLLM. Ollama does
+  # return it in a separate `reasoning` field, so `content` stays clean.
+  max_tokens: 4096

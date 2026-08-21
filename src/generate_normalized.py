@@ -214,9 +214,16 @@ async def complete_chat(client: httpx.AsyncClient, base: str, model: str,
     choice = payload["choices"][0]
     message = choice.get("message") or {}
     return {"raw": message.get("content") or "",
-            # vLLM populates this only when a reasoning parser is configured.
             # Kept separate from the answer, never merged into it.
-            "reasoning": message.get("reasoning_content") or "",
+            #
+            # TWO FIELD NAMES, because the two runtimes disagree: vLLM uses
+            # `reasoning_content` (only with a reasoning parser configured),
+            # Ollama uses `reasoning`. Reading only vLLM's name recorded
+            # reasoning_chars: 0 against Ollama while the model was emitting
+            # 21,808 characters of it — the measurement said nothing was
+            # happening. Measured 2026-08-21.
+            "reasoning": (message.get("reasoning_content")
+                          or message.get("reasoning") or ""),
             # Always true here: the request either carried thinking control or
             # raised. Recorded so a trace states the protocol it was produced
             # under rather than leaving a reader to infer it.
