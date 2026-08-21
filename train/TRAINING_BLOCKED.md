@@ -22,9 +22,24 @@ trainer. It was regenerated against the expanded-target config.
 
 ## The remaining step
 
-Make the explicit v1 decision and pass `--confirm-run-v1`. That flag is the
-irreversible transition from verification to training; nothing before it spends
-GPU time on a real run.
+**A valid `before` baseline, which does not yet exist.**
+
+v1 attempt 1 (2026-08-21) was approved and run. It never trained: six aborts in
+the `before` gates, all from one omission — the gates had never generated
+against a live model, because every test drives them from `--traces` fixtures.
+The last of those produced a baseline of exactly 0.0000 on both model-dependent
+gates by scoring the model's English reasoning as its answer. All six are fixed;
+see `calibration/SMOKE_RESULT.md`.
+
+Before `--confirm-run-v1` is used again:
+
+1. run `src/run_gates.py run --stage before` against a served base model;
+2. confirm `thinking_disabled: true` on the traces, answers rather than
+   reasoning in the completions, and all 20 edit + 40 voice outputs present;
+3. get fresh explicit approval.
+
+A baseline of zero is not a floor to measure from — it makes any output an
+improvement and satisfies "no regression" trivially.
 
 ## Qualification detail
 

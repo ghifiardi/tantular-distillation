@@ -216,3 +216,66 @@ Both passed every static check and would have been caught by
 Everything above concerns plumbing. **Nothing here says whether 136 mechanically
 promoted traces can lift Indonesian voice to 0.95 without regressing the edit
 contract.** The v1 run was made measurable, not likely to succeed.
+
+
+---
+
+# v1 attempt 1 — 2026-08-21: ABORTED, no training, no valid baseline
+
+`--confirm-run-v1` was used with explicit approval. **No training ever started
+and no adapter was produced.** Every attempt stopped in the `before` gates, and
+the trainer refuses to train past an unrunnable gate — so the cost was pod time,
+not a wasted training run or, worse, a plausible-looking false result.
+
+Hosts: two RTX A6000 48GB, drivers 580.159.04 (train) and 580.159.03 (serve),
+both on torch 2.13.0+cu130, vLLM 0.27.1 on the endpoint.
+
+## Six aborts, one omission
+
+Every one of these is the same root cause: **the gates had never generated
+against a live model.** All 100+ tests drive them from `--traces` fixtures, so
+the entire live generation path — prompt handling, protocol, parsing — was
+unexercised code that looked covered.
+
+| # | abort | cause |
+|---|---|---|
+| 1 | `family '' is not in the split manifest` | split assignment is a CORPUS rule; held-out eval prompts belong to no family by design |
+| 2 | egress refused 20 prompts | eval prompts were unclassified, so defaulted to `internal`; a rented endpoint is `external` |
+| 3 | `KeyError: 'family'` | the trace record joins on family; eval items have only an id |
+| 4 | `bridge.test.mjs did not finish in 300s` | a previous timeout left orphaned node workers that contended with the retry |
+| 5 | 20 malformed traces, `no final channel` | normalized-harmony is the TEACHER's protocol; Qwen3.5 emits no channels |
+| 6 | baseline scored **0.0000** on both gates | the model returned an English "Thinking Process:" preamble as `content`, and the scorer graded REASONING as the ANSWER |
+
+Abort 6 is the one that matters most, because it did not look like a failure.
+The run completed the baseline, wrote its reports, and continued to training. A
+0.0000 baseline is not obviously wrong — a base model with no Indonesian office
+training is expected to score low. It was only wrong on inspection: 38 of 40
+voice items failed on "indonesian ratio 0.35", which is not a voice problem at
+all. Had it stood, every after-gate would have compared against a floor of zero,
+where any output whatsoever is an improvement and "no regression" is trivially
+satisfied.
+
+## Fixes
+
+- `--eval-prompts`: skips split assignment, stamps `split: eval-only` and
+  `corpus_role: held_out_eval`, and REFUSES prompts carrying a family, so it
+  cannot become a way to bypass split rules for corpus.
+- Eval prompts classified `source_class: synthetic` — truthfully, since they
+  were authored for the purpose and reuse nothing. Deliberately not
+  `--egress-approval`, which suppresses the question rather than answering it.
+- Eval items use their own id as the join key, and an item without an id is
+  refused: a completion that cannot be attributed is not a measurement.
+- Gate timeouts kill the whole process group.
+- `--protocol {harmony,chat}`, default harmony so corpus generation is
+  unchanged; the gates use chat, which is also how the training data was
+  rendered and how the add-in talks to the model.
+- Chat requests send `enable_thinking: false` and **fail closed** if the
+  endpoint rejects it. The first version of that patch retried with thinking
+  enabled, which would have silently restored the invalid baseline.
+
+## What is still true
+
+The training path, expanded LoRA targets (80,216,064) and adapter binding all
+remain verified from qualification round 2. What does NOT exist is **a valid v1
+baseline**. The gates have still never produced one, and no comparison can be
+made until they do.
