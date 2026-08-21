@@ -142,7 +142,7 @@ def parse_channels(raw: str) -> dict:
             "malformed": not answer.strip()}
 
 
-def parse_chat(raw: str) -> dict:
+def parse_chat(raw: str, reasoning: str = "") -> dict:
     """Chat responses carry no channels: the response IS the answer.
 
     Returns the SAME shape as parse_channels — the two feed one record builder,
@@ -153,7 +153,8 @@ def parse_chat(raw: str) -> dict:
     FP8 failure mode, and must never become a valid empty completion.
     """
     answer = (raw or "").strip()
-    return {"answer": answer, "reasoning": "", "malformed": not answer}
+    return {"answer": answer, "reasoning": (reasoning or "").strip(),
+            "malformed": not answer}
 
 
 async def complete_chat(client: httpx.AsyncClient, base: str, model: str,
@@ -173,15 +174,53 @@ async def complete_chat(client: httpx.AsyncClient, base: str, model: str,
     """
     messages = ([{"role": "system", "content": system}] if system else []) + \
                [{"role": "user", "content": user}]
-    response = await client.post(
-        f"{base}/v1/chat/completions",
-        json={"model": model, "messages": messages, "temperature": temperature,
-              "seed": seed, "max_tokens": max_tokens},
-        timeout=timeout)
-    response.raise_for_status()
+    body = {"model": model, "messages": messages, "temperature": temperature,
+            "seed": seed, "max_tokens": max_tokens,
+            # THINKING OFF. Qwen3.5 otherwise opens with an English "Thinking
+            # Process:" preamble and returns it as `content`, so the reasoning
+            # IS the answer as far as any scorer can tell. Measured on the v1
+            # baseline: 38 of 40 voice items failed on Indonesian ratio (0.35)
+            # because they were scored against English reasoning.
+            #
+            # The harmony protocol separates reasoning from the answer and
+            # score_voice states reasoning is "never presented as the model's
+            # answer"; the chat path has to honour the same invariant. It also
+            # matches the training data — data/promoted completions are answers,
+            # not thinking — so before and after measure the same thing the
+            # adapter is trained to produce.
+            "chat_template_kwargs": {"enable_thinking": False}}
+    try:
+        response = await client.post(f"{base}/v1/chat/completions", json=body,
+                                     timeout=timeout)
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        # FAIL CLOSED. An earlier version retried without the kwarg when the
+        # endpoint rejected it — which would silently restore the very baseline
+        # this exists to prevent: reasoning scored as the answer, voice at
+        # 0.0000, and nothing in the report saying why. If the endpoint will not
+        # honour thinking control, the measurement is not the one we intend and
+        # there is no safe default to fall back to.
+        if e.response.status_code == 400:
+            raise RuntimeError(
+                "the endpoint rejected chat_template_kwargs "
+                "{'enable_thinking': False} (HTTP 400). Refusing to retry with "
+                "thinking ENABLED: the model would return its reasoning as the "
+                "answer and the gate would score that. Serve a model whose chat "
+                "template accepts the kwarg, or configure a reasoning parser so "
+                "reasoning_content is separated server-side."
+            ) from e
+        raise
     payload = response.json()
     choice = payload["choices"][0]
-    return {"raw": (choice.get("message") or {}).get("content") or "",
+    message = choice.get("message") or {}
+    return {"raw": message.get("content") or "",
+            # vLLM populates this only when a reasoning parser is configured.
+            # Kept separate from the answer, never merged into it.
+            "reasoning": message.get("reasoning_content") or "",
+            # Always true here: the request either carried thinking control or
+            # raised. Recorded so a trace states the protocol it was produced
+            # under rather than leaving a reader to infer it.
+            "thinking_disabled": True,
             "completion_tokens": (payload.get("usage") or {}).get("completion_tokens"),
             "done_reason": choice.get("finish_reason"),
             "stop_reason": choice.get("stop_reason", "__absent__")}
@@ -391,7 +430,8 @@ async def run(args: argparse.Namespace) -> None:
         # In chat mode the response IS the answer: there are no channels to
         # separate, and running parse_channels over it would discard everything
         # as "no final channel".
-        parsed = (parse_chat(result["raw"]) if args.protocol == "chat"
+        parsed = (parse_chat(result["raw"], result.get("reasoning", ""))
+                  if args.protocol == "chat"
                   else parse_channels(result["raw"]))
         termination = classify_termination(result["raw"], result["done_reason"])
         record = {
@@ -422,6 +462,8 @@ async def run(args: argparse.Namespace) -> None:
                 "quantization": resolved["HOST_QUANTIZATION"],
                 "protocol": ("plain-chat" if args.protocol == "chat"
                              else "normalized-harmony-raw"),
+                **({"thinking_disabled": result.get("thinking_disabled")}
+                   if args.protocol == "chat" else {}),
                 "template_sha256": template_hash,
                 "prompt_sha256": sha256(rendered[index]),
                 "prompt_bytes": len(rendered[index].encode("utf-8")),

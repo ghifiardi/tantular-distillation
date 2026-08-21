@@ -940,3 +940,88 @@ def test_an_empty_chat_response_is_malformed():
     import generate_normalized as gn
     for empty in ("", "   ", "\n\n"):
         assert gn.parse_chat(empty)["malformed"] is True
+
+
+def test_parse_chat_keeps_reasoning_out_of_the_answer():
+    sys.path.insert(0, str(ROOT / "src"))
+    import generate_normalized as gn
+    got = gn.parse_chat("Jawaban singkat.", "long english reasoning")
+    assert got["answer"] == "Jawaban singkat."
+    assert got["reasoning"] == "long english reasoning"
+    assert got["malformed"] is False
+
+
+# --- thinking control, exercised rather than grepped ------------------------
+#
+# The v1 baseline scored 0.0000 on voice because Qwen3.5 returns an English
+# "Thinking Process:" preamble as `content`, so the scorer graded reasoning as
+# the answer. These drive complete_chat with a fake transport, so they assert
+# what is SENT and what is RETURNED, not what the source happens to contain.
+
+class _FakeResponse:
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self.status_code = status
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import httpx
+            raise httpx.HTTPStatusError("boom", request=None, response=self)
+
+
+class _FakeClient:
+    """Records every request body and replays a scripted response."""
+
+    def __init__(self, payload, status=200):
+        self.sent = []
+        self._payload = payload
+        self._status = status
+
+    async def post(self, url, json=None, timeout=None):
+        self.sent.append(json)
+        return _FakeResponse(self._payload, self._status)
+
+
+def _chat(client):
+    sys.path.insert(0, str(ROOT / "src"))
+    import asyncio
+    import generate_normalized as gn
+    return asyncio.run(gn.complete_chat(
+        client, "http://x", "m", "sys", "user",
+        temperature=0, seed=0, max_tokens=16, timeout=5))
+
+
+def test_chat_request_actually_sends_enable_thinking_false():
+    client = _FakeClient({"choices": [{"message": {"content": "Jawaban."},
+                                       "finish_reason": "stop"}]})
+    got = _chat(client)
+    assert client.sent, "no request was made"
+    body = client.sent[0]
+    assert body.get("chat_template_kwargs") == {"enable_thinking": False}, body
+    assert got["thinking_disabled"] is True
+    assert got["raw"] == "Jawaban."
+
+
+def test_reasoning_content_is_returned_separately_from_content():
+    client = _FakeClient({"choices": [{
+        "message": {"content": "Jawaban.",
+                    "reasoning_content": "long english reasoning"},
+        "finish_reason": "stop"}]})
+    got = _chat(client)
+    assert got["raw"] == "Jawaban."
+    assert got["reasoning"] == "long english reasoning"
+    assert "reasoning" not in got["raw"]
+
+
+def test_rejected_thinking_control_aborts_instead_of_falling_back():
+    """A 400 must NOT be retried with thinking enabled."""
+    client = _FakeClient({"error": "unknown kwarg"}, status=400)
+    with pytest.raises(RuntimeError) as e:
+        _chat(client)
+    assert "Refusing to retry with thinking ENABLED" in str(e.value)
+    assert len(client.sent) == 1, (
+        f"made {len(client.sent)} requests; a rejected thinking-control request "
+        "must not be retried at all")
