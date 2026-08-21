@@ -153,6 +153,14 @@ def resolve(teacher_name: str, host_name: str) -> dict:
         # over YAML so a tunnel or a new rental address needs no source edit.
         "HOST_BASE_URL": os.environ.get("HOST_BASE_URL", "").strip()
                          or host.get("base_url", ""),
+        # The chat path is not always OpenAI's. The Tantular companion exposes
+        # /api/chat-completions and translates to Ollama's native /api/chat so
+        # thinking can be disabled — the OpenAI-compatible path ignores every
+        # thinking control. Measuring the product means measuring ITS path.
+        "HOST_CHAT_PATH": host.get("chat_completions_path", "/v1/chat/completions"),
+        # Local companions run self-signed TLS. Off only where the config says
+        # so, never inferred from the URL.
+        "HOST_TLS_VERIFY": "" if host.get("tls_verify") is False else "1",
         "HOST_API_KEY_ENV": host.get("api_key_env", ""),
         "HOST_CONCURRENCY": str(host.get("concurrency", 16)),
         "HOST_REQUEST_TIMEOUT_S": str(host.get("request_timeout_s", 600)),

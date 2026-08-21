@@ -1,0 +1,23 @@
+# The Tantular Office companion on this machine — the path the ADD-IN uses.
+#
+# Added 2026-08-21 to measure the product rather than a near neighbour. The
+# companion (tools/dev-server.mjs, commit 96b3d80) forwards to Ollama's native
+# /api/chat with think: false, because Ollama's OpenAI-compatible endpoint
+# ignores every thinking control. Measuring through here measures what a user
+# gets; measuring Ollama's /v1 directly does not.
+
+data_egress: internal
+name: tantular-companion
+runtime: gateway
+base_url: https://localhost:3000
+chat_completions_path: /api/chat-completions
+tls_verify: false          # self-signed localhost certificate
+gpu: "local machine"
+supports_fp8: false
+quantization: int4_ollama
+concurrency: 1
+request_timeout_s: 1800
+
+training_allowed: false
+no_training_reason: >-
+  A local companion process for measurement. Nothing trains here.

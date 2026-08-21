@@ -159,7 +159,8 @@ def parse_chat(raw: str, reasoning: str = "") -> dict:
 
 async def complete_chat(client: httpx.AsyncClient, base: str, model: str,
                         system: str, user: str, *, temperature: float, seed: int,
-                        max_tokens: int, timeout: float) -> dict:
+                        max_tokens: int, timeout: float,
+                        chat_path: str = "/v1/chat/completions") -> dict:
     """Ordinary chat completion — the protocol the STUDENT actually speaks.
 
     normalized-harmony renders channel markers client-side and parses
@@ -190,7 +191,7 @@ async def complete_chat(client: httpx.AsyncClient, base: str, model: str,
             # adapter is trained to produce.
             "chat_template_kwargs": {"enable_thinking": False}}
     try:
-        response = await client.post(f"{base}/v1/chat/completions", json=body,
+        response = await client.post(f"{base}{chat_path}", json=body,
                                      timeout=timeout)
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
@@ -406,7 +407,9 @@ async def run(args: argparse.Namespace) -> None:
     infrastructure: list[dict] = []
     semaphore = asyncio.Semaphore(concurrency)
 
-    async with httpx.AsyncClient() as client:
+    # verify comes from the host config, never inferred from the URL.
+    async with httpx.AsyncClient(
+            verify=bool(resolved.get("HOST_TLS_VERIFY"))) as client:
         async def worker(index: int) -> None:
             async with semaphore:
                 try:
@@ -416,7 +419,9 @@ async def run(args: argparse.Namespace) -> None:
                             prompts[index].get("system", ""),
                             prompts[index]["user"],
                             temperature=args.temperature, seed=args.seed,
-                            max_tokens=args.max_tokens, timeout=timeout)
+                            max_tokens=args.max_tokens, timeout=timeout,
+                            chat_path=resolved.get("HOST_CHAT_PATH")
+                            or "/v1/chat/completions")
                     else:
                         results[index] = await complete(
                             client, base, model, rendered[index],

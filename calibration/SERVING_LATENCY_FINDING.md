@@ -73,3 +73,50 @@ Proposed as deployment gates, distinct from capability gates:
 A measurement gap the finding also exposed: `reasoning_chars` read only vLLM's
 `reasoning_content` and recorded 0 against Ollama, which uses `reasoning` —
 reporting nothing while 21,808 characters were being generated. Fixed.
+
+
+---
+
+# After the serving fix — 2026-08-21
+
+Add-in commit `96b3d80` routes local requests to Ollama's native `/api/chat`,
+forces `think: false`, and translates `max_tokens` to `num_predict`. The
+companion was restarted (the running process was four days old and predated the
+fix). Measured through the companion — the path the add-in actually uses — not
+against Ollama directly.
+
+| | before (OpenAI path) | after (companion → native) |
+|---|---|---|
+| budget | `max_tokens 4096` | **`max_tokens 600`** |
+| answers | **3 / 10** | **10 / 10** |
+| empty | 7 | **0** |
+| `finish_reason: length` | 7 | **0** |
+| single short summary | 37 s, empty at 600 tokens | **7.4 s**, answered |
+| `fce::0001` at production budget | 512 s, 21,808 reasoning chars, empty | answered |
+
+The comparison is stricter than like-for-like: the fixed path was given a **7x
+smaller budget** and still answered every item.
+
+## Quality on the fixed path
+
+**9 / 10** on the six-property faithful-editing scorer — lands, preserves,
+structure, no_new_facts and voice all clean on every measurable item.
+
+The single failure is `fce::0005` (multi-edit): the model emitted ONE edit with
+a 203-character `find` against a 200-character limit, trying to replace a whole
+paragraph rather than making three targeted edits. The output is complete,
+well-formed JSON, so this is behaviour and not truncation. bf16 base produced
+three correct edits on the same item.
+
+That is a real contract violation, by three characters, on one item of ten. It
+is worth watching and is not a shipping blocker on this evidence.
+
+## Status
+
+The serving defect is fixed and the fix is verified on the product's own path.
+Latency went from minutes to seconds, and from mostly-no-answer to always-an-
+answer at a fraction of the budget.
+
+Still true: no capability gap has been demonstrated that would justify training.
+This finding was a serving bug, exactly as diagnosed, and training would not
+have fixed it.
