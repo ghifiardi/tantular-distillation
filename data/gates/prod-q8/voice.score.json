@@ -1,0 +1,581 @@
+{
+  "items": 40,
+  "passed": 38,
+  "rate": 0.95,
+  "threshold": 0.95,
+  "verdict": "PASS",
+  "per_dimension_failures": {
+    "terminology": 2
+  },
+  "results": [
+    {
+      "id": "voice::0001",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0002",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0003",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0004",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0005",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0006",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0007",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0008",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0009",
+      "focus": "terminology",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0010",
+      "focus": "terminology",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0011",
+      "focus": "terminology",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0012",
+      "focus": "terminology",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0013",
+      "focus": "terminology",
+      "passed": false,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": false,
+        "language": true,
+        "empty": true
+      },
+      "findings": {
+        "terminology": [
+          "backup -> pencadangan",
+          "user -> pengguna"
+        ]
+      }
+    },
+    {
+      "id": "voice::0014",
+      "focus": "terminology",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0015",
+      "focus": "terminology",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0016",
+      "focus": "terminology",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0017",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0018",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0019",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0020",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0021",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0022",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0023",
+      "focus": "faithfulness",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0024",
+      "focus": "faithfulness",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0025",
+      "focus": "faithfulness",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0026",
+      "focus": "faithfulness",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0027",
+      "focus": "faithfulness",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0028",
+      "focus": "faithfulness",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0029",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0030",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0031",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0032",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0033",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0034",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0035",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0036",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0037",
+      "focus": "faithfulness",
+      "passed": false,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": false,
+        "language": true,
+        "empty": true
+      },
+      "findings": {
+        "terminology": [
+          "maintenance -> pemeliharaan"
+        ]
+      }
+    },
+    {
+      "id": "voice::0038",
+      "focus": "faithfulness",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0039",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    },
+    {
+      "id": "voice::0040",
+      "focus": "register",
+      "passed": true,
+      "dimensions": {
+        "register_address": true,
+        "register_opener": true,
+        "baku": true,
+        "terminology": true,
+        "language": true,
+        "empty": true
+      },
+      "findings": {}
+    }
+  ]
+}

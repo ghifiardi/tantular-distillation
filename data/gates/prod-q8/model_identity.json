@@ -1,0 +1,53 @@
+{
+  "recorded": "2026-08-22",
+  "purpose": "production candidate identity",
+  "current_default_Q4": {
+    "tag": "tantular-office:0.4-9b",
+    "digest": "912936474e07a2090defdecb6e80f35b89f74313498d9455d57efc468b1a0396",
+    "size_bytes": 6594475886,
+    "modelfile_sha256": "350e19175862afe6fe507aa31aa421e7e41c5337bd19762a602f08482878ce1e",
+    "body_sha256": "dc69dd6e4f2f5669bb212509c1f21c00e470463a251bac47e51f41d5cb6b81fc",
+    "parameters": [
+      "num_ctx 32768",
+      "num_predict 8192",
+      "presence_penalty 1.5",
+      "repeat_penalty 1.05",
+      "temperature 0.2",
+      "top_k 20",
+      "top_p 0.9"
+    ]
+  },
+  "published_Q4": {
+    "tag": "ghifidanukusumo/tantular:latest",
+    "digest": "912936474e07a2090defdecb6e80f35b89f74313498d9455d57efc468b1a0396",
+    "size_bytes": 6594475886,
+    "modelfile_sha256": "a166e2c2318cd0d0b57b9d2fbc1f890c6b75e49381ae1fbed770298346ebfb99",
+    "body_sha256": "dc69dd6e4f2f5669bb212509c1f21c00e470463a251bac47e51f41d5cb6b81fc",
+    "parameters": [
+      "num_ctx 32768",
+      "num_predict 8192",
+      "presence_penalty 1.5",
+      "repeat_penalty 1.05",
+      "temperature 0.2",
+      "top_k 20",
+      "top_p 0.9"
+    ]
+  },
+  "candidate_Q8": {
+    "tag": "tantular-office:0.5-9b-q8",
+    "digest": "ad43e5078243140bbf672c773c004cc35cecb323ae60c8252112714a0f6d0d5d",
+    "size_bytes": 10699929539,
+    "modelfile_sha256": "65c7d9ef9b283a658eccae00fc51fbfa248985ef85895545286e9f76b506afc5",
+    "body_sha256": "dc69dd6e4f2f5669bb212509c1f21c00e470463a251bac47e51f41d5cb6b81fc",
+    "parameters": [
+      "num_ctx 32768",
+      "num_predict 8192",
+      "presence_penalty 1.5",
+      "repeat_penalty 1.05",
+      "temperature 0.2",
+      "top_k 20",
+      "top_p 0.9"
+    ]
+  },
+  "_body_sha256_note": "SYSTEM/TEMPLATE/RENDERER/PARSER only; the LICENSE block and FROM/PARAMETER lines are excluded so the hash compares the profile, not its packaging."
+}

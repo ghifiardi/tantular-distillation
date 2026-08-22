@@ -1,0 +1,13 @@
+{
+  "traces": 60,
+  "verdict": "PASS",
+  "empty": [],
+  "truncated": [],
+  "reasoning_chars_total": 0,
+  "latency_p50": 6.550000000000001,
+  "latency_p95": 22.91,
+  "latency_max": 29.03,
+  "latency_budget_p95": 30.0,
+  "latency_budget_max": 30.0,
+  "failures": []
+}
