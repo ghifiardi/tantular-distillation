@@ -1,0 +1,46 @@
+{
+  "recorded_utc": null,
+  "primary": {
+    "registry": {
+      "tag": "ghifidanukusumo/tantular:latest",
+      "digest": "0ed8471c2c9e781b2fe9443ab6c2642f84e732c3580c56c7eea8ba7267dcfe01",
+      "size_bytes": 10699929539,
+      "modified_at": "2026-08-22T09:57:20.366015255+07:00",
+      "_note": "a pointer, not an equivalence test: this digest changes across a push/pull round-trip"
+    },
+    "weights_blob": "sha256-73b25b6053372913a20bde4fd1c81db57fb573b2b8fc063ffdcf25c5ef1f1d68",
+    "canonical_profile_sha256": "15368614046c19ce4e63e2b5506507bfbd9d8e3bd3600571d9ad27af3c43f11b",
+    "parameters_sorted": [
+      "num_ctx 32768",
+      "num_predict 8192",
+      "presence_penalty 1.5",
+      "repeat_penalty 1.05",
+      "temperature 0.2",
+      "top_k 20",
+      "top_p 0.9"
+    ],
+    "profile_only_sha256": "dc69dd6e4f2f5669bb212509c1f21c00e470463a251bac47e51f41d5cb6b81fc"
+  },
+  "compared_to": {
+    "registry": {
+      "tag": "ghifidanukusumo/tantular:q8-0.5",
+      "digest": "ad43e5078243140bbf672c773c004cc35cecb323ae60c8252112714a0f6d0d5d",
+      "size_bytes": 10699929539,
+      "modified_at": "2026-08-22T09:55:36.996832018+07:00",
+      "_note": "a pointer, not an equivalence test: this digest changes across a push/pull round-trip"
+    },
+    "weights_blob": "sha256-73b25b6053372913a20bde4fd1c81db57fb573b2b8fc063ffdcf25c5ef1f1d68",
+    "canonical_profile_sha256": "15368614046c19ce4e63e2b5506507bfbd9d8e3bd3600571d9ad27af3c43f11b",
+    "parameters_sorted": [
+      "num_ctx 32768",
+      "num_predict 8192",
+      "presence_penalty 1.5",
+      "repeat_penalty 1.05",
+      "temperature 0.2",
+      "top_k 20",
+      "top_p 0.9"
+    ],
+    "profile_only_sha256": "dc69dd6e4f2f5669bb212509c1f21c00e470463a251bac47e51f41d5cb6b81fc"
+  },
+  "equivalent": true
+}

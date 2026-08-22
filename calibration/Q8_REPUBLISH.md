@@ -75,3 +75,62 @@ No GPU was rented and no training was run to reach this conclusion.
 
 Step 2 depends on step 1: changing the client default to a tag nobody can pull
 would break every install.
+
+---
+
+# Published and verified — 2026-08-22
+
+Three tags pushed to `ghifidanukusumo/tantular`:
+
+- `q4-0.4` — the previous Q4_K_M artifact, published FIRST as rollback
+- `q8-0.5` — the measured Q8_0 profile
+- `latest` — moved to Q8
+
+## Identity, by the three-part method
+
+Raw manifest digests are NOT comparable across a push/pull round-trip: the
+pushed tag was `ad43e5078243`, the pulled one `0ed8471c2c9e`, because Ollama
+recomputed the manifest and reordered the `PARAMETER` lines. Nothing about the
+model changed. `src/model_identity.py` records three separate pieces instead:
+
+| evidence | pushed `q8-0.5` | pulled `latest` |
+|---|---|---|
+| registry digest | `ad43e5078243…` | `0ed8471c2c9e…` — differs, expected |
+| weights blob | `sha256-73b25b60…` | **same** |
+| canonical profile (PARAMETERs sorted) | `15368614046c19ce` | **same** |
+
+Verdict: equivalent.
+
+## Behavioural verification — the primary check
+
+The pulled `:latest`, generated fresh through the companion:
+
+| gate | result | budget |
+|---|---|---|
+| indonesian_voice | **38/40 (0.9500)** | 0.95 |
+| edit_contract_output | **19/20 (0.9500)** | 0.90 |
+| empty / truncated / reasoning | **0 / 0 / 0** | 0 |
+| latency p95 | **17.6 s** | ≤ 30 s |
+| slowest request | **28.2 s** | ≤ 45 s |
+
+Per item, the pulled tag matched the locally built one exactly — identical
+verdicts on all 40 voice items.
+
+## Client and installer
+
+Add-in commit `447606d`:
+
+- installer pulls `ghifidanukusumo/tantular` by default instead of building
+  locally from `qwen3.5:9b`, which reproduces a Q4 profile that scores below
+  the gates;
+- RAM floor raised 12 GB → 16 GB, since the default grew from 6.6 GB to 10 GB;
+- `DEFAULT_DECK_MODEL` → `tantular-office:0.5-9b`, with the 0.4 alias retained
+  in the preference chain so existing installs keep working.
+
+## Outstanding
+
+**The product obligation attached to the 45 s budget is NOT implemented.**
+`calibration/DEPLOYMENT_BUDGET_POLICY.md` requires the add-in to show progress
+during a Studio action and allow cancellation. Neither exists yet. Until they
+do, a slow request is still indistinguishable from the hang this sequence began
+with — the budget is defensible, the user experience of reaching it is not.
