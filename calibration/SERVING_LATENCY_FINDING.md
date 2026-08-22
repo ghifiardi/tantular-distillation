@@ -221,3 +221,60 @@ construction, and a single 32-second wait is a poor Office experience even when
 p95 is comfortable. With `--latency-max 30` the same 60 traces FAIL on the
 outlier; with p95 alone they pass. The choice is now explicit rather than
 implied.
+
+---
+
+# Experiment 2 — Q4_K_M quantization IS the cause (2026-08-22)
+
+`tantular-greedy-q8:0.4-9b` built by `scripts/build_precision_variant.sh` from
+the shipped Modelfile: SYSTEM, TEMPLATE, RENDERER and PARSER copied byte for
+byte, only `FROM` changed to `qwen3.5:9b-q8_0`. Verified before running —
+system/template/renderer identical, and all seven parameters identical
+(`temperature 0`, `top_k 0`, `top_p 1`, `presence_penalty 0`,
+`repeat_penalty 1`, `num_ctx 32768`, `num_predict 8192`). Same companion path,
+same 60 items. **Precision is the only difference.**
+
+| gate | Q4_K_M greedy | **Q8_0 greedy** | bf16 base (vLLM) | threshold |
+|---|---|---|---|---|
+| indonesian_voice | 0.9250 (37/40) FAIL | **0.9500 (38/40) PASS** | 0.9500 (38/40) | 0.95 |
+| edit_contract_output | 0.9000 (18/20) | **0.9500 (19/20)** | 0.9500 (19/20) | 0.90 |
+
+**Q8 matches the bf16 base exactly on both gates** — same rates, and on voice
+the same two failing items (`voice::0013`, `voice::0037`).
+
+Per item, Q4 → Q8: **1 fixed, 0 broken** on voice (`voice::0014`), and
+`edit::0010` (unparseable JSON) fixed. `edit::0007` still fails on both — a
+203-character `find` against a 200 limit — so that one is not a precision
+artefact and belongs to the profile.
+
+`voice::0013` fails in both arms but for a DIFFERENT reason, which a total
+would have hidden:
+
+    Q4: backup -> pencadangan, di-update -> diperbarui
+    Q8: backup -> pencadangan, user -> pengguna
+
+## The cost
+
+| | Q4_K_M | Q8_0 |
+|---|---|---|
+| disk | 6.6 GB | 10 GB |
+| latency p50 | 3.8 s | 6.1 s |
+| latency p95 | 15.3 s | 21.6 s |
+| slowest | 21.6 s | 28.5 s |
+
+Q8 is ~60% slower at p50 and 1.4x the download. Both still pass a 30 s p95
+budget; with a 30 s per-request ceiling, Q8's slowest request at 28.5 s is
+inside it and Q4's shipped-sampling arm at 32.1 s was not.
+
+## Conclusion
+
+The quality gap is **quantization, not capability**. Q8_0 recovers bf16-level
+scores on both gates with the same prompt and the same weights lineage.
+
+Training remains unjustified, and this experiment is the reason: the deficit
+that might have motivated it disappears when the model is served at higher
+precision. A fine-tune would have been an expensive fix for a packaging choice.
+
+Remaining, and small: `edit::0007` fails at every precision — the model emits
+one over-long `find` instead of several targeted edits. One item of twenty,
+above the 0.90 threshold either way. Worth watching, not worth training for.

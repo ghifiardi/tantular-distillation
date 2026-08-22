@@ -21,7 +21,12 @@ SOURCE_MODEL="${SOURCE_MODEL:-tantular-office:0.4-9b}"
 BASE="${1:?usage: build_precision_variant.sh <base-tag> <new-tag>}"
 NEW="${2:?usage: build_precision_variant.sh <base-tag> <new-tag>}"
 
-ollama list | grep -q "^${BASE}" || { echo "base tag not pulled: $BASE" >&2; exit 1; }
+# Capture first, then match. Under `set -o pipefail`, `ollama list | grep -q`
+# fails even when the tag IS present: grep -q exits on the first match, ollama
+# takes SIGPIPE and exits non-zero, and pipefail propagates that. The guard then
+# rejects a model that is sitting right there.
+INSTALLED="$(ollama list)"
+grep -q "^${BASE}" <<<"$INSTALLED" || { echo "base tag not pulled: $BASE" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
