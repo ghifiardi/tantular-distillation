@@ -134,3 +134,51 @@ Add-in commit `447606d`:
 during a Studio action and allow cancellation. Neither exists yet. Until they
 do, a slow request is still indistinguishable from the hang this sequence began
 with — the budget is defensible, the user experience of reaching it is not.
+
+---
+
+# Add-in smoke test on the registry Q8 tag — 2026-08-22
+
+End to end through the companion (`https://localhost:3000/api/chat-completions`
+→ Ollama native `/api/chat`, `think: false`) against
+`ghifidanukusumo/tantular:latest` pulled from the registry.
+
+| request | latency | finish | reasoning | result |
+|---|---|---|---|---|
+| two-sentence summary | **4.1 s** | stop | 0 | correct Indonesian, figures preserved |
+| edit-contract JSON | **2.0 s** | stop | 0 | `{"edits":[{"find":"setting","replace":"pengaturan","occurrence":1}]}` |
+| **cold start** (after `ollama stop`) | **11.9 s** | stop | 0 | correct |
+
+All inside the 45 s per-request budget, cold start included.
+
+## One unexplained observation, recorded rather than smoothed over
+
+The first attempt at this smoke test hung for over ten minutes and was killed by
+a tool timeout. It has not reproduced: the two warm runs above took 4.1 s and
+2.0 s, and a deliberate cold start took 11.9 s, so model loading is not the
+explanation.
+
+The most likely cause is that the request reached the companion while it was
+still initialising, since the server had just been restarted in the same
+command. That is a guess. It is written down because an unexplained ten-minute
+stall in exactly the area this work is about should not be quietly dropped, and
+because if it recurs this note is the first evidence.
+
+## UX obligation — now met
+
+Add-in commit `5cf7fee` implements what
+`calibration/DEPLOYMENT_BUDGET_POLICY.md` required:
+
+- elapsed time in every progress region, never blank;
+- a **Batal** button in all four regions, wired to a real `AbortController`
+  whose signal reaches `runTantular`;
+- cancellation reported as its own outcome, not as an error;
+- budget timeout as a third, distinct outcome;
+- once past the budget the progress line says so and points at the cancel
+  button.
+
+Deck generation keeps its 480 s budget rather than being forced to 45 s: it
+produces many slides, not one answer, and was never what the 45 s figure
+measured. It gets the clock and the cancel button; it does not get the cap.
+
+8 new tests cover the rules without a DOM; 397 add-in tests pass.
