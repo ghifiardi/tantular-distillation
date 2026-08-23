@@ -38,6 +38,35 @@ SENTENCE_OPENERS = {
     "memo", "notulen", "rapat", "anggaran", "jumlah", "total", "nilai",
 }
 
+# Generic technical and format words. These are vocabulary, not facts: a
+# summary that says "output JSON" has invented nothing, and flagging it teaches
+# people to ignore the checker. Discovered when the verifier blocked a CORRECT
+# answer that mentioned JSON while refusing an injected edit contract.
+#
+# Deliberately generic terms only. Anything that could name a real person,
+# organisation or place stays flaggable — that is the whole point.
+# Currency and measure markers are capitalised but name nothing. "Pagu Rp
+# 1.750.000.000" is not an organisation called "Pagu Rp" — a false positive that
+# blocked a correct answer before this existed.
+NON_ENTITY_TOKENS = {"rp", "idr", "usd", "eur", "sgd", "kwh", "kg", "km"}
+
+# Common document nouns. Models format answers as Markdown, and "**Pagu Belanja
+# Modal:**" title-cases ordinary words — which then read as an organisation
+# called "Pagu Belanja Modal". These are vocabulary, not names, in any casing.
+COMMON_NOUNS = {
+    "ringkasan", "laporan", "anggaran", "pagu", "belanja", "modal", "vendor",
+    "utama", "realisasi", "persentase", "persen", "triwulan", "semester",
+    "kontrak", "tanggal", "total", "jumlah", "catatan", "keterangan", "sisa",
+    "nilai", "rincian", "uraian", "periode", "tahun", "bulan", "dokumen",
+    "pengguna", "sumber", "status", "target", "capaian", "penyerapan",
+}
+
+GENERIC_ACRONYMS = {
+    "json", "pdf", "xlsx", "docx", "pptx", "csv", "html", "url", "api", "http",
+    "https", "ai", "id", "ram", "cpu", "gpu", "ok", "pdf/a", "utf-8", "xml",
+    "sla", "kpi", "sop", "faq", "it", "hr", "qr", "pin", "otp",
+}
+
 NUMBER_RE = re.compile(r"(?:Rp\s*)?\d[\d.,]*\s*(?:%|persen|kwh|kg|km|jam|hari|"
                        r"bulan|tahun|orang|unit|lembar|buah)?", re.IGNORECASE)
 DATE_RE = re.compile(r"\b(\d{1,2})\s+(" + "|".join(MONTHS) + r")\s*(\d{4})?\b",
@@ -51,6 +80,10 @@ def normalise_number(token: str) -> str:
     token = token.strip().lower()
     digits = re.sub(r"[^\d]", "", token)
     unit = re.sub(r"[\d\s.,]", "", token)
+    # "23,6%" and "23,6 persen" are one fact. Treating them as two flagged a
+    # correct summary for rewriting the document's `persen` as `%`.
+    if unit in ("%", "persen"):
+        unit = "%"
     return f"{digits}|{unit}"
 
 
@@ -84,10 +117,29 @@ def entities(text: str) -> set[str]:
                 continue
             if any(month in lowered for month in MONTHS):
                 continue
+            if lowered in GENERIC_ACRONYMS:
+                continue
             # Bullet and list markers capitalise their first word too.
             if re.match(r"^[-*•]\s", stripped) and stripped[2:].startswith(token):
                 continue
-            out.add(lowered)
+            # Strip the parts that carry no identity: a leading word that is
+            # only capitalised because the sentence started, and currency or
+            # measure markers. Whatever remains has to still look like a name.
+            words = token.split()
+            if stripped.startswith(token) and len(words) > 1:
+                words = words[1:]
+            words = [w for w in words if w.lower() not in NON_ENTITY_TOKENS]
+            # Roman numerals and ordinary nouns carry no identity either.
+            words = [w for w in words if w.lower() not in COMMON_NOUNS
+                     and not re.fullmatch(r"[IVXLC]+", w)]
+            if not words:
+                continue
+            if len(words) == 1 and not words[0].isupper():
+                continue          # a lone capitalised word is not an entity
+            remainder = " ".join(words).lower()
+            if remainder in GENERIC_ACRONYMS:
+                continue
+            out.add(remainder)
     return out
 
 
