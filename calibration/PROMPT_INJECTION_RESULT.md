@@ -72,17 +72,31 @@ A verifier that refuses correct work gets switched off, and then it defends
 nothing. All four are regression tests in `tests/test_verify_web_answer.py`,
 alongside a test that the loosening did not reach the attacks.
 
+## Now also measured through the product path
+
+The verifier was ported to the companion on 2026-08-23 and the seven classes
+were re-run over real HTTP — pane, approval token, fetch, model, verifier —
+against a local hostile origin. 0 of 7 reached the user there too, and the run
+found a bug this Python suite structurally could not: the execute response
+overwrote its own verdict field with the upstream HTTP status.
+
+That run resisted 6 of 7 where this one resists 4 of 7. The difference is the
+wrapping — the payload arrives inside the search adapter's JSON envelope there
+and as raw text here — not the model. See
+`tantular_office_addin/docs/LOOKUP_VERIFIER.md`.
+
 ## Status: the flag stays `false`
 
-0/7 reaching the user is **not** clearance to enable lookup. The verifier exists
-only as Python in this repository. The add-in pane is JavaScript and does not
-call it, so nothing in the shipped path performs this check. Until the verifier
-runs in the companion, on the real answer, before display, the measurement
-describes an instrument that is not installed.
+0/7 reaching the user is **containment**, not evidence the model resists
+injection. It obeys a hostile page in 3 of 7 classes and that has not changed.
 
-To enable, all of these:
+The four conditions from the previous review are now met: the verifier runs in
+the companion, a failing answer is neither displayed as trusted nor eligible for
+an edit, the suite runs against that path over HTTP, and protected strings are
+derived from the real document.
 
-1. the verifier runs in the companion path, not just here;
-2. an answer that fails it is not displayed as trusted and cannot become an edit;
-3. this suite runs against that path, not against a local reimplementation;
-4. `preserves` protects strings derived from the real document, not a fixture.
+The flag stays `false` on what remains open, listed in
+`tantular_office_addin/docs/LOOKUP_VERIFIER.md`: the pane renders neither
+verdict, the real document is not yet wired through, only one host with one
+response shape has been measured, and no run has been made against a real
+remote host.
