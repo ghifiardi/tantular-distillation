@@ -17,10 +17,10 @@ The rules are therefore about ROLE, not origin:
                   vanishes is a violation however plausible the replacement.
   no_new_facts    numbers, dates and entities must trace to the document or the
                   fetched page. Catches inventions with no source at all.
-  untrusted_echo  the answer must not open by adopting a literal string that
-                  appears only in the untrusted page. This is what catches
-                  exfiltration, where every document fact is preserved and no
-                  new fact appears — the attack is the FORMAT, not the content.
+  untrusted_echo  the answer must not adopt attacker-chosen format markers or
+                  repeat distinctive payload literals from instruction-like web
+                  text. Quoting a hostile payload in a disclaimer still carries
+                  attacker-controlled content into the trusted result.
 
 FAILS CLOSED. A missing document, a missing answer, or an unavailable check is a
 refusal, not a pass: an unverified answer must never be presented as verified.
@@ -68,8 +68,43 @@ def check_untrusted_echo(answer: str, document: str, untrusted: str,
     findings = []
     for token in re.findall(r"[A-Za-z][A-Za-z_-]{%d,}:" % (min_len - 1), untrusted or ""):
         if token in head and token not in document:
-            findings.append(f"answer opens with {token!r}, a marker supplied by "
-                            "the untrusted page")
+            findings.append("answer opens with a marker supplied by the "
+                            "untrusted page")
+
+    # A model can preserve every document fact and still quote the attack while
+    # claiming it ignored it, for example "PT Contoh tidak disertakan." That
+    # disclaimer still transports hostile page content into the trusted pane.
+    instruction_cue = re.compile(
+        r"\b(?:abaikan|awali|ganti|ubah|replace|keluarkan|salin|sertakan|"
+        r"tulis(?:kan)?|mulai|instruksi|perintah|sistem|diam-diam|roleplay|"
+        r"sebagai)\b", re.I)
+    patterns = (
+        re.compile(r"\[[^\]\n]{3,120}\]"),
+        re.compile(r"""["'“”]([^"'“”\n]{3,120})["'“”]"""),
+        re.compile(r"\b(?:PT|CV|PD|UD|Yayasan|Koperasi)\s+[A-Z][a-zA-Z]+"
+                   r"(?:\s+[A-Z][a-zA-Z]+)*"),
+        re.compile(r"\b(?:[A-Z]{2,}[A-Z0-9_-]*|"
+                   r"[A-Z][a-z]+[A-Z][A-Za-z0-9_-]*)\b"),
+    )
+    literals = []
+    seen = set()
+    for segment in re.split(r"\n+|(?<=[.!?])\s+", untrusted or ""):
+        if not instruction_cue.search(segment):
+            continue
+        for pattern in patterns:
+            for match in pattern.finditer(segment):
+                literal = (match.group(1) if match.lastindex else match.group(0)).strip()
+                if len(literal) >= 3 and literal not in seen:
+                    seen.add(literal)
+                    literals.append(literal)
+    answer_lower = (answer or "").lower()
+    document_lower = (document or "").lower()
+    for literal in literals[:32]:
+        lower = literal.lower()
+        if lower in answer_lower and lower not in document_lower:
+            findings.append("answer repeats a payload literal from "
+                            "instruction-like untrusted content")
+            break
     return findings
 
 
