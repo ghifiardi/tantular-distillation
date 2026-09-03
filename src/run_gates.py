@@ -128,8 +128,8 @@ def verify_served_model(expect: str, host: str, teacher: str) -> dict:
     except Exception as e:
         fail(f"cannot reach {url} to verify model identity: {e}")
 
-    if not any(expect == s or expect.split("/")[-1].lower() in str(s).lower()
-               for s in served):
+    from model_ids import any_match
+    if not any_match(expect, served):
         fail(f"the endpoint is NOT serving the model the config names.\n"
              f"  config base_model : {expect}\n"
              f"  endpoint serves   : {served}\n"
@@ -146,6 +146,15 @@ def requested_model_id(args) -> str:
     if args.stage == "after":
         return args.adapter_model_id
     return args.expect_model or args.teacher or ""
+
+
+def stop_args(spec: dict) -> list[str]:
+    values = spec.get("stop_sequences") or []
+    if not isinstance(values, list) or not all(
+        isinstance(value, str) and value for value in values
+    ):
+        fail("gate stop_sequences must be a list of non-empty strings")
+    return [part for value in values for part in ("--stop", value)]
 
 
 ADAPTER_REQUIRED_FILES = ("adapter_config.json",)
@@ -345,7 +354,8 @@ def gate_indonesian_voice(spec: dict, stage: str, args, out_dir: Path) -> dict:
         cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
                "--teacher", args.teacher, "--host", args.host,
                "--model-id", requested_model_id(args), "--eval-prompts", "--protocol", "chat",
-               "--prompts", str(items), "--out", str(traces), "--resume"]
+               "--prompts", str(items), "--out", str(traces), "--resume",
+               *stop_args(spec)]
         print(f"  generating {stage} answers from {requested_model_id(args)} "
               f"-> {traces.name}")
         proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -490,7 +500,8 @@ def gate_edit_contract_output(spec: dict, stage: str, args, out_dir: Path) -> di
         cmd = [PY, str(ROOT / "src" / "generate_normalized.py"),
                "--teacher", args.teacher, "--host", args.host,
                "--model-id", requested_model_id(args), "--eval-prompts", "--protocol", "chat",
-               "--prompts", str(items), "--out", str(traces_path), "--resume"]
+               "--prompts", str(items), "--out", str(traces_path), "--resume",
+               *stop_args(spec)]
         print(f"  generating {stage} edit answers -> {traces_path.name}")
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
@@ -542,11 +553,27 @@ GATES = {"indonesian_voice": gate_indonesian_voice,
 
 # --- commands ---------------------------------------------------------------
 
+def load_gate_config(config: Path) -> tuple[dict, dict | None]:
+    """Gate definitions, resolved by the shared loader and refused in this
+    module's own voice.
+
+    The resolution itself lives in src/gate_config.py because the run freezer
+    needs the same answer and must not import a CLI module to get it.
+    """
+    import gate_config
+
+    try:
+        return gate_config.load_gate_config(config)
+    except gate_config.GateConfigError as exc:
+        fail(str(exc))
+        raise                                  # unreachable; fail() exits
+
+
 def cmd_run(args) -> None:
     config = Path(args.config)
     if not config.is_file():
         fail(f"config missing: {config}")
-    cfg = yaml.safe_load(config.read_text())
+    cfg, shared_evaluation = load_gate_config(config)
     specs = cfg.get("eval_gates") or []
     if not specs:
         fail("config declares no eval_gates")
@@ -605,6 +632,10 @@ def cmd_run(args) -> None:
         if result["model_dependent"]:
             result["generated_by_model_id"] = requested_model_id(args)
             result["from_fixtures"] = bool(args.traces or args.edit_traces)
+            # Stop sequences change what the model is recorded as having said,
+            # so they belong in the report alongside the model id rather than
+            # only in the config that produced them.
+            result["stop_sequences"] = list(spec.get("stop_sequences") or [])
         result["status"] = (
             ("MET_TARGET" if result["passed"] else "BASELINE_BELOW_TARGET")
             if args.stage == "before" else
@@ -617,8 +648,13 @@ def cmd_run(args) -> None:
     report = {
         "stage": args.stage,
         "config": {"path": str(config), "sha256": digest_file(config)},
+        "shared_evaluation_config": shared_evaluation,
         "model": {"teacher": args.teacher, "host": args.host,
-                  "expected": args.expect_model, "identity": model_identity},
+                  # Fixture runs do not need a live --expect-model argument,
+                  # but their reports still need the config's exact base id so
+                  # before/after comparison cannot accept a cross-model pair.
+                  "expected": args.expect_model or cfg.get("base_model"),
+                  "identity": model_identity},
         "adapter": {"path": str(adapter) if adapter else None,
                     "sha256": digest_tree(adapter) if adapter else None,
                     "model_id": args.adapter_model_id,
@@ -689,6 +725,16 @@ def cmd_compare(args) -> None:
     if b["config"]["sha256"] != a["config"]["sha256"]:
         fail("before and after ran against DIFFERENT configs — the comparison "
              "would attribute a config change to the adapter")
+    if b.get("shared_evaluation_config") != a.get("shared_evaluation_config"):
+        fail("before and after used DIFFERENT shared evaluation configs")
+    before_model = (b.get("model") or {}).get("expected")
+    after_model = (a.get("model") or {}).get("expected")
+    if not before_model or before_model != after_model:
+        fail(
+            "before and after expected DIFFERENT base model identities.\n"
+            f"  before {before_model!r}\n"
+            f"  after  {after_model!r}"
+        )
     if a["adapter"]["sha256"] is None:
         fail("the 'after' report has no adapter — nothing was trained to compare")
 
@@ -725,12 +771,63 @@ def cmd_compare(args) -> None:
     print(f"  adapter {a['adapter']['path']}  {a['adapter']['sha256'][:16]}…\n")
     print(f"  {'gate':<24}{'before':>9}{'after':>9}{'delta':>9}   verdict")
 
+    # Gate SETS must match, not merely be a subset in one direction. Checking
+    # only "after ⊆ before" lets a failing gate be deleted from the after report:
+    # every surviving gate then passes and never regresses, and the comparison
+    # prints PROMOTABLE for a run whose worst result was removed. Silence is not
+    # a pass, so an absent gate is an abort.
+    for label, report in (("before", b), ("after", a)):
+        names = [g.get("name") for g in report["gates"]]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            fail(f"the '{label}' report lists duplicate gate(s): "
+                 f"{', '.join(str(d) for d in duplicates)}.\nOne name must mean "
+                 "one measurement, or a delta is ambiguous.")
+    before_names = {g["name"] for g in b["gates"]}
+    after_names = {g["name"] for g in a["gates"]}
+    if before_names != after_names:
+        missing = sorted(before_names - after_names)
+        added = sorted(after_names - before_names)
+        detail = []
+        if missing:
+            detail.append("missing from after: " + ", ".join(missing))
+        if added:
+            detail.append("present only in after: " + ", ".join(added))
+        fail("before and after measured DIFFERENT gate sets — "
+             + "; ".join(detail)
+             + ".\nA gate dropped from the after report cannot regress and "
+               "cannot fail, so the comparison would report a promotable "
+               "adapter on an incomplete evaluation.")
+
+    # And both must match what the config DECLARES, so that dropping the same
+    # gate from both reports is caught too.
+    config_path = Path(a["config"]["path"])
+    if not config_path.is_absolute():
+        config_path = ROOT / config_path
+    if not config_path.is_file():
+        fail(f"the config both reports name is missing: {config_path}.\n"
+             "Gate-set completeness cannot be verified without it.")
+    if digest_file(config_path) != a["config"]["sha256"]:
+        fail(f"{config_path} changed since the reports were written.\n"
+             "Refresh the runs; do not compare against a config that moved.")
+    declared_cfg, _ = load_gate_config(config_path)
+    declared = {g["name"] for g in declared_cfg.get("eval_gates") or []}
+    if declared and declared != after_names:
+        fail("the reports do not cover every gate the config declares — "
+             f"declared {sorted(declared)}, measured {sorted(after_names)}.")
+
     bg = {g["name"]: g for g in b["gates"]}
     regressed, uninformative = [], []
     for g in a["gates"]:
         prev = bg.get(g["name"])
         if prev is None:
             fail(f"gate '{g['name']}' present after but not before")
+        if g["model_dependent"] and \
+                g.get("stop_sequences") != prev.get("stop_sequences"):
+            fail(f"gate '{g['name']}' used different stop sequences before and "
+                 f"after: {prev.get('stop_sequences')!r} vs "
+                 f"{g.get('stop_sequences')!r}.\nDifferent truncation rules "
+                 "produce different answers from the same model.")
         delta = g["rate"] - prev["rate"]
         verdict = "REGRESSED" if delta < 0 else ("same" if delta == 0 else "improved")
         if delta < 0:

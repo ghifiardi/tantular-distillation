@@ -352,6 +352,21 @@ def test_identity_rejects_the_teacher_endpoint(monkeypatch):
     assert e.value.code == 2
 
 
+def test_identity_does_not_confuse_instruct_with_base(monkeypatch):
+    """Qwen3.5-9B must not match the longer Qwen3.5-9B-Base id."""
+    with pytest.raises(SystemExit) as e:
+        _identity(monkeypatch, "Qwen/Qwen3.5-9B",
+                  ["Qwen/Qwen3.5-9B-Base"])
+    assert e.value.code == 2
+
+
+def test_identity_does_not_confuse_base_with_instruct(monkeypatch):
+    with pytest.raises(SystemExit) as e:
+        _identity(monkeypatch, "Qwen/Qwen3.5-9B-Base",
+                  ["Qwen/Qwen3.5-9B"])
+    assert e.value.code == 2
+
+
 # --- training host: ai19 is production, and must refuse to train ------------
 #
 # ai19 backs the openai.ina17.com gateway and a face_ai_service. Its config used
@@ -628,6 +643,38 @@ def test_compare_refuses_an_after_report_generated_from_the_base(config, tmp_pat
                           cwd=ROOT)
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "not from the adapter id" in proc.stderr
+
+
+def test_compare_refuses_different_expected_base_models(config, tmp_path):
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+    doctored = json.loads(after.read_text())
+    doctored["model"]["expected"] = "Qwen/Qwen3.5-9B-Base"
+    after.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "DIFFERENT base model identities" in proc.stderr
+
+
+def test_compare_refuses_different_shared_evaluation_config(config, tmp_path):
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+    doctored = json.loads(after.read_text())
+    doctored["shared_evaluation_config"] = {
+        "path": "other.yaml", "sha256": "0" * 64,
+    }
+    after.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "DIFFERENT shared evaluation configs" in proc.stderr
 
 
 def test_compare_refuses_an_after_report_with_only_a_digest(config, tmp_path):
@@ -1025,3 +1072,84 @@ def test_rejected_thinking_control_aborts_instead_of_falling_back():
     assert len(client.sent) == 1, (
         f"made {len(client.sent)} requests; a rejected thinking-control request "
         "must not be retried at all")
+
+
+def test_compare_refuses_different_stop_sequences(config, tmp_path):
+    """Different truncation rules make the same model look different."""
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+    doctored = json.loads(after.read_text())
+    for gate in doctored["gates"]:
+        if gate["model_dependent"]:
+            gate["stop_sequences"] = ["\n\nUser:"]
+    after.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "different stop sequences" in proc.stderr
+
+
+def test_model_dependent_gate_reports_record_their_stop_sequences(config, tmp_path):
+    before = tmp_path / "before.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    report = json.loads(before.read_text())
+    recorded = [g for g in report["gates"] if g["model_dependent"]]
+    assert recorded
+    for gate in recorded:
+        assert gate["stop_sequences"] == []
+
+
+def test_compare_refuses_an_after_report_missing_a_before_gate(config, tmp_path):
+    """Deleting a FAILING gate from the after report printed PROMOTABLE."""
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+
+    doctored = json.loads(after.read_text())
+    dropped = doctored["gates"].pop()
+    after.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "DIFFERENT gate sets" in proc.stderr
+    assert dropped["name"] in proc.stderr
+    assert "PROMOTABLE" not in proc.stdout
+
+
+def test_compare_refuses_an_after_gate_absent_from_before(config, tmp_path):
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+
+    doctored = json.loads(before.read_text())
+    doctored["gates"].pop()
+    before.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "PROMOTABLE" not in proc.stdout
+
+
+@pytest.mark.parametrize("side", ["before", "after"])
+def test_compare_refuses_duplicate_gate_names(config, tmp_path, side):
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    run(config, before, write_traces(tmp_path / "b.jsonl", 3))
+    run(config, after, write_traces(tmp_path / "a.jsonl", 0), stage="after",
+        adapter=make_adapter(tmp_path / "a"))
+
+    target = before if side == "before" else after
+    doctored = json.loads(target.read_text())
+    doctored["gates"].append(dict(doctored["gates"][0]))
+    target.write_text(json.dumps(doctored))
+    proc = subprocess.run([PY, RUNNER, "compare", "--before", str(before),
+                           "--after", str(after)], capture_output=True, text=True,
+                          cwd=ROOT)
+    assert proc.returncode == 2
+    assert "duplicate gate(s)" in proc.stderr

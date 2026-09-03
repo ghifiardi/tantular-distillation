@@ -259,15 +259,20 @@ def tinker_backend_snapshot(config_path: Path) -> dict:
 def declared_gate_specs(config_path: Path) -> list[dict]:
     """The gates the digest-pinned shared evaluation config declares.
 
-    Resolved through run_gates.load_gate_config so the freezer and the gate
-    runner read one definition, including the inherited stop sequences.
+    Resolved through src/gate_config.py, the same loader src/run_gates.py uses,
+    so the freezer records the gates the runner will actually execute —
+    including the inherited stop sequences. The loader is deliberately not the
+    gate runner: a freeze must not depend on a CLI module to answer a
+    configuration question.
     """
     sys.path.insert(0, str(ROOT / "src"))
-    import run_gates
+    import gate_config
 
-    effective, _shared = run_gates.load_gate_config(config_path)
-    return [spec for spec in (effective.get("eval_gates") or [])
-            if isinstance(spec, dict) and spec.get("name")]
+    try:
+        return gate_config.declared_gate_specs(config_path)
+    except gate_config.GateConfigError as exc:
+        sys.exit(f"cannot resolve the gates {config_path} declares: {exc}\n"
+                 "Refusing to freeze a run whose gate definitions cannot be read.")
 
 
 def baseline_snapshot(path: Path, config_path: Path, base_model: str) -> dict:
