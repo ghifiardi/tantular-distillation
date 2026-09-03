@@ -62,9 +62,9 @@ def doctor(source: Path, out: Path, edit) -> Path:
     return out
 
 
-def test_freeze_v2_pins_promotion_outputs_and_failed_gate(valid_freeze):
+def test_freeze_v4_pins_promotion_outputs_and_failed_gate(valid_freeze):
     payload = json.loads(valid_freeze.read_text())
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 4
     assert payload["promotion_manifest"]["sha256"]
     assert payload["promotion_manifest"]["promoted"]["train"]["traces"] == 136
     assert payload["promotion_manifest"]["promoted"]["eval"]["traces"] == 47
@@ -80,12 +80,12 @@ def test_checked_in_v1_freeze_is_current_and_accepted():
     proc = subprocess.run([PY, TRAINER, "--dry-run"],
                           capture_output=True, text=True, cwd=ROOT)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "schema             2" in proc.stdout
+    assert "schema             4" in proc.stdout
     assert "waiver verified" in proc.stdout
     assert "DRY RUN OK" in proc.stdout
 
 
-def test_valid_v2_freeze_allows_complete_cpu_dry_run(valid_freeze):
+def test_valid_v4_freeze_allows_complete_cpu_dry_run(valid_freeze):
     proc = run_trainer(valid_freeze)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "waiver verified" in proc.stdout
@@ -209,3 +209,86 @@ def test_freezer_refuses_failed_gate_without_waiver(tmp_path):
     proc = freeze(tmp_path / "RUN.json", waiver=None)
     assert proc.returncode != 0
     assert "gate FAILED and no --waiver" in proc.stdout + proc.stderr
+
+
+# --- v4: the corpus audit is recorded, not remembered -----------------------
+
+def test_freeze_records_the_provenance_audit(valid_freeze):
+    """Six months on, "why can this checkpoint not claim FP8?" has to be
+    answerable from the manifest rather than from anyone's memory."""
+    audit = json.loads(valid_freeze.read_text())["provenance_audit"]
+
+    assert audit["fp8_gate"]["status"] == "UNMET"
+    assert audit["fp8_gate"]["untrainable_quantizations"] == {"int4_ollama": 260}
+    assert audit["source_classes"] == {"synthetic": 260}
+    assert audit["license_freshness"]["resolved"][0]["registry_model"] == "muse-glimmer-30b"
+    # Freshness is measured against the freeze date, not the clock. This fixture
+    # freezes at 2026-08-19 while the registry entry was reviewed on 2026-09-03,
+    # so the review is in the FUTURE relative to the freeze.
+    assert audit["as_of_date"] == "2026-08-19"
+    resolved = audit["license_freshness"]["resolved"][0]
+    assert resolved["age_days"] == -15
+    assert resolved["status"] == "UNKNOWN", (
+        "a review dated after the freeze is a data error, not freshness; a "
+        "negative age would otherwise pass `age > max_age` forever")
+    assert audit["identity_verification"] == {
+        "all_verified": False, "unverified_models": ["muse-glimmer-30b"]}
+    assert audit["trainable_as_is"] is False
+    # Stated inside the block, not left to be inferred from its absence.
+    assert audit["authorizes_training"] is False
+
+
+def test_the_audit_does_not_change_what_the_gate_decides(valid_freeze):
+    """Additive evidence only: the recorded verdict is still the gate's."""
+    payload = json.loads(valid_freeze.read_text())
+    assert payload["gate"]["exit_code"] == 1
+    assert payload["gate"]["verdict"] == "FAILED"
+    assert payload["provenance_audit"]["fp8_gate"]["status"] == "UNMET"
+
+
+def test_an_unparseable_frozen_at_refuses_rather_than_dating_from_the_clock(tmp_path):
+    out = tmp_path / "RUN.json"
+    proc = subprocess.run(
+        [PY, FREEZER, "--corpus", str(CORPUS), "--config", str(CONFIG),
+         "--promotion-manifest", str(PROMOTION), "--waiver", str(WAIVER),
+         "--out", str(out), "--frozen-at", "sometime in August", "--write"],
+        capture_output=True, text=True, cwd=ROOT)
+    assert proc.returncode != 0
+    assert "ISO date" in proc.stdout + proc.stderr
+    assert not out.exists()
+
+
+def test_the_checked_in_freeze_is_dated_when_it_was_actually_made():
+    """A schema-4 manifest written on 2026-09-03 must not claim an August
+    freeze. The historical August freeze is preserved separately, byte for
+    byte, at train/archive/RUN_MANIFEST.v1.schema-2.json — backdating this one
+    to match it would put a false date on a new artifact."""
+    payload = json.loads((ROOT / "train" / "RUN_MANIFEST.v1.json").read_text())
+    audit = payload["provenance_audit"]
+
+    assert payload["schema_version"] == 4
+    assert payload["frozen_at"].startswith("2026-09-03")
+    assert audit["as_of_date"] == "2026-09-03"
+
+    resolved = audit["license_freshness"]["resolved"][0]
+    assert resolved["reviewed_at"] == "2026-09-03"
+    assert resolved["age_days"] == 0, "the licence review is same-day, not -15"
+    assert resolved["status"] == "FRESH"
+
+    # Still not trainable, and for the honest reasons.
+    assert audit["fp8_gate"]["status"] == "UNMET"
+    assert audit["source_classes"] == {"synthetic": 260}
+    assert audit["identity_verification"]["all_verified"] is False
+    assert audit["trainable_as_is"] is False
+    assert audit["authorizes_training"] is False
+
+
+def test_the_archived_schema_2_freeze_still_holds_the_august_record():
+    archived = json.loads(
+        (ROOT / "train" / "archive" / "RUN_MANIFEST.v1.schema-2.json").read_text())
+    assert archived["schema_version"] == 2
+    assert archived["frozen_at"].startswith("2026-08-20")
+    assert "provenance_audit" not in archived
+    # The failed gate it recorded is preserved, not tidied away.
+    assert archived["gate"]["exit_code"] == 1
+    assert archived["gate"]["verdict"] == "FAILED"

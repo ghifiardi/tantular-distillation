@@ -1,0 +1,8 @@
+# TINKER CLIENT dependencies.  Install in a dedicated Python 3.12 environment
+# on the machine that prepares/submits the managed run.  The GPUs are managed
+# by Tinker; these packages are not a replacement for requirements-train.txt.
+#
+# Resolved from PyPI and the official cookbook on 2026-08-29.  Runtime code
+# asserts these exact top-level versions before any Tinker API client is made.
+tinker==0.26.1
+tinker-cookbook==0.5.5

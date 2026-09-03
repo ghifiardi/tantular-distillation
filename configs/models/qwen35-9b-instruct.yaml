@@ -1,0 +1,51 @@
+# The STUDENT the product runs today (instruct). DRAFT registry entry.
+# Identity only; hardware is in configs/hosts/, LoRA layout in
+# configs/architectures/. Mirrors configs/teachers/office-student-9b.yaml.
+schema_version: 1
+
+model_id: Qwen/Qwen3.5-9B
+revision: REPLACE_WITH_PINNED_HUB_COMMIT
+role: student
+family: qwen3.5
+generation: "3.5"
+
+modality:
+  text: true
+  vision: true            # Qwen3.5 is a unified VL foundation
+
+params:
+  total_b: 9.0
+  active_b: null
+  vision_b: null          # unknown -> memory estimates flagged INCOMPLETE
+
+tokenizer:
+  model_id: Qwen/Qwen3.5-9B
+  revision: REPLACE_WITH_PINNED_HUB_COMMIT
+  sha256: TOKENIZER_DIGEST_QWEN35_9B    # compatibility key (placeholder)
+
+chat_template:
+  source: model
+  path: null
+  sha256: CHAT_TEMPLATE_DIGEST_QWEN35_9B
+
+architecture_profile: qwen35-hybrid-dense-9b
+
+# The SERVING config for this same checkpoint (port, repo per precision,
+# sampling), which src/config.py resolves for the gates. This file owns
+# IDENTITY; that one owns how it is served. src/distill_plan.py refuses to plan
+# while the two disagree about which checkpoint they mean — the link is checked,
+# not assumed.
+serving_config: office-student-9b
+
+capabilities:
+  tools: true
+  logprobs: true
+
+license:
+  identifier: apache-2.0
+  output_training_permitted: true
+  reviewed_at: 2026-09-03
+  recheck_max_age_days: 180
+  evidence_sha256: LICENSE_EVIDENCE_DIGEST_QWEN35_9B
+
+digests_verified: false

@@ -10,6 +10,11 @@
 # that capability is Tantular's own and distilling over it loses ground.
 
 name: muse-glimmer
+
+# Identity — model_id, tokenizer/chat-template digests, licence freshness —
+# lives in the model registry; see the note in
+# configs/teachers/office-student-9b.yaml. This file says how it is SERVED.
+registry_model: muse-glimmer-30b
 # 8001 collides with the nginx that ships in RunPod's PyTorch template, which
 # even answers HTTP 200 on /v1/models. Measured 2026-08-18.
 port: 8010

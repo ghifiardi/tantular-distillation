@@ -1,0 +1,46 @@
+# An EXAMPLE larger teacher (not currently used). MoE: 122B total / ~10B active,
+# 48 layers, 256 experts (8 routed + 1 shared). A3B/A10B is active compute, not
+# resident memory: all experts stay resident. DRAFT registry entry.
+schema_version: 1
+
+model_id: Qwen/Qwen3.5-122B-A10B
+revision: REPLACE_WITH_PINNED_HUB_COMMIT
+role: teacher
+family: qwen3.5
+generation: "3.5"
+
+modality:
+  text: true
+  vision: true
+
+params:
+  total_b: 122.0        # all experts resident -> size memory on this, not active_b
+  active_b: 10.0
+  vision_b: null        # vision tower unaccounted -> estimate INCOMPLETE
+
+tokenizer:
+  model_id: Qwen/Qwen3.5-122B-A10B
+  revision: REPLACE_WITH_PINNED_HUB_COMMIT
+  sha256: TOKENIZER_DIGEST_QWEN35_122B   # may or may not equal the 9B student's
+
+chat_template:
+  source: model
+  path: null
+  sha256: CHAT_TEMPLATE_DIGEST_QWEN35_122B
+
+architecture_profile: null
+
+capabilities:
+  tools: true
+  logprobs: true
+
+license:
+  # Apache 2.0 held across 3.5/3.6 and STOPPED at the 3.8 flagship. Re-review
+  # per checkpoint; do not inherit a family-level assumption.
+  identifier: apache-2.0
+  output_training_permitted: true
+  reviewed_at: 2026-09-03
+  recheck_max_age_days: 180
+  evidence_sha256: LICENSE_EVIDENCE_DIGEST_QWEN35_122B
+
+digests_verified: false

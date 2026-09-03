@@ -1,0 +1,22 @@
+# Baseline identity for the Tinker SFT experiment.
+#
+# This is deliberately separate from office-student-9b.yaml.  Qwen3.5-9B-Base
+# and Qwen3.5-9B are different checkpoints; comparing a Base-trained adapter
+# against an instruct-model baseline would repeat the teacher-vs-student class
+# of identity error that the gate runner already refuses.
+name: office-student-9b-base
+served_model_name: Qwen/Qwen3.5-9B-Base
+license: apache-2.0
+port: 8020
+repos:
+  bf16: Qwen/Qwen3.5-9B-Base
+tokenizer: Qwen/Qwen3.5-9B-Base
+# vLLM's chat endpoint must render the same RoleColon format used by Tinker.
+# Without this explicit template, the Base tokenizer may have no chat template
+# or may apply a different one, making the product-path gates meaningless.
+chat_template: templates/role_colon.jinja
+sampling:
+  temperature: 0.0
+  max_tokens: 4096
+  stop:
+    - "\n\nUser:"

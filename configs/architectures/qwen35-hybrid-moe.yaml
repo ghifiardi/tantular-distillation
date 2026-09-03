@@ -1,0 +1,39 @@
+# Architecture profile for a hybrid MoE checkpoint (e.g. 122B-A10B: 48 layers,
+# 256 experts = 8 routed + 1 shared). A 48-layer 256-expert block CANNOT inherit
+# the 9B's 32-layer target list. DRAFT / illustrative; verify before use.
+schema_version: 1
+name: qwen35-hybrid-moe
+model_type: qwen3_5_moe
+
+expected:
+  layers: 48
+  # 12 x (3 x (Gated DeltaNet -> MoE) -> 1 x (Gated Attention -> MoE))
+  layer_pattern: [linear_attention, linear_attention, linear_attention, full_attention]
+  layer_pattern_repeat: 12
+  experts_total: 256
+  experts_routed: 8
+  experts_shared: 1
+signature: ARCH_SIGNATURE_QWEN35_MOE   # placeholder; fill from real config.json
+
+lora_targets:
+  full_attention: [q_proj, k_proj, v_proj, o_proj]
+  linear_attention: [in_proj_qkv, in_proj_z, out_proj]
+  mlp: [gate_proj, up_proj, down_proj]
+
+# Expert LoRA is OPT-IN. Targeting all 256 experts' projections produces an
+# enormous adapter the serving runtime may not bind faithfully.
+experts:
+  target_experts: false
+  note: >-
+    Enable only with a measured parameter count and a proven vLLM bind, the same
+    way the 9B's 80,216,064 figure was verified on the smoke rental.
+
+excluded: [in_proj_a, in_proj_b, A_log, dt_bias]
+
+serving_adapter:
+  train_prefix: model.layers
+  vllm_prefix: model.language_model.layers
+
+mode_c:
+  eligible: true
+  targets_lm_head: false

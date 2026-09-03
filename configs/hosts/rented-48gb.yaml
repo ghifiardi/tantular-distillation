@@ -15,6 +15,9 @@ data_egress: external
 
 name: rented-48gb
 gpu: "1x RTX 6000 Ada / L40S 48GB"
+# Declared capacity for src/distill_plan.py (fail-closed if absent).
+gpu_memory_gb: 48
+gpu_count: 1
 tensor_parallel_size: 1
 quantization: fp8
 gpu_memory_utilization: 0.92

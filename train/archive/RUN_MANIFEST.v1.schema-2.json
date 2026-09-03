@@ -1,7 +1,7 @@
 {
-  "schema_version": 4,
+  "schema_version": 2,
   "_what": "The exact inputs and authorisation a training run started from. Written before training, never edited after.",
-  "frozen_at": "2026-09-03T00:00:00+07:00",
+  "frozen_at": "2026-08-20T10:15:05+07:00",
   "corpus": {
     "path": "data/v3-candidate/traces.r0.jsonl",
     "sha256": "1d16204ddc384fce1904a075c2dca2e5a9d50c5262f6fb1f56755a3280a757f2",
@@ -21,7 +21,7 @@
   },
   "training_config": {
     "path": "train/qlora_9b.yaml",
-    "sha256": "5feaba2650b87c51afb58c4ee2ce2abd8461a71698c6391e30acbbd37d873576"
+    "sha256": "41f303f1d687c933a1af5a2f5124381967b8a942ffd1fad3991051e215d88c0e"
   },
   "promotion_manifest": {
     "path": "train/RUN_MANIFEST.v1-mechanical.json",
@@ -61,75 +61,6 @@
   "waiver": {
     "path": "calibration/INT4_WAIVER.md",
     "sha256": "dd9725a5b5d940198289877fa98ca1f73fbad35c0f7a0091a4755f54affc7d18"
-  },
-  "provenance_audit": {
-    "corpus": "data/v3-candidate/traces.r0.jsonl",
-    "records": 260,
-    "teachers": {
-      "muse-glimmer": 260
-    },
-    "repos": {
-      "muse-glimmer:30b": 260
-    },
-    "quantizations": {
-      "int4_ollama": 260
-    },
-    "hosts": {
-      "ai19-ollama": 260
-    },
-    "licenses_recorded": {
-      "apache-2.0": 260
-    },
-    "source_classes": {
-      "synthetic": 260
-    },
-    "fp8_gate": {
-      "status": "UNMET",
-      "untrainable_quantizations": {
-        "int4_ollama": 260
-      },
-      "waiver_file_present": true,
-      "uncovered_by_waiver": {}
-    },
-    "real_office_claim": {
-      "supported": false,
-      "synthetic_traces": 260
-    },
-    "license_freshness": {
-      "resolved": [
-        {
-          "identifier": "apache-2.0",
-          "output_training_permitted": true,
-          "reviewed_at": "2026-09-03",
-          "age_days": 0,
-          "max_age_days": 180,
-          "evidence_present": true,
-          "status": "FRESH",
-          "reason": null,
-          "problems": [],
-          "registry_model": "muse-glimmer-30b",
-          "model_id": "meta-models/Muse-Glimmer-30B-assistant",
-          "digests_verified": false
-        }
-      ],
-      "unresolved_corpus_teachers": []
-    },
-    "identity_verification": {
-      "all_verified": false,
-      "unverified_models": [
-        "muse-glimmer-30b"
-      ]
-    },
-    "limits": [
-      "FP8 gate UNMET: 260 trace(s) from a quantized teacher {'int4_ollama': 260} \u2014 no FP8 claim may be made.",
-      "Quantized traces are within calibration/INT4_WAIVER.md scope; the waiver authorises proceeding DESPITE the failure \u2014 it does not convert it to a pass.",
-      "260/260 trace(s) are source_class: synthetic \u2014 supports NO claim about real Office documents.",
-      "Registry model 'muse-glimmer-30b' digests_verified is not true; tokenizer/template sha256 unverified."
-    ],
-    "trainable_as_is": false,
-    "authorizes_training": false,
-    "_what": "Mechanical limits of the corpus at freeze time. Additive evidence: it does not decide the gate, and it authorises nothing.",
-    "as_of_date": "2026-09-03"
   },
   "claims_this_run_may_NOT_support": [
     "Any statement about performance on real Office documents \u2014 the corpus is entirely source_class: synthetic.",

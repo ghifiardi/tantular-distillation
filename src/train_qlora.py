@@ -46,6 +46,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -57,7 +58,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = str(ROOT / ".venv" / "bin" / "python")
-RUN_MANIFEST_SCHEMA_VERSION = 2
+RUN_MANIFEST_SCHEMA_VERSION = 4   # v4 records provenance_audit
 REQUIRED_INT4_WAIVER = ROOT / "calibration" / "INT4_WAIVER.md"
 
 
@@ -180,7 +181,8 @@ def corpus_gate_errors(corpus: Path) -> list[str]:
 
 
 def check_run_freeze(run_manifest_path: Path, config_path: Path,
-                     promotion_manifest_path: Path) -> dict:
+                     promotion_manifest_path: Path, *,
+                     expected_schema_version: int = RUN_MANIFEST_SCHEMA_VERSION) -> dict:
     """Enforce the exact, versioned freeze before any endpoint or GPU work.
 
     A waiver does not turn the int4 gate into a pass. The expected shape is a
@@ -189,10 +191,10 @@ def check_run_freeze(run_manifest_path: Path, config_path: Path,
     """
     freeze = load_json(run_manifest_path, "run manifest")
     version = freeze.get("schema_version")
-    if version != RUN_MANIFEST_SCHEMA_VERSION:
+    if version != expected_schema_version:
         die(
             f"run manifest schema is stale or unsupported: {version!r}; expected "
-            f"{RUN_MANIFEST_SCHEMA_VERSION}.\n"
+            f"{expected_schema_version}.\n"
             "This freeze predates promotion-manifest enforcement. Re-run "
             "src/freeze_training_run.py after the training smoke test."
         )
@@ -421,6 +423,72 @@ def make_lora_config(config: dict):
     )
 
 
+SIGNATURE_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def load_architecture_profile(config: dict) -> tuple[str, dict]:
+    """The layer layout this config's LoRA target list was written for."""
+    name = config.get("architecture_profile")
+    if not name:
+        die("the training config declares no architecture_profile. The target "
+            "list below is written for ONE layer layout — 8 full-attention "
+            "layers of 32, split in_proj names — and means nothing against a "
+            "different checkpoint. Add architecture_profile: <name> naming a "
+            "file under configs/architectures/.")
+    path = ROOT / "configs" / "architectures" / f"{name}.yaml"
+    if not path.is_file():
+        available = sorted(p.stem for p in (ROOT / "configs" / "architectures").glob("*.yaml"))
+        die(f"no architecture profile {name!r} (have: {', '.join(available) or 'none'})")
+    profile = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(profile, dict):
+        die(f"{path} must be a mapping")
+    return name, profile
+
+
+def check_architecture_signature(model_config: dict, profile: dict,
+                                 profile_name: str) -> str:
+    """Abort unless the loaded model is the shape the profile pins.
+
+    Pure over dicts so it can be tested without loading a model. The signature
+    is recomputed here rather than trusted from the profile, and it is never
+    written back: pinning whatever happened to load would make the check agree
+    with itself.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import distill_plan
+
+    actual = distill_plan.architecture_signature(model_config)
+    expected = str(profile.get("signature") or "").strip()
+    if not SIGNATURE_RE.match(expected):
+        die(f"architecture profile {profile_name!r} has no pinned signature "
+            f"(found {expected!r}).\n"
+            f"The loaded model's signature is {actual}\n"
+            "Pin it from the real checkpoint, then re-run:\n"
+            "    ./.venv/bin/python src/distill_plan.py arch-signature "
+            "<snapshot>/config.json\n"
+            "This is not filled in automatically. A signature copied from the "
+            "model in front of you checks nothing.")
+    if actual != expected:
+        die(f"ARCHITECTURE MISMATCH — refusing to attach LoRA.\n"
+            f"  profile {profile_name!r} pins {expected}\n"
+            f"  loaded model computes    {actual}\n"
+            f"  loaded shape: {json.dumps(distill_plan.describe_architecture(model_config), sort_keys=True)}\n"
+            "The LoRA target list is written for the pinned layout. Against a "
+            "different one it can match zero modules in most layers and still "
+            "train, producing an adapter the serving path cannot faithfully "
+            "evaluate.")
+    print(f"\n=== ARCHITECTURE ===\n  profile {profile_name}\n"
+          f"  signature {actual}  (matches)")
+    return actual
+
+
+def verify_architecture_signature(model, config: dict) -> str:
+    """The same check against a loaded transformers model."""
+    name, profile = load_architecture_profile(config)
+    model_config = model.config.to_dict()
+    return check_architecture_signature(model_config, profile, name)
+
+
 def verify_target_module_coverage(model, targets: list[str]) -> dict[str, int]:
     """Prove every configured target exists before PEFT constructs an adapter.
 
@@ -554,6 +622,10 @@ def train(config: dict, run_dir: Path, args) -> Path:
             load_in_4bit=config.get("load_in_4bit", True),
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True))
+
+    # Before PEFT constructs anything: is this the checkpoint the target list
+    # was written for? A mismatch here is silent later.
+    verify_architecture_signature(model, config)
 
     targets = config["lora"]["target_modules"]
     verify_target_module_coverage(model, targets)
