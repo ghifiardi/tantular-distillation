@@ -163,3 +163,40 @@ def test_informal_replacement_fails_voice(tmp_path):
     answers["fce::0007"] = edits(("setting", "gak usah diatur", 1),
                                  ("backup", "pencadangan", 1))
     assert "voice" in failing(score(tmp_path, answers), "fce::0007")
+
+
+# --- hermeticity: scoring must not write inside the repository --------------
+
+def test_the_contract_checker_writes_its_cases_outside_the_repository(monkeypatch):
+    """Running the suite must leave the working tree clean.
+
+    The cases file used to be data/gates/fce/_cases.json — a fixed path INSIDE
+    the repo. So merely running the tests produced an untracked artifact, and a
+    clean checkout stopped being clean the moment it was verified. Worse, two
+    scorer runs shared that one path, so one could read the other's cases and
+    score against the wrong document.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import score_faithful_edit
+
+    seen: dict[str, Path] = {}
+    legacy = ROOT / "data" / "gates" / "fce" / "_cases.json"
+    legacy_before = legacy.exists()      # a leftover from before the fix is not
+                                         # this call's doing; only a NEW one is
+
+    def fake_run(cmd, **kwargs):
+        seen["cases"] = Path(cmd[2])
+        seen["existed_during_call"] = seen["cases"].is_file()
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({"results": []}), "")
+
+    monkeypatch.setattr(score_faithful_edit.subprocess, "run", fake_run)
+    score_faithful_edit.run_contract_checker([{"id": "a"}], ADDIN)
+
+    cases = seen["cases"]
+    assert seen["existed_during_call"], "the checker was handed a real file"
+    # The invariant: that file was never anywhere inside the repository.
+    assert ROOT not in cases.parents, f"{cases} is inside the working tree"
+    # And it does not outlive the call.
+    assert not cases.exists(), "the scratch directory was not cleaned up"
+    assert legacy.exists() == legacy_before, \
+        "the call recreated the old repository-local cases file"
