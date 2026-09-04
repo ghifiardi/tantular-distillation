@@ -1153,3 +1153,56 @@ def test_compare_refuses_duplicate_gate_names(config, tmp_path, side):
                           cwd=ROOT)
     assert proc.returncode == 2
     assert "duplicate gate(s)" in proc.stderr
+
+
+# --- the Node suite must not race itself ------------------------------------
+
+def test_the_node_suite_lock_serialises_across_processes(tmp_path):
+    """Two concurrent gate runs made the add-in bridge test hang for 300s.
+
+    The per-file loop already serialises inside one run; nothing stopped two
+    RUNS from colliding, and the CPU suite launches run_gates.py many times.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    with run_gates.node_suite_lock(suite):
+        proc = subprocess.run(
+            [PY, "-c",
+             "import sys; sys.path.insert(0, 'src'); import run_gates;\n"
+             "run_gates.NODE_SUITE_LOCK_TIMEOUT_S = 1\n"
+             f"ctx = run_gates.node_suite_lock(run_gates.Path({str(suite)!r}))\n"
+             "ctx.__enter__()"],
+            capture_output=True, text=True, cwd=ROOT,
+        )
+    # Waits rather than racing, and fails closed rather than waiting forever.
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "another gate run has held" in proc.stderr
+
+
+def test_the_node_suite_lock_is_released_and_reentrant_after_use(tmp_path):
+    """A lock that leaked would turn every later run into a 900s wait."""
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    for _ in range(3):
+        with run_gates.node_suite_lock(suite):
+            pass
+    with run_gates.node_suite_lock(suite):
+        pass
+
+
+def test_unrelated_suites_do_not_block_each_other(tmp_path):
+    """The lock is keyed on the suite path, so two checkouts run concurrently."""
+    sys.path.insert(0, str(ROOT / "src"))
+    import run_gates
+
+    first, second = tmp_path / "a", tmp_path / "b"
+    first.mkdir()
+    second.mkdir()
+    with run_gates.node_suite_lock(first), run_gates.node_suite_lock(second):
+        pass

@@ -63,6 +63,7 @@ worth having; only one of them gates the adapter.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import subprocess
@@ -156,6 +157,8 @@ def stop_args(spec: dict) -> list[str]:
         fail("gate stop_sequences must be a list of non-empty strings")
     return [part for value in values for part in ("--stop", value)]
 
+
+NODE_SUITE_LOCK_TIMEOUT_S = 900
 
 ADAPTER_REQUIRED_FILES = ("adapter_config.json",)
 ADAPTER_WEIGHT_FILES = ("adapter_model.safetensors", "adapter_model.bin")
@@ -384,6 +387,54 @@ def gate_indonesian_voice(spec: dict, stage: str, args, out_dir: Path) -> dict:
     }
 
 
+@contextlib.contextmanager
+def node_suite_lock(suite: Path):
+    """Serialise the add-in Node suite ACROSS processes, not just within one.
+
+    The per-file loop below already serialises inside a single gate run, for
+    the reason documented there: `node --test` in parallel makes the add-in's
+    bridge test miss its worker's fixed 300ms ready banner and hang until the
+    timeout. But nothing stopped TWO gate runs from doing it to each other, and
+    the CPU test suite launches run_gates.py as a subprocess many times. Any
+    concurrency — a stray earlier run, two developers, pytest-xdist — recreates
+    exactly the contention the comment below warns about, and it presents as a
+    300-second timeout in whichever run loses.
+
+    Observed 2026-08-29: two concurrent `node --test tantularClientStream` from
+    two run_gates processes; the same file passes alone in ~20s.
+
+    Keyed on the suite path so unrelated checkouts do not block each other.
+    """
+    import fcntl
+    import hashlib as _hashlib
+    import tempfile
+    import time
+
+    key = _hashlib.sha256(str(suite.resolve()).encode()).hexdigest()[:16]
+    lock_path = Path(tempfile.gettempdir()) / f"tantular-node-suite-{key}.lock"
+    handle = lock_path.open("a+")
+    deadline = time.monotonic() + NODE_SUITE_LOCK_TIMEOUT_S
+    while True:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            if time.monotonic() >= deadline:
+                handle.close()
+                fail(
+                    f"office_json_contract: another gate run has held "
+                    f"{lock_path} for {NODE_SUITE_LOCK_TIMEOUT_S}s.\n"
+                    "Running the add-in suite concurrently makes its bridge "
+                    "test hang, so this waits rather than racing — and fails "
+                    "closed rather than waiting forever. Find the other run."
+                )
+            time.sleep(0.25)
+    try:
+        yield
+    finally:
+        handle.close()
+
+
 def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> dict:
     suite = (ROOT / spec["source"]).resolve()
     if not suite.is_dir():
@@ -410,51 +461,52 @@ def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> di
     # runner reported anyway.
     per_file_timeout = int(spec.get("timeout_s", 300))
     total = passed = 0
-    for test_file in tests:
-        # start_new_session puts node in its OWN process group so a timeout can
-        # kill the WHOLE tree. The add-in's bridge test spawns a long-lived
-        # worker; subprocess timeouts kill only the direct child, and the
-        # orphaned worker then survives to contend with the next attempt. That
-        # is not hypothetical: two orphans from one timed-out gate made the
-        # following run's bridge test hang too, turning one failure into a
-        # cascade. Measured 2026-08-21.
-        try:
-            proc = subprocess.Popen(["node", "--test", str(test_file)],
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    text=True, cwd=project, start_new_session=True)
-        except FileNotFoundError:
-            fail("office_json_contract: node is not installed")
-        try:
-            stdout, stderr = proc.communicate(timeout=per_file_timeout)
-        except subprocess.TimeoutExpired:
-            import os as _os
-            import signal as _signal
+    with node_suite_lock(suite):
+        for test_file in tests:
+            # start_new_session puts node in its OWN process group so a timeout can
+            # kill the WHOLE tree. The add-in's bridge test spawns a long-lived
+            # worker; subprocess timeouts kill only the direct child, and the
+            # orphaned worker then survives to contend with the next attempt. That
+            # is not hypothetical: two orphans from one timed-out gate made the
+            # following run's bridge test hang too, turning one failure into a
+            # cascade. Measured 2026-08-21.
             try:
-                _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                proc.kill()
-            proc.communicate()
-            fail(f"office_json_contract: {test_file.name} did not finish in "
-                 f"{per_file_timeout}s. Failing closed rather than waiting: a "
-                 "gate that hangs yields no verdict and stalls the run.\n"
-                 "Its whole process group was killed, so nothing is left behind "
-                 "to interfere with the next attempt.")
-        proc = subprocess.CompletedProcess(proc.args, proc.returncode,
-                                           stdout, stderr)
-        out = proc.stdout + proc.stderr
-        if "# tests " not in out:
-            fail(f"office_json_contract: {test_file.name} produced no test "
-                 "summary — is node installed? failing closed rather than "
-                 "skipping")
+                proc = subprocess.Popen(["node", "--test", str(test_file)],
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        text=True, cwd=project, start_new_session=True)
+            except FileNotFoundError:
+                fail("office_json_contract: node is not installed")
+            try:
+                stdout, stderr = proc.communicate(timeout=per_file_timeout)
+            except subprocess.TimeoutExpired:
+                import os as _os
+                import signal as _signal
+                try:
+                    _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
+                proc.communicate()
+                fail(f"office_json_contract: {test_file.name} did not finish in "
+                     f"{per_file_timeout}s. Failing closed rather than waiting: a "
+                     "gate that hangs yields no verdict and stalls the run.\n"
+                     "Its whole process group was killed, so nothing is left behind "
+                     "to interfere with the next attempt.")
+            proc = subprocess.CompletedProcess(proc.args, proc.returncode,
+                                               stdout, stderr)
+            out = proc.stdout + proc.stderr
+            if "# tests " not in out:
+                fail(f"office_json_contract: {test_file.name} produced no test "
+                     "summary — is node installed? failing closed rather than "
+                     "skipping")
 
-        def field(key: str, text: str = out, name: str = test_file.name) -> int:
-            for line in text.splitlines():
-                if line.startswith(f"# {key} "):
-                    return int(line.split()[-1])
-            fail(f"office_json_contract: {name} summary missing '{key}'")
+            def field(key: str, text: str = out, name: str = test_file.name) -> int:
+                for line in text.splitlines():
+                    if line.startswith(f"# {key} "):
+                        return int(line.split()[-1])
+                fail(f"office_json_contract: {name} summary missing '{key}'")
 
-        total += field("tests")
-        passed += field("pass")
+            total += field("tests")
+            passed += field("pass")
     rate = passed / total if total else 0.0
     return {
         "name": "office_json_contract",
