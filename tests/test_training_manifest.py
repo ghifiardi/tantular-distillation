@@ -62,6 +62,7 @@ def doctor(source: Path, out: Path, edit) -> Path:
     return out
 
 
+@pytest.mark.requires_local_corpus
 def test_freeze_v4_pins_promotion_outputs_and_failed_gate(valid_freeze):
     payload = json.loads(valid_freeze.read_text())
     assert payload["schema_version"] == 4
@@ -76,6 +77,7 @@ def test_freeze_v4_pins_promotion_outputs_and_failed_gate(valid_freeze):
     assert payload["waiver"]["sha256"]
 
 
+@pytest.mark.requires_local_corpus
 def test_checked_in_v1_freeze_is_current_and_accepted():
     proc = subprocess.run([PY, TRAINER, "--dry-run"],
                           capture_output=True, text=True, cwd=ROOT)
@@ -85,6 +87,7 @@ def test_checked_in_v1_freeze_is_current_and_accepted():
     assert "DRY RUN OK" in proc.stdout
 
 
+@pytest.mark.requires_local_corpus
 def test_valid_v4_freeze_allows_complete_cpu_dry_run(valid_freeze):
     proc = run_trainer(valid_freeze)
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -92,6 +95,7 @@ def test_valid_v4_freeze_allows_complete_cpu_dry_run(valid_freeze):
     assert "DRY RUN OK" in proc.stdout
 
 
+@pytest.mark.requires_local_corpus
 def test_changed_config_is_refused_before_any_gate_or_gpu_work(tmp_path):
     config = tmp_path / "qlora.yaml"
     config.write_bytes(CONFIG.read_bytes())
@@ -105,6 +109,7 @@ def test_changed_config_is_refused_before_any_gate_or_gpu_work(tmp_path):
     assert "=== HELD-OUT VERIFICATION ===" not in proc.stdout
 
 
+@pytest.mark.requires_local_corpus
 def test_changed_promotion_manifest_is_refused(valid_freeze, tmp_path):
     promotion = tmp_path / "promotion.json"
     promotion.write_bytes(PROMOTION.read_bytes())
@@ -117,6 +122,7 @@ def test_changed_promotion_manifest_is_refused(valid_freeze, tmp_path):
     assert "promotion manifest is STALE or changed" in proc.stderr
 
 
+@pytest.mark.requires_local_corpus
 def test_doctored_promoted_snapshot_is_refused(valid_freeze, tmp_path):
     manifest = doctor(
         valid_freeze, tmp_path / "doctored.json",
@@ -128,6 +134,7 @@ def test_doctored_promoted_snapshot_is_refused(valid_freeze, tmp_path):
     assert "promoted train sha256 disagrees" in proc.stderr
 
 
+@pytest.mark.requires_local_corpus
 def test_failed_gate_without_waiver_is_refused(valid_freeze, tmp_path):
     manifest = doctor(
         valid_freeze, tmp_path / "no-waiver.json",
@@ -139,6 +146,7 @@ def test_failed_gate_without_waiver_is_refused(valid_freeze, tmp_path):
     assert "no signed waiver" in proc.stderr
 
 
+@pytest.mark.requires_local_corpus
 def test_changed_waiver_is_refused(valid_freeze, tmp_path):
     manifest = doctor(
         valid_freeze, tmp_path / "bad-waiver.json",
@@ -149,6 +157,7 @@ def test_changed_waiver_is_refused(valid_freeze, tmp_path):
     assert "signed waiver is STALE or changed" in proc.stderr
 
 
+@pytest.mark.requires_local_corpus
 def test_gate_verdict_cannot_turn_a_failure_into_a_pass(valid_freeze, tmp_path):
     manifest = doctor(
         valid_freeze, tmp_path / "false-pass.json",
@@ -159,6 +168,7 @@ def test_gate_verdict_cannot_turn_a_failure_into_a_pass(valid_freeze, tmp_path):
     assert "gate verdict contradicts its exit code" in proc.stderr
 
 
+@pytest.mark.requires_local_corpus
 def test_arbitrary_waiver_cannot_authorize_the_int4_failure(tmp_path):
     other = tmp_path / "OTHER_WAIVER.md"
     other.write_text(WAIVER.read_text())
@@ -167,6 +177,7 @@ def test_arbitrary_waiver_cannot_authorize_the_int4_failure(tmp_path):
     assert "requires the accepted waiver" in proc.stdout + proc.stderr
 
 
+@pytest.mark.requires_local_corpus
 def test_int4_waiver_cannot_authorize_an_unrelated_corpus_failure(tmp_path):
     corpus = tmp_path / "corpus.jsonl"
     rows = [json.loads(line) for line in CORPUS.read_text().splitlines()]
@@ -205,6 +216,7 @@ def test_malformed_run_manifest_fails_closed(tmp_path):
     assert "not readable JSON" in proc.stderr
 
 
+@pytest.mark.requires_local_corpus
 def test_freezer_refuses_failed_gate_without_waiver(tmp_path):
     proc = freeze(tmp_path / "RUN.json", waiver=None)
     assert proc.returncode != 0

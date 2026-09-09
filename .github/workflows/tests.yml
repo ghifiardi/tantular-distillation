@@ -1,0 +1,89 @@
+# The suite this repository can run from published refs alone.
+#
+# Deliberately NOT called "full-tests". Two partitions are excluded, each for a
+# stated reason, each counted and asserted:
+#
+#   requires_local_corpus  data/v3-candidate/traces.r0.jsonl and
+#                          data/promoted/*.jsonl are gitignored by policy.
+#   requires_addin         ../tantular_office_addin is not on the default branch
+#                          of ghifiardi/LLM-Indonesia, and its package-lock.json
+#                          is not tracked on any ref.
+#
+# Neither is a runtime skip. Locally, without those inputs, the marked tests
+# still run and still fail. See docs/CI.md.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests-no-corpus-no-addin:
+    name: tests-no-corpus-no-addin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      EXPECTED_EXCLUDED_CORPUS: "13"
+      EXPECTED_EXCLUDED_ADDIN: "28"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          # Matches the interpreter the recorded full-suite run was verified on.
+          python-version: "3.14"
+
+      # A REAL .venv at the repository root, not just an install into the
+      # ambient interpreter: 55 files hardcode ROOT/.venv/bin/python and shell
+      # out to it, so the subprocess tests fail without this exact path.
+      - name: Create the project virtualenv
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python -c "import httpx, yaml, jinja2, pytest; print('deps OK')"
+
+      # Print what is being left out, and refuse if either partition changed
+      # size. A silently growing exclusion is how a suite stops meaning anything.
+      # The two are asserted INDEPENDENTLY; the final deselected total is read
+      # from the run below, never computed as their sum, because a test could in
+      # principle carry both markers.
+      - name: Show the excluded partitions
+        run: |
+          fail=0
+          for marker in requires_local_corpus requires_addin; do
+            case "$marker" in
+              requires_local_corpus) expected="$EXPECTED_EXCLUDED_CORPUS" ;;
+              requires_addin)        expected="$EXPECTED_EXCLUDED_ADDIN" ;;
+            esac
+            echo "::group::$marker (expected $expected)"
+            .venv/bin/python -m pytest tests/ --collect-only -q -m "$marker" \
+              | tee "/tmp/$marker.txt"
+            echo "::endgroup::"
+            actual=$(grep -c '::' "/tmp/$marker.txt" || true)
+            echo "$marker: expected $expected, collected $actual"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::The '$marker' partition changed size" \
+                   "(expected $expected, collected $actual)." \
+                   "Investigate before merging; do not just update the number." \
+                   "See docs/CI.md."
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+      - name: Run the suite without the corpus or the add-in
+        run: |
+          .venv/bin/python -m pytest tests/ -q \
+            -m "not requires_local_corpus and not requires_addin"
