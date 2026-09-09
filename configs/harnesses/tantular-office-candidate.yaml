@@ -1,0 +1,47 @@
+schema_version: 1
+name: tantular-office-candidate
+status: candidate
+
+model_contract:
+  registry_model: qwen35-9b-instruct
+  prompt_format: chat
+
+prompts:
+  system:
+    path: ../tantular_office_addin/src
+    sha256: null
+    verified: false
+
+tools:
+  allow:
+    - office_read
+    - office_edit
+  state_change_requires_approval: true
+
+memory:
+  active_context: bounded
+  ephemeral_execution: sandbox
+  durable_task_state: append_only
+  product_memory: disabled
+
+execution:
+  isolation: sandbox
+  network: denied_by_default
+  max_steps: 8
+  max_wall_seconds: 600
+
+verification:
+  before_action:
+    - request_schema
+    - target_location
+  after_action:
+    - edit_contract
+    - faithful_edit
+  repair_attempts: 1
+
+mutation:
+  production_self_modify: false
+  candidate_workspace_only: true
+  evaluator_mutation_allowed: false
+  human_approval_required: true
+

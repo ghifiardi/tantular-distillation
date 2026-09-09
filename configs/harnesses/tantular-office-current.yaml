@@ -1,0 +1,46 @@
+schema_version: 1
+name: tantular-office-current
+status: current
+
+model_contract:
+  registry_model: qwen35-9b-instruct
+  prompt_format: chat
+
+prompts:
+  system:
+    path: ../tantular_office_addin/src
+    sha256: null
+    verified: false
+
+tools:
+  allow:
+    - office_read
+    - office_edit
+  state_change_requires_approval: true
+
+memory:
+  active_context: bounded
+  ephemeral_execution: request
+  durable_task_state: none
+  product_memory: disabled
+
+execution:
+  isolation: companion_process
+  network: denied_by_default
+  max_steps: 4
+  max_wall_seconds: 300
+
+verification:
+  before_action:
+    - request_schema
+  after_action:
+    - edit_contract
+    - faithful_edit
+  repair_attempts: 0
+
+mutation:
+  production_self_modify: false
+  candidate_workspace_only: true
+  evaluator_mutation_allowed: false
+  human_approval_required: true
+
