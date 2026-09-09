@@ -25,6 +25,7 @@ Exits non-zero on any violation so it can gate a training run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
@@ -125,7 +126,72 @@ def split_balance(records: list[dict], manifest: dict) -> list[tuple]:
     return rows
 
 
-def check(records: list[dict], manifest: dict, gate: bool = False) -> list[str]:
+def harness_declaration(paths: list[Path]) -> dict | None:
+    """The harness mode DECLARED by each corpus's adjacent pass manifest.
+
+    Read from <corpus>/../MANIFEST.json, never from the traces. Inferring the
+    mode from trace contents would mean a corpus that lost its attribution reads
+    as a valid legacy corpus, which is the failure the declaration exists to
+    make loud. Trace contents establish what happened; the pass manifest
+    declares what was required.
+
+    Returns the canonical summary when harness-aware, None when legacy. A pass
+    manifest with no harness field predates the field and is legacy.
+    """
+    declarations: list[tuple[Path, dict | None]] = []
+    for path in paths:
+        manifest_path = path.parent / "MANIFEST.json"
+        if not manifest_path.is_file():
+            declarations.append((path, None))
+            continue
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            sys.exit(f"{manifest_path} is not readable JSON: {exc}\n"
+                     "Refusing to score a corpus whose pass manifest cannot be read.")
+
+        entry = (payload.get("files") or {}).get(path.name)
+        if isinstance(entry, dict) and entry.get("sha256"):
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            if entry["sha256"] != actual:
+                sys.exit(f"{manifest_path} describes different bytes than {path}:\n"
+                         f"  manifest {entry['sha256']}\n  on disk  {actual}\n"
+                         "The declaration cannot be trusted to be about this corpus.")
+
+        # The pass-level block is where a pass records its harness (one pass is
+        # one harness); a per-file block is accepted for tolerance.
+        declared = payload.get("harness")
+        if declared is None and isinstance(entry, dict):
+            declared = entry.get("harness")
+        if declared is not None:
+            if not isinstance(declared, dict) or "required" not in declared:
+                sys.exit(f"{manifest_path} has a malformed harness block: "
+                         f"{declared!r}")
+            if not declared.get("required"):
+                declared = None
+        declarations.append((path, declared))
+
+    aware = [(p, d) for p, d in declarations if d]
+    legacy = [p for p, d in declarations if not d]
+    if aware and legacy:
+        sys.exit(
+            "cannot verify harness-aware and legacy corpora together:\n"
+            + "".join(f"  harness-aware  {p}\n" for p, _ in aware)
+            + "".join(f"  legacy         {p}\n" for p in legacy)
+            + "One verdict cannot describe both.")
+    if not aware:
+        return None
+    for field, label in (("digest", "harness digests"),
+                         ("execution_model_registry", "execution models")):
+        seen = sorted({str(d.get(field)) for _, d in aware})
+        if len(seen) != 1:
+            sys.exit(f"the corpora declare {len(seen)} different {label}: "
+                     + ", ".join(v[:16] for v in seen))
+    return aware[0][1]
+
+
+def check(records: list[dict], manifest: dict, gate: bool = False, *,
+          harness_required: bool = False) -> list[str]:
     errors = []
 
     # THE invariant: one family, one split. A family appearing in both train
@@ -195,6 +261,17 @@ def check(records: list[dict], manifest: dict, gate: bool = False) -> list[str]:
             if not provenance.get(field):
                 errors.append(f"{record['_source']}: provenance missing {field}")
                 break
+
+    # Harness attribution, only when the pass manifest DECLARED it. The mode is
+    # passed in rather than rediscovered here, so this function cannot decide
+    # for itself that a corpus which lost its attribution was legacy all along.
+    if harness_required:
+        sys.path.insert(0, str(ROOT / "src"))
+        import harness_distill
+        try:
+            harness_distill.summarize_harness_attribution(records, required=True)
+        except harness_distill.HarnessPlanError as exc:
+            errors.append(str(exc))
 
     if not gate:
         return errors
@@ -310,8 +387,16 @@ def main() -> None:
     if not records:
         sys.exit("no traces found")
 
+    declared = harness_declaration(args.paths)
     report(records, manifest, args.gate)
-    errors = check(records, manifest, gate=args.gate)
+    if declared:
+        print("\nharness attribution: REQUIRED")
+        print(f"  harness          {declared.get('name')}")
+        print(f"  digest           {str(declared.get('digest'))[:16]}…")
+        print(f"  execution model  {declared.get('execution_model_registry')}")
+        print(f"  prompt verified  {'yes' if declared.get('prompt_verified') else 'no'}")
+    errors = check(records, manifest, gate=args.gate,
+                   harness_required=bool(declared))
     if errors:
         print(f"\nFAILED — {len(errors)} violation(s):")
         for error in errors[:20]:
