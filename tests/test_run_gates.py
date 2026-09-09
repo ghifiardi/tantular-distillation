@@ -665,6 +665,7 @@ def test_compare_refuses_an_after_report_generated_from_the_base(config, tmp_pat
     assert "not from the adapter id" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_different_expected_base_models(config, tmp_path):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -680,6 +681,7 @@ def test_compare_refuses_different_expected_base_models(config, tmp_path):
     assert "DIFFERENT base model identities" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_different_shared_evaluation_config(config, tmp_path):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -1095,6 +1097,7 @@ def test_rejected_thinking_control_aborts_instead_of_falling_back():
         "must not be retried at all")
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_different_stop_sequences(config, tmp_path):
     """Different truncation rules make the same model look different."""
     before, after = tmp_path / "before.json", tmp_path / "after.json"
@@ -1113,6 +1116,7 @@ def test_compare_refuses_different_stop_sequences(config, tmp_path):
     assert "different stop sequences" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_model_dependent_gate_reports_record_their_stop_sequences(config, tmp_path):
     before = tmp_path / "before.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -1123,6 +1127,7 @@ def test_model_dependent_gate_reports_record_their_stop_sequences(config, tmp_pa
         assert gate["stop_sequences"] == []
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_an_after_report_missing_a_before_gate(config, tmp_path):
     """Deleting a FAILING gate from the after report printed PROMOTABLE."""
     before, after = tmp_path / "before.json", tmp_path / "after.json"
@@ -1142,6 +1147,7 @@ def test_compare_refuses_an_after_report_missing_a_before_gate(config, tmp_path)
     assert "PROMOTABLE" not in proc.stdout
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_an_after_gate_absent_from_before(config, tmp_path):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -1159,6 +1165,7 @@ def test_compare_refuses_an_after_gate_absent_from_before(config, tmp_path):
 
 
 @pytest.mark.parametrize("side", ["before", "after"])
+@pytest.mark.requires_addin
 def test_compare_refuses_duplicate_gate_names(config, tmp_path, side):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))

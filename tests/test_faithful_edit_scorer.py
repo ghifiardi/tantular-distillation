@@ -180,7 +180,8 @@ def test_informal_replacement_fails_voice(tmp_path):
 
 # --- hermeticity: scoring must not write inside the repository --------------
 
-def test_the_contract_checker_writes_its_cases_outside_the_repository(monkeypatch):
+def test_the_contract_checker_writes_its_cases_outside_the_repository(monkeypatch,
+                                                                     tmp_path):
     """Running the suite must leave the working tree clean.
 
     The cases file used to be data/gates/fce/_cases.json — a fixed path INSIDE
@@ -202,8 +203,18 @@ def test_the_contract_checker_writes_its_cases_outside_the_repository(monkeypatc
         seen["existed_during_call"] = seen["cases"].is_file()
         return subprocess.CompletedProcess(cmd, 0, json.dumps({"results": []}), "")
 
+    # A FAKE add-in tree, not the real one. run_contract_checker refuses before
+    # it runs anything unless <addin_src>/chat/editContract.js exists, so
+    # pointing at the real add-in would make this test depend on a sibling
+    # checkout it does not actually use — the subprocess is mocked, and what is
+    # under test is where the scratch file goes, not the product's parser.
+    fake_addin = tmp_path / "addin" / "src"
+    (fake_addin / "chat").mkdir(parents=True)
+    (fake_addin / "chat" / "editContract.js").write_text("// sentinel\n",
+                                                         encoding="utf-8")
+
     monkeypatch.setattr(score_faithful_edit.subprocess, "run", fake_run)
-    score_faithful_edit.run_contract_checker([{"id": "a"}], ADDIN)
+    score_faithful_edit.run_contract_checker([{"id": "a"}], fake_addin)
 
     cases = seen["cases"]
     assert seen["existed_during_call"], "the checker was handed a real file"

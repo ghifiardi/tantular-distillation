@@ -225,6 +225,7 @@ def test_freezer_refuses_failed_gate_without_waiver(tmp_path):
 
 # --- v4: the corpus audit is recorded, not remembered -----------------------
 
+@pytest.mark.requires_local_corpus
 def test_freeze_records_the_provenance_audit(valid_freeze):
     """Six months on, "why can this checkpoint not claim FP8?" has to be
     answerable from the manifest rather than from anyone's memory."""
@@ -250,6 +251,7 @@ def test_freeze_records_the_provenance_audit(valid_freeze):
     assert audit["authorizes_training"] is False
 
 
+@pytest.mark.requires_local_corpus
 def test_the_audit_does_not_change_what_the_gate_decides(valid_freeze):
     """Additive evidence only: the recorded verdict is still the gate's."""
     payload = json.loads(valid_freeze.read_text())
@@ -258,6 +260,7 @@ def test_the_audit_does_not_change_what_the_gate_decides(valid_freeze):
     assert payload["provenance_audit"]["fp8_gate"]["status"] == "UNMET"
 
 
+@pytest.mark.requires_local_corpus
 def test_an_unparseable_frozen_at_refuses_rather_than_dating_from_the_clock(tmp_path):
     out = tmp_path / "RUN.json"
     proc = subprocess.run(
