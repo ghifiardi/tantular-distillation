@@ -205,3 +205,158 @@ def test_the_shipped_harnesses_remain_unverified_here():
         system = (hd.load_harness(name).get("prompts") or {}).get("system") or {}
         assert system.get("verified") is not True, name
         assert not system.get("sha256"), name
+
+
+# --- the EFFECTIVE prompts, not the whole source tree ------------------------
+#
+# Digesting ../tantular_office_addin/src as a tree answers "did any JavaScript
+# change?" — too sensitive (an unrelated edit moves it) and not sensitive
+# enough (a prompt moved between modules leaves it unchanged). The add-in's own
+# registry knows which strings are prompts and owns each one's content hash.
+
+REGISTRY_JS = """\
+const CONTENT = {
+  router: "ROUTER PROMPT",
+  edit: "EDIT PROMPT",
+};
+function hashText(text) {
+  let h = 0;
+  for (const ch of text) { h = (h * 31 + ch.codePointAt(0)) >>> 0; }
+  return String(h);
+}
+export function allPromptIds() { return Object.keys(CONTENT); }
+export function getPrompt(id) {
+  if (!(id in CONTENT)) throw new Error("unknown prompt id: " + id);
+  return { id, content: CONTENT[id], contentHash: hashText(CONTENT[id]) };
+}
+"""
+
+node = pytest.mark.skipif(__import__("shutil").which("node") is None,
+                          reason="node is required to read a prompt registry")
+
+
+@pytest.fixture
+def registry(tmp_path, monkeypatch):
+    """A fake add-in: a prompt registry plus an unrelated source file."""
+    src = tmp_path / "addin-src"
+    src.mkdir()
+    (src / "promptRegistry.js").write_text(REGISTRY_JS, encoding="utf-8")
+    (src / "unrelated.js").write_text("export const X = 1;\n", encoding="utf-8")
+    (src / "package.json").write_text('{"type":"module"}', encoding="utf-8")
+
+    directory = tmp_path / "harnesses"
+    directory.mkdir()
+    path = directory / "reg-harness.yaml"
+    path.write_text(
+        SPEC.replace("PROMPT_PATH", str(src / "promptRegistry.js"))
+            .replace("name: fake-harness", "name: reg-harness")
+            .replace("    sha256: null", "    source: prompt_registry\n    sha256: null"),
+        encoding="utf-8")
+    monkeypatch.setattr(vhi, "HARNESS_DIR", directory)
+    return path, src
+
+
+@node
+def test_the_registry_digest_covers_the_prompts(registry):
+    path, src = registry
+    digest, rows = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert vhi.SHA256_RE.match(digest)
+    assert [r["id"] for r in rows] == ["edit", "router"], "sorted by id"
+
+
+@node
+def test_changing_a_prompt_changes_the_digest(registry):
+    path, src = registry
+    before, _ = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    (src / "promptRegistry.js").write_text(
+        REGISTRY_JS.replace('router: "ROUTER PROMPT"', 'router: "ROUTER PROMPT v2"'),
+        encoding="utf-8")
+    after, _ = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert after != before
+
+
+@node
+def test_changing_an_unrelated_source_file_does_not(registry):
+    """The reason for reading the registry instead of the tree."""
+    path, src = registry
+    before, _ = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    (src / "unrelated.js").write_text("export const X = 999;\n", encoding="utf-8")
+    after, _ = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert after == before
+
+
+@node
+def test_a_registry_missing_an_export_fails_closed(registry, capsys):
+    path, src = registry
+    (src / "promptRegistry.js").write_text(
+        "export function allPromptIds() { return ['a']; }\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert "could not be read" in capsys.readouterr().err
+
+
+@node
+def test_a_registry_reporting_no_prompts_fails_closed(registry, capsys):
+    path, src = registry
+    (src / "promptRegistry.js").write_text(
+        "export function allPromptIds() { return []; }\n"
+        "export function getPrompt(id) { return { id, contentHash: 'x' }; }\n",
+        encoding="utf-8")
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert "could not be read" in capsys.readouterr().err
+
+
+@node
+def test_a_prompt_without_a_content_hash_fails_closed(registry, capsys):
+    path, src = registry
+    (src / "promptRegistry.js").write_text(
+        "export function allPromptIds() { return ['a']; }\n"
+        "export function getPrompt(id) { return { id }; }\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert "could not be read" in capsys.readouterr().err
+
+
+def test_a_missing_registry_file_fails_closed(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(tmp_path / "nope.js")
+    assert "no prompt registry" in capsys.readouterr().err
+
+
+def test_a_missing_node_fails_closed(tmp_path, monkeypatch, capsys):
+    """Without node the prompt identity is unknowable; it must not fall back to
+    hashing the file's bytes, which would be a different claim."""
+    stub = tmp_path / "promptRegistry.js"
+    stub.write_text(REGISTRY_JS, encoding="utf-8")
+    monkeypatch.setattr(vhi.shutil, "which", lambda _: None)
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(stub)
+    assert "node is required" in capsys.readouterr().err
+
+
+def test_an_empty_directory_is_not_a_verified_prompt_identity(tmp_path, capsys):
+    """sha256 of an empty traversal is stable and meaningless."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(SystemExit):
+        vhi.digest_path(empty)
+    assert "empty directory" in capsys.readouterr().err
+
+
+@node
+def test_the_real_harnesses_measure_but_stay_unpinned():
+    """The add-in is present in this checkout and the registry reads cleanly,
+    but nothing is pinned: that tree is unpublished (docs/CI.md), so a digest of
+    it could not be reproduced by anyone else."""
+    registry_path = ROOT.parent / "tantular_office_addin" / "src" / "promptRegistry.js"
+    if not registry_path.is_file():
+        pytest.skip("the Office add-in sibling is not checked out")
+    digest, rows = vhi.prompt_registry_digest(registry_path)
+    assert vhi.SHA256_RE.match(digest)
+    assert len(rows) >= 5
+    for name in ("tantular-office-current", "tantular-office-candidate"):
+        system = (hd.load_harness(name).get("prompts") or {}).get("system") or {}
+        assert system.get("source") == "prompt_registry", name
+        assert system.get("verified") is not True, name
+        assert not system.get("sha256"), name

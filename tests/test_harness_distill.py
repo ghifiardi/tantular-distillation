@@ -18,7 +18,10 @@ def safe_harness(**overrides):
         "schema_version": 1,
         "name": "safe",
         "status": "candidate",
-        "model_contract": {"registry_model": "student", "prompt_format": "chat"},
+        "model_contract": {
+            "protocol": "openai_chat",
+            "compatible_registry_models": ["student", "teacher"],
+        },
         "prompts": {
             "system": {"path": "prompt.txt", "sha256": None, "verified": False}
         },
@@ -234,16 +237,16 @@ def test_provenance_is_deterministic_and_matches_the_plan_digest():
     """A digest computed here and a digest computed by `plan` must agree, or a
     trace and the experiment that reads it describe different harnesses."""
     spec = safe_harness()
-    first = hd.harness_provenance(spec)
-    assert first == hd.harness_provenance(dict(spec))
+    first = hd.harness_provenance(spec, execution_model_registry="student")
+    assert first == hd.harness_provenance(dict(spec), execution_model_registry="student")
     assert first["digest"] == hd.canonical_digest(spec)
 
 
 def test_provenance_records_the_identity_fields_a_reader_needs():
-    block = hd.harness_provenance(safe_harness())
+    block = hd.harness_provenance(safe_harness(), execution_model_registry="student")
     assert block["name"] == "safe"
     assert block["status"] == "candidate"
-    assert block["model_registry"] == "student"
+    assert block["execution_model_registry"] == "student"
     assert block["schema_version"] == 1
     # Tool and verification policy are digested separately: a trace should say
     # which policy produced it without carrying the whole policy.
@@ -255,7 +258,7 @@ def test_an_unverified_prompt_is_recorded_as_unverified_not_guessed():
     """The one thing this must never do is invent a prompt hash. An unverified
     harness says so, and `src/verify_harness_identity.py` is the only thing that
     may fill it in."""
-    block = hd.harness_provenance(safe_harness())
+    block = hd.harness_provenance(safe_harness(), execution_model_registry="student")
     assert block["prompt_sha256"] is None
     assert block["prompt_verified"] is False
 
@@ -263,7 +266,7 @@ def test_an_unverified_prompt_is_recorded_as_unverified_not_guessed():
 def test_a_verified_prompt_is_carried_through():
     spec = safe_harness(prompts={"system": {"path": "p.txt", "sha256": "a" * 64,
                                             "verified": True}})
-    block = hd.harness_provenance(spec)
+    block = hd.harness_provenance(spec, execution_model_registry="student")
     assert block["prompt_sha256"] == "a" * 64
     assert block["prompt_verified"] is True
 
@@ -272,16 +275,17 @@ def test_a_claimed_verification_without_a_digest_is_not_believed():
     """`verified: true` with no sha256 is a contradiction; fail closed."""
     spec = safe_harness(prompts={"system": {"path": "p.txt", "sha256": None,
                                             "verified": True}})
-    assert hd.harness_provenance(spec)["prompt_verified"] is False
+    assert hd.harness_provenance(spec, execution_model_registry="student")["prompt_verified"] is False
 
 
 def test_changing_the_policy_changes_the_digest():
     """The digest has to be load-bearing: two harnesses that differ in what the
     agent may do must not share one."""
-    base = hd.harness_provenance(safe_harness())
-    wider = hd.harness_provenance(safe_harness(
-        tools={"allow": ["read", "edit", "shell"],
-               "state_change_requires_approval": True}))
+    base = hd.harness_provenance(safe_harness(), execution_model_registry="student")
+    wider = hd.harness_provenance(
+        safe_harness(tools={"allow": ["read", "edit", "shell"],
+                            "state_change_requires_approval": True}),
+        execution_model_registry="student")
     assert wider["digest"] != base["digest"]
     assert wider["tool_policy_digest"] != base["tool_policy_digest"]
     assert wider["verification_policy_digest"] == base["verification_policy_digest"]
@@ -291,11 +295,12 @@ def test_provenance_refuses_an_unsafe_harness():
     """Nothing may stamp attribution for a harness that would not be allowed to
     run: the block would then be evidence for a trace that should not exist."""
     with pytest.raises(hd.HarnessPlanError):
-        hd.harness_provenance(safe_harness(
-            mutation={"production_self_modify": True,
-                      "candidate_workspace_only": True,
-                      "evaluator_mutation_allowed": False,
-                      "human_approval_required": True}))
+        hd.harness_provenance(
+            safe_harness(mutation={"production_self_modify": True,
+                                   "candidate_workspace_only": True,
+                                   "evaluator_mutation_allowed": False,
+                                   "human_approval_required": True}),
+            execution_model_registry="student")
 
 
 def test_the_shipped_draft_harnesses_are_unverified_today():
@@ -303,6 +308,72 @@ def test_the_shipped_draft_harnesses_are_unverified_today():
     system prompt hashed, so both must say so. Delete this when they are
     verified against the real add-in."""
     for name in ("tantular-office-current", "tantular-office-candidate"):
-        block = hd.harness_provenance(hd.load_harness(name))
+        block = hd.harness_provenance(hd.load_harness(name),
+                                      execution_model_registry="qwen35-9b-instruct")
         assert block["prompt_verified"] is False, name
         assert block["prompt_sha256"] is None, name
+
+
+# --- the harness is model-COMPATIBLE, not model-bound ------------------------
+#
+# The whole point of the four-arm design is running ONE harness against a
+# student and a teacher. A harness pinned to a single registry model would make
+# the teacher_current and teacher_candidate arms impossible to express, so the
+# contract lists what it is compatible with and the trace records what actually
+# ran.
+
+def test_one_harness_serves_both_factorial_model_arms():
+    spec = safe_harness()
+    student = hd.harness_provenance(spec, execution_model_registry="student")
+    teacher = hd.harness_provenance(spec, execution_model_registry="teacher")
+
+    # Same harness, so the same harness digest — that is what makes the arms
+    # comparable at all.
+    assert student["digest"] == teacher["digest"]
+    # But the traces say which model produced them.
+    assert student["execution_model_registry"] == "student"
+    assert teacher["execution_model_registry"] == "teacher"
+    assert student["compatible_registry_models"] == ["student", "teacher"]
+
+
+def test_an_incompatible_execution_model_is_refused():
+    """Recording a trace as harness-attributed while the harness was never
+    declared compatible with the model would make the attribution a guess."""
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.harness_provenance(safe_harness(), execution_model_registry="some-other")
+    assert "not compatible" in str(exc.value)
+
+
+def test_the_execution_model_must_be_stated():
+    with pytest.raises(hd.HarnessPlanError):
+        hd.harness_provenance(safe_harness(), execution_model_registry="")
+
+
+def test_a_harness_declaring_no_compatible_models_is_refused():
+    with pytest.raises(hd.HarnessPlanError):
+        hd.harness_provenance(
+            safe_harness(model_contract={"protocol": "openai_chat",
+                                         "compatible_registry_models": []}),
+            execution_model_registry="student")
+
+
+def test_widening_compatibility_changes_the_harness_digest():
+    """Compatibility is part of the harness definition, so changing it is a
+    different harness — not a free-form annotation."""
+    base = hd.harness_provenance(safe_harness(), execution_model_registry="student")
+    wider = hd.harness_provenance(
+        safe_harness(model_contract={"protocol": "openai_chat",
+                                     "compatible_registry_models":
+                                         ["student", "teacher", "third"]}),
+        execution_model_registry="student")
+    assert wider["digest"] != base["digest"]
+
+
+def test_the_shipped_harnesses_cover_both_planned_arms():
+    """The real specs must admit the student AND the teacher, or the planned
+    experiment cannot run."""
+    for name in ("tantular-office-current", "tantular-office-candidate"):
+        models = (hd.load_harness(name)["model_contract"]
+                  ["compatible_registry_models"])
+        assert "qwen35-9b-instruct" in models, name
+        assert "muse-glimmer-30b" in models, name

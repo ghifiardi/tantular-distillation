@@ -9,13 +9,20 @@ name: tantular-office-current
 status: current                 # current | candidate | retired
 
 model_contract:
-  registry_model: qwen35-9b-instruct
-  prompt_format: chat
+  protocol: openai_chat
+  # A harness is model-COMPATIBLE, not model-bound: the four-arm comparison
+  # runs ONE harness against the student and the teacher. Which model actually
+  # ran is recorded per trace, in harness_provenance.execution_model_registry.
+  compatible_registry_models:
+    - qwen35-9b-instruct
+    - muse-glimmer-30b
 
 prompts:
   system:
-    path: ../tantular_office_addin/src/...
+    source: prompt_registry      # prompt_registry | path
+    path: ../tantular_office_addin/src/promptRegistry.js
     sha256: null
+    verified: false
 
 tools:
   allow: [office_edit]
@@ -54,3 +61,32 @@ mutation:
 - State-changing tools require approval.
 - Execution budgets must be positive and bounded.
 
+
+
+## `model_contract`
+
+`compatible_registry_models` lists every `configs/models/` entry this harness
+may run against. It is part of the digested definition, so widening it produces
+a different harness — which is the honest reading, since a harness qualified
+against one model is not automatically qualified against another.
+
+`harness_provenance(spec, execution_model_registry=...)` refuses a model that is
+not on the list. Attribution for an undeclared pairing would be a guess, and the
+whole point of the block is that it is not.
+
+## `prompts.system.source`
+
+`prompt_registry` (preferred for the Office add-in) resolves the identity through
+the add-in's own `promptRegistry.js`, which enumerates every production prompt
+and owns each one's content hash. The digest is canonical JSON over the sorted
+`{id, contentHash}` pairs.
+
+The alternative, `path`, digests a file or a directory tree. It is the wrong
+answer for the add-in: a tree digest changes on any unrelated JavaScript edit
+while the prompts are identical, and does not change when a prompt moves between
+modules. It answers "did any source change?", not "did the prompts change?".
+
+Either way `src/verify_harness_identity.py` is the only thing that may set
+`sha256` and `verified: true`, and it fails closed rather than guessing — on a
+missing registry, a missing `node`, a missing export, an empty prompt list, an
+entry without a hash, or an empty directory.

@@ -3,12 +3,22 @@ name: tantular-office-candidate
 status: candidate
 
 model_contract:
-  registry_model: qwen35-9b-instruct
-  prompt_format: chat
+  protocol: openai_chat
+  # The SAME harness runs against student and teacher: that is what makes the
+  # four-arm comparison a comparison. Compatibility is declared; which model
+  # actually ran is recorded per trace, not fixed here.
+  compatible_registry_models:
+    - qwen35-9b-instruct
+    - muse-glimmer-30b
 
 prompts:
   system:
-    path: ../tantular_office_addin/src
+    # The add-in's own registry of every production prompt, which exposes each
+    # prompt's content hash. Digesting the whole src/ tree would change on any
+    # unrelated JavaScript edit and would not change when a prompt moved
+    # between files — it answers the wrong question.
+    source: prompt_registry
+    path: ../tantular_office_addin/src/promptRegistry.js
     sha256: null
     verified: false
 

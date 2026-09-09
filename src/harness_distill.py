@@ -141,7 +141,8 @@ def _policy_digest(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def harness_provenance(spec: dict[str, Any]) -> dict[str, Any]:
+def harness_provenance(spec: dict[str, Any], *,
+                       execution_model_registry: str) -> dict[str, Any]:
     """The provenance block stamped onto every harness-aware trace.
 
     ONE SOURCE OF TRUTH. The digest here is the same canonical_digest that
@@ -164,6 +165,26 @@ def harness_provenance(spec: dict[str, Any]) -> dict[str, Any]:
     """
     validate_harness(spec)                     # unsafe harness -> refuse
 
+    # A harness is model-COMPATIBLE, not model-bound. The four-arm design runs
+    # ONE harness against the student and the teacher, so pinning a single
+    # registry model here would make the teacher arms inexpressible. The spec
+    # declares what it may run against; the trace records what actually did.
+    contract = spec.get("model_contract") or {}
+    compatible = contract.get("compatible_registry_models")
+    if not isinstance(compatible, list) or not compatible:
+        raise HarnessPlanError(
+            f"harness {spec.get('name')!r} declares no "
+            "model_contract.compatible_registry_models")
+    if not execution_model_registry:
+        raise HarnessPlanError(
+            "execution_model_registry is required: a harness-attributed trace "
+            "must say which model produced it")
+    if execution_model_registry not in compatible:
+        raise HarnessPlanError(
+            f"model {execution_model_registry!r} is not compatible with harness "
+            f"{spec.get('name')!r} (declared: {compatible}). Attribution for an "
+            "undeclared pairing would be a guess.")
+
     prompt = ((spec.get("prompts") or {}).get("system") or {})
     sha = prompt.get("sha256")
     verified = prompt.get("verified") is True and isinstance(sha, str) \
@@ -174,7 +195,8 @@ def harness_provenance(spec: dict[str, Any]) -> dict[str, Any]:
         "name": spec.get("name"),
         "status": spec.get("status"),
         "digest": canonical_digest(spec),
-        "model_registry": (spec.get("model_contract") or {}).get("registry_model"),
+        "compatible_registry_models": list(compatible),
+        "execution_model_registry": execution_model_registry,
         "prompt_sha256": sha if verified else None,
         "prompt_verified": verified,
         "tool_policy_digest": _policy_digest(spec.get("tools")),
