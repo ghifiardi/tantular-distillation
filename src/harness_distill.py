@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,63 @@ def validate_harness(spec: dict[str, Any]) -> list[str]:
     if prompt.get("verified") is not True or not prompt.get("sha256"):
         warnings.append("system prompt identity is unverified")
     return warnings
+
+
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+# The block stamped onto a harness-aware trace. Version it separately from the
+# harness schema: a trace written today must stay readable when the harness
+# schema moves on.
+HARNESS_PROVENANCE_SCHEMA = 1
+
+
+def _policy_digest(payload: Any) -> str:
+    """Digest one policy sub-object, so a trace can name the policy that
+    produced it without carrying the whole thing."""
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def harness_provenance(spec: dict[str, Any]) -> dict[str, Any]:
+    """The provenance block stamped onto every harness-aware trace.
+
+    ONE SOURCE OF TRUTH. The digest here is the same canonical_digest that
+    build_plan reports, computed the same way, because a trace and the
+    experiment that reads it must agree about which harness ran — otherwise the
+    attribution is decorative.
+
+    The audit that motivated this found data/promoted/train.jsonl to be 136
+    traces, 136 model-attributed, 0 harness-attributed: nothing in that corpus
+    can say whether a result came from the model or from the scaffolding around
+    it. This block is what makes the difference recordable.
+
+    It never invents a prompt hash. An unverified harness records
+    prompt_sha256: null and prompt_verified: false, and only
+    src/verify_harness_identity.py may fill it in from a real file. A harness
+    claiming verified: true without a digest is not believed.
+
+    Raises HarnessPlanError for a harness that would not be allowed to run: a
+    trace should not carry attribution for a configuration that is refused.
+    """
+    validate_harness(spec)                     # unsafe harness -> refuse
+
+    prompt = ((spec.get("prompts") or {}).get("system") or {})
+    sha = prompt.get("sha256")
+    verified = prompt.get("verified") is True and isinstance(sha, str) \
+        and bool(SHA256_RE.match(sha))
+
+    return {
+        "schema_version": HARNESS_PROVENANCE_SCHEMA,
+        "name": spec.get("name"),
+        "status": spec.get("status"),
+        "digest": canonical_digest(spec),
+        "model_registry": (spec.get("model_contract") or {}).get("registry_model"),
+        "prompt_sha256": sha if verified else None,
+        "prompt_verified": verified,
+        "tool_policy_digest": _policy_digest(spec.get("tools")),
+        "verification_policy_digest": _policy_digest(spec.get("verification")),
+    }
 
 
 def build_plan(experiment: dict[str, Any]) -> dict[str, Any]:

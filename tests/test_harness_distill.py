@@ -221,3 +221,88 @@ def test_repository_draft_plan_loads():
     ]
     assert result["training_authorized"] is False
 
+
+
+# --- harness_provenance: the block stamped onto every harness-aware trace ----
+#
+# One source of truth. The audit already showed why it matters: the promoted
+# corpus is 136 traces, 136 model-attributed, 0 harness-attributed — so nothing
+# in it can tell whether a result came from the model or from the scaffold
+# around it.
+
+def test_provenance_is_deterministic_and_matches_the_plan_digest():
+    """A digest computed here and a digest computed by `plan` must agree, or a
+    trace and the experiment that reads it describe different harnesses."""
+    spec = safe_harness()
+    first = hd.harness_provenance(spec)
+    assert first == hd.harness_provenance(dict(spec))
+    assert first["digest"] == hd.canonical_digest(spec)
+
+
+def test_provenance_records_the_identity_fields_a_reader_needs():
+    block = hd.harness_provenance(safe_harness())
+    assert block["name"] == "safe"
+    assert block["status"] == "candidate"
+    assert block["model_registry"] == "student"
+    assert block["schema_version"] == 1
+    # Tool and verification policy are digested separately: a trace should say
+    # which policy produced it without carrying the whole policy.
+    assert hd.SHA256_RE.match(block["tool_policy_digest"])
+    assert hd.SHA256_RE.match(block["verification_policy_digest"])
+
+
+def test_an_unverified_prompt_is_recorded_as_unverified_not_guessed():
+    """The one thing this must never do is invent a prompt hash. An unverified
+    harness says so, and `src/verify_harness_identity.py` is the only thing that
+    may fill it in."""
+    block = hd.harness_provenance(safe_harness())
+    assert block["prompt_sha256"] is None
+    assert block["prompt_verified"] is False
+
+
+def test_a_verified_prompt_is_carried_through():
+    spec = safe_harness(prompts={"system": {"path": "p.txt", "sha256": "a" * 64,
+                                            "verified": True}})
+    block = hd.harness_provenance(spec)
+    assert block["prompt_sha256"] == "a" * 64
+    assert block["prompt_verified"] is True
+
+
+def test_a_claimed_verification_without_a_digest_is_not_believed():
+    """`verified: true` with no sha256 is a contradiction; fail closed."""
+    spec = safe_harness(prompts={"system": {"path": "p.txt", "sha256": None,
+                                            "verified": True}})
+    assert hd.harness_provenance(spec)["prompt_verified"] is False
+
+
+def test_changing_the_policy_changes_the_digest():
+    """The digest has to be load-bearing: two harnesses that differ in what the
+    agent may do must not share one."""
+    base = hd.harness_provenance(safe_harness())
+    wider = hd.harness_provenance(safe_harness(
+        tools={"allow": ["read", "edit", "shell"],
+               "state_change_requires_approval": True}))
+    assert wider["digest"] != base["digest"]
+    assert wider["tool_policy_digest"] != base["tool_policy_digest"]
+    assert wider["verification_policy_digest"] == base["verification_policy_digest"]
+
+
+def test_provenance_refuses_an_unsafe_harness():
+    """Nothing may stamp attribution for a harness that would not be allowed to
+    run: the block would then be evidence for a trace that should not exist."""
+    with pytest.raises(hd.HarnessPlanError):
+        hd.harness_provenance(safe_harness(
+            mutation={"production_self_modify": True,
+                      "candidate_workspace_only": True,
+                      "evaluator_mutation_allowed": False,
+                      "human_approval_required": True}))
+
+
+def test_the_shipped_draft_harnesses_are_unverified_today():
+    """Documented state, not aspiration: neither draft harness has had its
+    system prompt hashed, so both must say so. Delete this when they are
+    verified against the real add-in."""
+    for name in ("tantular-office-current", "tantular-office-candidate"):
+        block = hd.harness_provenance(hd.load_harness(name))
+        assert block["prompt_verified"] is False, name
+        assert block["prompt_sha256"] is None, name
