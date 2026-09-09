@@ -1,0 +1,42 @@
+# Architecture profile for the 9B student. Encodes what train/qlora_9b.yaml
+# discovered on the smoke rental, moved out of the run config so a different
+# checkpoint cannot silently inherit it. DRAFT.
+schema_version: 1
+name: qwen35-hybrid-dense-9b
+model_type: qwen3_5
+
+# The signature is recomputed from a loaded config.json at train time and MUST
+# match this value, or the trainer aborts. Compute with:
+#   src/distill_plan.py arch-signature <path-to-config.json>
+expected:
+  layers: 32
+  # three linear_attention then one full_attention, repeated 8x
+  layer_pattern: [linear_attention, linear_attention, linear_attention, full_attention]
+  layer_pattern_repeat: 8
+signature: ARCH_SIGNATURE_QWEN35_9B   # placeholder; fill from real config.json
+
+# 8 of 32 layers are full-attention; 24 are linear-attention; MLP on all 32.
+# Names are load-bearing: transformers exposes split in_proj_*, vLLM fuses the
+# first two into in_proj_qkvz. Target the SPLIT names that exist at train time.
+lora_targets:
+  full_attention: [q_proj, k_proj, v_proj, o_proj]
+  linear_attention: [in_proj_qkv, in_proj_z, out_proj]
+  mlp: [gate_proj, up_proj, down_proj]
+
+# in_proj_a / in_proj_b exist in transformers but vLLM's LoRA cannot bind the
+# split names; A_log / dt_bias are plain params, not nn.Linear. Excluded so the
+# serving path can faithfully evaluate everything trained.
+excluded: [in_proj_a, in_proj_b, A_log, dt_bias]
+
+serving_adapter:
+  # PEFT writes model.layers.* at train time; vLLM resolves
+  # model.language_model.layers.* at serve time. convert_adapter_for_vllm.py
+  # bridges these.
+  train_prefix: model.layers
+  vllm_prefix: model.language_model.layers
+
+mode_c:
+  # DistillationTrainer reads lm_head.weight directly and bypasses
+  # PeftModel.forward(): adapters on lm_head and prompt-learning are rejected.
+  eligible: true
+  targets_lm_head: false

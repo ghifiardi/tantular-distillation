@@ -71,6 +71,18 @@ if [[ -n "$ADAPTER_PATH" ]]; then
   echo "  adapter: $ADAPTER_ID -> $ADAPTER_PATH"
 fi
 
+CHAT_TEMPLATE_ARGS=()
+if [[ -n "${TEACHER_CHAT_TEMPLATE:-}" ]]; then
+  CHAT_TEMPLATE_PATH="$TEACHER_CHAT_TEMPLATE"
+  [[ "$CHAT_TEMPLATE_PATH" = /* ]] || CHAT_TEMPLATE_PATH="$ROOT/$CHAT_TEMPLATE_PATH"
+  [[ -f "$CHAT_TEMPLATE_PATH" ]] || {
+    echo "REFUSING: configured chat template is missing: $CHAT_TEMPLATE_PATH" >&2
+    exit 2
+  }
+  CHAT_TEMPLATE_ARGS=(--chat-template "$CHAT_TEMPLATE_PATH")
+  echo "  chat template: $CHAT_TEMPLATE_PATH"
+fi
+
 # Refuse to start a SECOND server. This is not hypothetical: on the endpoint
 # pod 2026-08-20, a second `serve_student.sh` was launched while the first was
 # still loading the model. The second vLLM lost the race for VRAM and died with
@@ -153,6 +165,7 @@ echo "  url    : http://0.0.0.0:$TEACHER_PORT/v1"
 exec "$VLLM_BIN" serve "$TEACHER_REPO" \
   --served-model-name "$TEACHER_REPO" "$MODEL" \
   --dtype bfloat16 \
+  "${CHAT_TEMPLATE_ARGS[@]+"${CHAT_TEMPLATE_ARGS[@]}"}" \
   "${LORA_ARGS[@]+"${LORA_ARGS[@]}"}" \
   --port "$TEACHER_PORT" \
   --tensor-parallel-size "$HOST_TENSOR_PARALLEL_SIZE" \

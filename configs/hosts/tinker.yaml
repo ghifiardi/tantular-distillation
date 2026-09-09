@@ -1,0 +1,15 @@
+# Thinking Machines Tinker is an external managed training service.  This
+# declaration lets config.training_guard() apply the same actual-host safety
+# check used by the local trainer: declaring "tinker" while running on ai19
+# does not make ai19 safe to train from.
+name: tinker
+role: managed-training-client
+runtime: tinker
+data_egress: external
+training_allowed: true
+teacher_serving: false
+
+# Tinker itself reads TINKER_API_KEY.  The training runner deliberately does
+# not read this variable until every local check and the interactive
+# confirmation have passed.
+api_key_env: TINKER_API_KEY

@@ -56,6 +56,13 @@ no_training_reason: >-
   Ollama, which takes the gateway down.
 hostnames: [ai19]
 
+# NO gpu_memory_gb IS DECLARED HERE, deliberately. The cards are 2x24GB, but
+# src/distill_plan.py reads that field as USABLE VRAM, and on this box it is
+# neither 48 nor stable: the Ollama gateway and face_ai_service already hold
+# ~14.5GB of GPU0 and ~12.3GB of GPU1, and that varies with production traffic.
+# An undeclared host is ineligible, which is the honest answer here. Do not
+# "fix" this by writing 48.
+
 tensor_parallel_size: 2
 quantization: int4
 gpu_memory_utilization: 0.90

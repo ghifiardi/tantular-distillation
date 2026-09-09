@@ -1,0 +1,98 @@
+# Opt-in Tinker SFT experiment.  This config does NOT authorize training.
+# train/TRAINING_BLOCKED.md remains controlling; execution additionally needs
+# a separately reviewed authorization document and a valid before-baseline for
+# this exact Base checkpoint.
+backend: tinker
+config_schema_version: 1
+
+base_model: Qwen/Qwen3.5-9B-Base
+
+# Tinker's current model table recommends role_colon for this Base checkpoint.
+# Do not substitute qwen3_5_disable_thinking merely because the product runs
+# the instruct checkpoint with thinking disabled: a renderer is part of the
+# training format and must follow the exact base model.
+renderer: role_colon
+
+serving:
+  # Passed explicitly to vLLM for both the before and after endpoints.  The
+  # renderer verifier compares this Jinja template token-for-token with
+  # Tinker's RoleColon generation prompt before cloud execution.
+  chat_template: templates/role_colon.jinja
+
+lora:
+  rank: 32
+
+sequence:
+  max_tokens: 4096
+  # Before the Tinker packages are imported, UTF-8 bytes are a conservative
+  # upper bound for the text-token count of a byte-fallback tokenizer.  This
+  # reserve covers role/control tokens added by the renderer.  Execution also
+  # performs an exact renderer/tokenizer measurement and aborts on overflow.
+  template_reserve_tokens: 256
+  on_overflow: abort
+
+training:
+  num_epochs: 2
+  train_batch_size: 4
+  eval_batch_size: 1
+  learning_rate: 1.0e-4
+  lr_schedule: linear
+  eval_every: 17
+  save_every: 17
+  max_steps: 68
+
+data:
+  train: data/promoted/train.jsonl
+  eval: data/promoted/eval.jsonl
+
+egress:
+  host: tinker
+  allowed_source_classes:
+    - synthetic
+
+packages:
+  tinker: "0.26.1"
+  tinker-cookbook: "0.5.5"
+
+# The transitive libraries that decide token ids, rendering and adapter layout.
+# Pinning only tinker/tinker-cookbook would let a transformers or tokenizers
+# upgrade change the exact ids a verified run measured while every recorded
+# version still matched.  Resolved 2026-08-29 in .venv-tinker; the full set is
+# in requirements-tinker.lock.  Refresh both together and re-freeze.
+runtime_packages:
+  transformers: "5.5.4"
+  tokenizers: "0.22.2"
+  torch: "2.13.0"
+  datasets: "5.0.1"
+  huggingface-hub: "1.29.0"
+  chz: "0.4.0"
+  tml-renderers: "0.1.0"
+  safetensors: "0.8.0"
+
+pricing:
+  # Current Tinker pricing on 2026-08-29 lists Qwen3.5-9B at this training
+  # rate.  Execution refuses when this observation is older than max_age_days;
+  # refresh and re-freeze rather than spending against stale pricing.
+  observed_at: "2026-08-29"
+  max_age_days: 30
+  train_usd_per_million_tokens: 1.463
+
+evaluation:
+  config: train/qlora_9b.yaml
+  # Re-pinned when qlora_9b.yaml gained architecture_profile; the gates it
+  # declares are unchanged.
+  config_sha256: 5feaba2650b87c51afb58c4ee2ce2abd8461a71698c6391e30acbbd37d873576
+  required_baseline_model: Qwen/Qwen3.5-9B-Base
+  required_model_config: office-student-9b-base
+  required_host_config: student-serve
+  stop_sequences:
+    - "\n\nUser:"
+
+authorization:
+  # Intentionally absent today.  The schema-v3 preview manifest records this
+  # as execution_authorized=false.  --execute remains impossible until a
+  # reviewed document exists and is pinned into a fresh non-preview manifest.
+  required_document: train/TRAINING_JUSTIFIED.md
+
+output:
+  checkpoint_label: trained_unvalidated

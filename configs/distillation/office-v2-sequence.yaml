@@ -1,0 +1,38 @@
+# A distillation RUN PLAN. Does NOT authorize training (see TRAINING_BLOCKED.md).
+# The planner (src/distill_plan.py) reads this + the model registry + the fleet
+# and either emits a fail-closed plan or refuses. DRAFT.
+schema_version: 1
+name: office-v2-sequence
+
+student: qwen35-9b-instruct       # -> configs/models/<name>.yaml
+teacher: muse-glimmer-30b         # non-Qwen: Mode C expected to be refused
+objective: reasoning_import       # import reasoning/agentic behaviour; keep voice
+
+# sequence | preference | on_policy_kd | auto
+#   auto downgrades on a tokenizer mismatch: on_policy_kd -> preference -> sequence
+mode: auto
+
+precision_preference: [fp8, bf16]   # planner also honours host capability
+
+replay:
+  enabled: true
+  # No fixed ratio is asserted. Published evidence clusters near 1:1. Sweep and
+  # pick against the gates below.
+  sweep: ["1:0", "2:1", "1:1", "1:2"]
+  anchor_scoring: kl_penalty        # kl_penalty | ntp (scoring matters as much as ratio)
+  anchor_gates:
+    - voice_eval.v1
+    - edit_contract_eval.v1
+
+preference:
+  judge_required: true              # pairs MUST pass a judge before training
+  scope: [voice, faithfulness]      # NOT edit_op_selection / tool_args (token-localized)
+
+# Mode C parameters are stated EXPLICITLY so nothing is inherited from
+# qlora_9b.yaml. Used only if the compatibility key matches at plan time.
+on_policy_kd:
+  trl_version: "1.10.0"
+  learning_rate: 1.0e-6             # NOT 1e-4
+  max_completion_length: 512        # watch completions/clipped_ratio
+  vllm_mode: colocate
+  beta: 0.5                         # JSD; 1.0 would be reverse KL

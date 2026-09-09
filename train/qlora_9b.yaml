@@ -10,6 +10,12 @@
 
 base_model: Qwen/Qwen3.5-9B
 load_in_4bit: true
+
+# The layer layout the target_modules list below is written for. src/train_qlora.py
+# recomputes the signature from the loaded model's own config and ABORTS before
+# PEFT attaches anything if it differs. Declared, not inferred: a 48-layer MoE
+# would otherwise take this 32-layer target list and train almost nothing.
+architecture_profile: qwen35-hybrid-dense-9b
 max_seq_length: 32768
 
 lora:

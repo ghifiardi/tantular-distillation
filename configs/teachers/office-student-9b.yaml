@@ -13,6 +13,13 @@
 # disagree, the gates abort — they are compared, not assumed.
 
 name: office-student-9b
+
+# Identity — model_id, tokenizer/chat-template digests, licence freshness, the
+# LoRA architecture profile — lives in the model registry, not here. This file
+# says how the checkpoint is SERVED. src/distill_plan.py checks that the two
+# still describe the same thing and refuses to plan if they do not.
+registry_model: qwen35-9b-instruct
+
 port: 8020            # distinct from muse-glimmer's 8010 so both can be up
 served_model_name: Qwen/Qwen3.5-9B
 license: apache-2.0

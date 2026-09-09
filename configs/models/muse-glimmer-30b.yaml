@@ -1,0 +1,49 @@
+# A REAL teacher this repo already uses (configs/teachers/muse-glimmer.yaml).
+# Non-Qwen, so its tokenizer differs from the Qwen student: Mode C is expected
+# to be refused for the muse-glimmer -> qwen35-9b pair. DRAFT registry entry.
+schema_version: 1
+
+model_id: meta-models/Muse-Glimmer-30B-assistant
+revision: REPLACE_WITH_PINNED_HUB_COMMIT
+role: teacher
+family: muse-glimmer
+generation: "1"
+
+modality:
+  text: true
+  vision: true
+
+params:
+  total_b: 30.0
+  active_b: null
+  vision_b: null
+
+tokenizer:
+  model_id: meta-models/Muse-Glimmer-30B-assistant
+  revision: REPLACE_WITH_PINNED_HUB_COMMIT
+  sha256: TOKENIZER_DIGEST_MUSE_GLIMMER_30B   # differs from the Qwen student
+
+chat_template:
+  source: model
+  path: null
+  sha256: CHAT_TEMPLATE_DIGEST_MUSE_GLIMMER_30B
+
+architecture_profile: null    # teachers are served by URL; no LoRA layout needed
+
+# Serving config for this same checkpoint; see the note in
+# configs/models/qwen35-9b-instruct.yaml. Its fp8/int4/gateway repos are
+# deliberately different artefacts and are not identity claims; repos.bf16 is.
+serving_config: muse-glimmer
+
+capabilities:
+  tools: true
+  logprobs: true
+
+license:
+  identifier: apache-2.0
+  output_training_permitted: true
+  reviewed_at: 2026-09-03
+  recheck_max_age_days: 180
+  evidence_sha256: LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B
+
+digests_verified: false

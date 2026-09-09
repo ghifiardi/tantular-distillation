@@ -57,12 +57,21 @@ def run_contract_checker(cases: list[dict], addin_src: Path) -> dict[str, dict]:
         sys.exit(f"checker missing: {checker}")
     if not (addin_src / "chat" / "editContract.js").is_file():
         sys.exit(f"add-in parser missing under {addin_src}")
-    tmp = ROOT / "data" / "gates" / "fce" / "_cases.json"
-    tmp.parent.mkdir(parents=True, exist_ok=True)
-    tmp.write_text(json.dumps(cases, ensure_ascii=False), encoding="utf-8")
-    proc = subprocess.run(["node", str(checker), str(tmp), str(addin_src)],
-                          capture_output=True, text=True, cwd=ROOT,
-                          start_new_session=True, timeout=300)
+    # A PRIVATE temporary file, not data/gates/fce/_cases.json.
+    #
+    # That fixed path was inside the repository, so merely running the test
+    # suite left an untracked artifact in the working tree — and, worse, two
+    # concurrent scorer runs wrote the same file, so one could read the other's
+    # cases and score the wrong document. The same cross-process contention the
+    # add-in gate serialises against, in a quieter form.
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="fce-cases-") as scratch:
+        tmp = Path(scratch) / "cases.json"
+        tmp.write_text(json.dumps(cases, ensure_ascii=False), encoding="utf-8")
+        proc = subprocess.run(["node", str(checker), str(tmp), str(addin_src)],
+                              capture_output=True, text=True, cwd=ROOT,
+                              start_new_session=True, timeout=300)
     if proc.returncode != 0:
         sys.exit(f"contract checker failed:\n{proc.stderr[-500:]}")
     return {r["id"]: r for r in json.loads(proc.stdout)["results"]}

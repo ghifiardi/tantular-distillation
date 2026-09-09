@@ -18,7 +18,7 @@ Deselection happens only in `.github/workflows/tests.yml`, as an explicit `-m`
 expression a reader can see. It is a workflow policy, not a property of the
 tests.
 
-## Gap 1 — the corpus (13 tests)
+## Gap 1 — the corpus (37 tests)
 
 `.gitignore` excludes `*.jsonl` (except `prompts/*.jsonl`), `data/raw/` and
 `data/promoted/`: *"Corpora and weights never belong in git — HF hosts those."*
@@ -28,7 +28,9 @@ A fresh clone therefore lacks:
     data/promoted/train.jsonl              the promoted training split
     data/promoted/eval.jsonl               the promoted held-out split
 
-Thirteen tests read them: twelve in `tests/test_training_manifest.py` and
+Thirty-seven tests read them, across `tests/test_training_manifest.py`,
+`tests/test_tinker_sft.py` (the freeze, payload-rendering and checkpoint-label
+paths all start from a real freeze) and
 `tests/test_run_gates.py::test_trainer_refuses_ai19_end_to_end`.
 
 That last one is marked rather than refactored because its dependency is
@@ -52,7 +54,7 @@ without touching the corpus and the wiring assertion could return to CI. That is
 a trainer-ordering question with its own tradeoffs (failing early on a bad
 freeze is also worth something), so it is recorded rather than decided.
 
-## Gap 2 — the Office add-in (20 tests)
+## Gap 2 — the Office add-in (36 tests)
 
 `train/qlora_9b.yaml` points the `office_json_contract` and
 `edit_contract_output` gates at `../tantular_office_addin` — a SIBLING of this
@@ -69,7 +71,7 @@ Pinning a feature branch and using `npm install` instead would produce a
 non-reproducible dependency tree pinned to a moving ref. That trades away the
 determinism the gates depend on, so it is not done.
 
-**Twenty-eight tests** carry `requires_addin`: twenty in
+**Thirty-six tests** carry `requires_addin`: twenty-eight in
 `tests/test_run_gates.py`, which fail without the add-in source, its parser or
 its Node suite, and eight in `tests/test_faithful_edit_scorer.py`.
 
@@ -121,16 +123,29 @@ version control. This is the standing argument for the upstream fix above.
 The workflow collects each partition into the job log every run and asserts its
 size independently:
 
-    EXPECTED_EXCLUDED_CORPUS: 13
-    EXPECTED_EXCLUDED_ADDIN:  20
+    EXPECTED_EXCLUDED_CORPUS: 37
+    EXPECTED_EXCLUDED_ADDIN:  36
 
 Both assertions fail in **both** directions. If a number moves, investigate; do
 not update it to match. A changed count means a new dependency was introduced or
 an existing test stopped exercising one, and both are worth knowing.
 
-The **final deselected total is read from the run**, never computed as 13 + 20.
+The **final deselected total is read from the run**, never computed as 37 + 36.
 A test could in principle carry both markers, in which case the union is smaller
-than the sum.
+than the sum. Today the union collects 73, which happens to equal the sum — that
+is a measurement, not an assumption, and it is re-measured whenever either
+number moves.
+
+### A test that only LOOKED add-in dependent
+
+`test_the_contract_checker_writes_its_cases_outside_the_repository` mocks its
+subprocess and never runs the real parser, but `run_contract_checker` refuses
+before calling anything unless `<addin_src>/chat/editContract.js` exists. It
+therefore failed without the add-in while testing nothing about it. It now
+builds a temporary fake add-in tree containing that sentinel file, and stays in
+CI. Marking it `requires_addin` would have been the easy fix and the wrong one:
+the hermeticity property it guards — that scoring leaves no artifact in the
+working tree — is exactly the kind of thing CI should be checking.
 
 *Measurement caveat:* the add-in partition was discovered by running the
 corpus-free partition on a checkout with the add-in absent. It therefore

@@ -1,0 +1,404 @@
+{
+  "schema_version": 5,
+  "_what": "Preview of exact inputs and controls for a possible training run. It does not authorize or record a started run.",
+  "frozen_at": "2026-09-03T00:00:00+07:00",
+  "corpus": {
+    "path": "data/v3-candidate/traces.r0.jsonl",
+    "sha256": "1d16204ddc384fce1904a075c2dca2e5a9d50c5262f6fb1f56755a3280a757f2",
+    "traces": 260,
+    "families": 260,
+    "provenance": {
+      "split_fingerprint": "ccb5ff683228c4c9",
+      "split_seed": "tantular-office-v2",
+      "template_sha256": "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e",
+      "repo": "muse-glimmer:30b",
+      "quantization": "int4_ollama",
+      "host": "ai19-ollama",
+      "reasoning_strength": "high",
+      "temperature": 0.0,
+      "seed": 0
+    }
+  },
+  "training_config": {
+    "path": "train/tinker_sft_9b.yaml",
+    "sha256": "c0176761a6b7d226796abdb0b6dae25ac79d3128fe76e2d1d5c4c83eef1490dc"
+  },
+  "promotion_manifest": {
+    "path": "train/RUN_MANIFEST.v1-mechanical.json",
+    "sha256": "f325f480118bae52a9d766054bc83926c45905cbcebedbb6b2070c1c5c80893c",
+    "source_corpus_sha256": "1d16204ddc384fce1904a075c2dca2e5a9d50c5262f6fb1f56755a3280a757f2",
+    "split_fingerprint": "ccb5ff683228c4c9",
+    "promoted": {
+      "train": {
+        "path": "data/promoted/train.jsonl",
+        "sha256": "79c7b6aca182ceeb17fdd4de02a994d63dd890b3fdf9019f5df4de3a6f515629",
+        "traces": 136
+      },
+      "eval": {
+        "path": "data/promoted/eval.jsonl",
+        "sha256": "636f78642152246ef5579b883e988df5fef35cf8538fa1efed461b1697b00d6e",
+        "traces": 47
+      }
+    }
+  },
+  "gate": {
+    "command": "src/verify_corpus.py data/v3-candidate/traces.r0.jsonl --gate",
+    "exit_code": 1,
+    "verdict": "FAILED",
+    "violations": [
+      "260 trace(s) from a quantized teacher ({'int4_ollama': 260}) \u2014 regenerate at fp8 before training, or proceed under a SIGNED waiver (calibration/INT4_WAIVER.md). This gate stays FAILED either way: a waiver authorises proceeding despite the failure, it does not convert it into a pass, and no FP8 claim may be made."
+    ],
+    "_not_a_pass": "A non-zero exit is the correct and expected state for an int4 corpus. The waiver authorises proceeding DESPITE this failure; it does not convert it into a pass, and no FP8 claim may be made on the strength of it.",
+    "output": [
+      "    challenge  families   34 ( 13.1%)   traces    34 ( 13.1%)",
+      "    eval       families   54 ( 20.8%)   traces    54 ( 20.8%)",
+      "    train      families  172 ( 66.2%)   traces   172 ( 66.2%)",
+      "",
+      "FAILED \u2014 1 violation(s):",
+      "  260 trace(s) from a quantized teacher ({'int4_ollama': 260}) \u2014 regenerate at fp8 before training, or proceed under a SIGNED waiver (calibration/INT4_WAIVER.md). This gate stays FAILED either way: a waiver authorises proceeding despite the failure, it does not convert it into a pass, and no FP8 claim may be made."
+    ]
+  },
+  "waiver": {
+    "path": "calibration/INT4_WAIVER.md",
+    "sha256": "dd9725a5b5d940198289877fa98ca1f73fbad35c0f7a0091a4755f54affc7d18"
+  },
+  "provenance_audit": {
+    "corpus": "data/v3-candidate/traces.r0.jsonl",
+    "records": 260,
+    "teachers": {
+      "muse-glimmer": 260
+    },
+    "repos": {
+      "muse-glimmer:30b": 260
+    },
+    "quantizations": {
+      "int4_ollama": 260
+    },
+    "hosts": {
+      "ai19-ollama": 260
+    },
+    "licenses_recorded": {
+      "apache-2.0": 260
+    },
+    "source_classes": {
+      "synthetic": 260
+    },
+    "fp8_gate": {
+      "status": "UNMET",
+      "untrainable_quantizations": {
+        "int4_ollama": 260
+      },
+      "waiver_file_present": true,
+      "uncovered_by_waiver": {}
+    },
+    "real_office_claim": {
+      "supported": false,
+      "synthetic_traces": 260
+    },
+    "license_freshness": {
+      "resolved": [
+        {
+          "identifier": "apache-2.0",
+          "output_training_permitted": true,
+          "reviewed_at": "2026-09-03",
+          "age_days": 0,
+          "max_age_days": 180,
+          "evidence_present": true,
+          "status": "FRESH",
+          "reason": null,
+          "problems": [],
+          "registry_model": "muse-glimmer-30b",
+          "model_id": "meta-models/Muse-Glimmer-30B-assistant",
+          "digests_verified": false
+        }
+      ],
+      "unresolved_corpus_teachers": []
+    },
+    "identity_verification": {
+      "all_verified": false,
+      "unverified_models": [
+        "muse-glimmer-30b"
+      ]
+    },
+    "limits": [
+      "FP8 gate UNMET: 260 trace(s) from a quantized teacher {'int4_ollama': 260} \u2014 no FP8 claim may be made.",
+      "Quantized traces are within calibration/INT4_WAIVER.md scope; the waiver authorises proceeding DESPITE the failure \u2014 it does not convert it to a pass.",
+      "260/260 trace(s) are source_class: synthetic \u2014 supports NO claim about real Office documents.",
+      "Registry model 'muse-glimmer-30b' digests_verified is not true; tokenizer/template sha256 unverified."
+    ],
+    "trainable_as_is": false,
+    "authorizes_training": false,
+    "_what": "Mechanical limits of the corpus at freeze time. Additive evidence: it does not decide the gate, and it authorises nothing.",
+    "as_of_date": "2026-09-03"
+  },
+  "claims_this_run_may_NOT_support": [
+    "Any statement about performance on real Office documents \u2014 the corpus is entirely source_class: synthetic.",
+    "FP8 equivalence, or that the FP8 gate passed. The treatment arm has never been generated.",
+    "Teacher stability under batching other than concurrency 4. See calibration/VOLATILITY_v3.md."
+  ],
+  "backend": {
+    "name": "tinker",
+    "config_schema_version": 1,
+    "external_service": true,
+    "base_model": "Qwen/Qwen3.5-9B-Base",
+    "renderer": "role_colon",
+    "serving": {
+      "chat_template": "templates/role_colon.jinja",
+      "chat_template_sha256": "2845ea03848c309d512a0bfe4ecd3f604810c22362236a8339a9bb8391ea4fa2"
+    },
+    "lora_rank": 32,
+    "max_tokens": 4096,
+    "training": {
+      "num_epochs": 2,
+      "train_batch_size": 4,
+      "eval_batch_size": 1,
+      "learning_rate": 0.0001,
+      "lr_schedule": "linear",
+      "eval_every": 17,
+      "save_every": 17,
+      "max_steps": 68
+    },
+    "egress": {
+      "host": "tinker",
+      "allowed_source_classes": [
+        "synthetic"
+      ]
+    },
+    "packages": {
+      "tinker": "0.26.1",
+      "tinker-cookbook": "0.5.5"
+    },
+    "runtime_packages": {
+      "transformers": "5.5.4",
+      "tokenizers": "0.22.2",
+      "torch": "2.13.0",
+      "datasets": "5.0.1",
+      "huggingface-hub": "1.29.0",
+      "chz": "0.4.0",
+      "tml-renderers": "0.1.0",
+      "safetensors": "0.8.0"
+    },
+    "pricing": {
+      "observed_at": "2026-08-29",
+      "max_age_days": 30,
+      "train_usd_per_million_tokens": 1.463
+    },
+    "payload": {
+      "train": {
+        "source_path": "data/promoted/train.jsonl",
+        "source_sha256": "79c7b6aca182ceeb17fdd4de02a994d63dd890b3fdf9019f5df4de3a6f515629",
+        "rows": 136,
+        "families": [
+          "document:email::0001",
+          "document:email::0002",
+          "document:email::0004",
+          "document:email::0005",
+          "document:email::0006",
+          "document:email::0008",
+          "document:email::0009",
+          "document:memo::0002",
+          "document:memo::0003",
+          "document:memo::0004",
+          "document:memo::0005",
+          "document:memo::0008",
+          "document:memo::0009",
+          "document:report::0000",
+          "document:report::0001",
+          "document:report::0002",
+          "document:report::0004",
+          "document:report::0006",
+          "document:report::0009",
+          "document:slide-text::0001",
+          "document:slide-text::0002",
+          "document:slide-text::0003",
+          "document:slide-text::0004",
+          "document:slide-text::0006",
+          "document:slide-text::0007",
+          "document:slide-text::0008",
+          "document:spreadsheet-text::0005",
+          "document:spreadsheet-text::0006",
+          "document:spreadsheet-text::0007",
+          "document:spreadsheet-text::0008",
+          "document:spreadsheet-text::0009",
+          "edit:elaborasi::0002",
+          "edit:elaborasi::0003",
+          "edit:elaborasi::0004",
+          "edit:elaborasi::0005",
+          "edit:elaborasi::0006",
+          "edit:elaborasi::0007",
+          "edit:koreksi::0000",
+          "edit:koreksi::0001",
+          "edit:koreksi::0002",
+          "edit:koreksi::0005",
+          "edit:koreksi::0006",
+          "edit:koreksi::0007",
+          "edit:koreksi::0008",
+          "edit:koreksi::0009",
+          "edit:perjelas::0001",
+          "edit:perjelas::0002",
+          "edit:perjelas::0003",
+          "edit:perjelas::0004",
+          "edit:perjelas::0005",
+          "edit:perjelas::0006",
+          "edit:perjelas::0007",
+          "edit:perjelas::0008",
+          "edit:restrukturisasi::0001",
+          "edit:restrukturisasi::0002",
+          "edit:restrukturisasi::0004",
+          "edit:restrukturisasi::0005",
+          "edit:restrukturisasi::0006",
+          "edit:restrukturisasi::0007",
+          "edit:restrukturisasi::0008",
+          "edit:restrukturisasi::0009",
+          "edit:ringkas_bagian::0001",
+          "edit:ringkas_bagian::0002",
+          "edit:ringkas_bagian::0003",
+          "edit:ringkas_bagian::0004",
+          "edit:ringkas_bagian::0005",
+          "edit:ringkas_bagian::0007",
+          "edit:ringkas_bagian::0009",
+          "edit:ubah_istilah::0000",
+          "edit:ubah_istilah::0001",
+          "edit:ubah_istilah::0002",
+          "edit:ubah_istilah::0005",
+          "edit:ubah_istilah::0008",
+          "prose:ringkas::0005",
+          "prose:ringkas::0006",
+          "prose:ringkas::0007",
+          "prose:ringkas::0008",
+          "prose:ringkas::0009",
+          "prose:terjemah::0001",
+          "prose:terjemah::0002",
+          "prose:terjemah::0003",
+          "prose:terjemah::0005",
+          "prose:terjemah::0006",
+          "prose:terjemah::0008",
+          "prose:terjemah::0009",
+          "router:CEK_AMAN::0001",
+          "router:CEK_AMAN::0002",
+          "router:CEK_AMAN::0003",
+          "router:CEK_AMAN::0004",
+          "router:CEK_AMAN::0005",
+          "router:CEK_AMAN::0006",
+          "router:CEK_AMAN::0007",
+          "router:CEK_AMAN::0008",
+          "router:DRAFT_TEKS::0000",
+          "router:DRAFT_TEKS::0002",
+          "router:DRAFT_TEKS::0003",
+          "router:DRAFT_TEKS::0005",
+          "router:DRAFT_TEKS::0006",
+          "router:DRAFT_TEKS::0007",
+          "router:DRAFT_TEKS::0008",
+          "router:EDIT_TEKS::0001",
+          "router:EDIT_TEKS::0002",
+          "router:EDIT_TEKS::0003",
+          "router:EDIT_TEKS::0004",
+          "router:EDIT_TEKS::0007",
+          "router:RINGKAS::0001",
+          "router:RINGKAS::0003",
+          "router:RINGKAS::0004",
+          "router:RINGKAS::0006",
+          "router:RINGKAS::0007",
+          "router:TANYA_DOKUMEN::0000",
+          "router:TANYA_DOKUMEN::0001",
+          "router:TANYA_DOKUMEN::0004",
+          "router:TANYA_DOKUMEN::0005",
+          "router:TANYA_DOKUMEN::0006",
+          "router:TANYA_DOKUMEN::0008",
+          "router:TANYA_DOKUMEN::0009",
+          "router:TERJEMAH::0002",
+          "router:TERJEMAH::0003",
+          "router:TERJEMAH::0004",
+          "router:TERJEMAH::0006",
+          "router:TERJEMAH::0007",
+          "router:TERJEMAH::0008",
+          "router:TERJEMAH::0009",
+          "router:UBAH_NADA::0001",
+          "router:UBAH_NADA::0002",
+          "router:UBAH_NADA::0003",
+          "router:UBAH_NADA::0005",
+          "router:UBAH_NADA::0006",
+          "router:UBAH_NADA::0009",
+          "router:UMUM::0000",
+          "router:UMUM::0002",
+          "router:UMUM::0003",
+          "router:UMUM::0005",
+          "router:UMUM::0006",
+          "router:UMUM::0007"
+        ],
+        "source_classes": {
+          "synthetic": 136
+        },
+        "upload_sha256": "9526143643206942e060927ad98c749f9ee633f3122b6bacf87efafff1a5ec78",
+        "audit_sha256": "43d9122c2d645a5e20412a48284d9970014514eede452184d9af624f83748829",
+        "max_content_utf8_bytes": 1554
+      },
+      "eval": {
+        "source_path": "data/promoted/eval.jsonl",
+        "source_sha256": "636f78642152246ef5579b883e988df5fef35cf8538fa1efed461b1697b00d6e",
+        "rows": 47,
+        "families": [
+          "document:email::0000",
+          "document:email::0003",
+          "document:memo::0000",
+          "document:memo::0006",
+          "document:memo::0007",
+          "document:report::0003",
+          "document:report::0005",
+          "document:report::0007",
+          "document:slide-text::0000",
+          "document:spreadsheet-text::0000",
+          "document:spreadsheet-text::0001",
+          "document:spreadsheet-text::0002",
+          "document:spreadsheet-text::0004",
+          "edit:elaborasi::0000",
+          "edit:elaborasi::0001",
+          "edit:koreksi::0004",
+          "edit:perjelas::0000",
+          "edit:restrukturisasi::0003",
+          "edit:ringkas_bagian::0006",
+          "edit:ringkas_bagian::0008",
+          "edit:ubah_istilah::0003",
+          "edit:ubah_istilah::0006",
+          "prose:ringkas::0001",
+          "prose:ringkas::0002",
+          "prose:ringkas::0003",
+          "prose:ringkas::0004",
+          "prose:terjemah::0004",
+          "prose:terjemah::0007",
+          "router:CEK_AMAN::0009",
+          "router:DRAFT_TEKS::0001",
+          "router:DRAFT_TEKS::0004",
+          "router:EDIT_TEKS::0000",
+          "router:EDIT_TEKS::0005",
+          "router:EDIT_TEKS::0006",
+          "router:EDIT_TEKS::0009",
+          "router:RINGKAS::0000",
+          "router:RINGKAS::0005",
+          "router:RINGKAS::0008",
+          "router:RINGKAS::0009",
+          "router:TANYA_DOKUMEN::0003",
+          "router:TERJEMAH::0000",
+          "router:TERJEMAH::0005",
+          "router:UBAH_NADA::0004",
+          "router:UBAH_NADA::0007",
+          "router:UBAH_NADA::0008",
+          "router:UMUM::0001",
+          "router:UMUM::0009"
+        ],
+        "source_classes": {
+          "synthetic": 47
+        },
+        "upload_sha256": "47974eca9e1de411999b573753a7604ae7f426e9780c3f63f4453a8415a500e9",
+        "audit_sha256": "f9ad5c5ae6aa5f7e7105c685d025b4e042924b9bb4034cdceb4755b526c644da",
+        "max_content_utf8_bytes": 1626
+      }
+    },
+    "checkpoint_label": "trained_unvalidated"
+  },
+  "before_baseline": null,
+  "training_authorization": null,
+  "execution_authorized": false,
+  "preview": true,
+  "_preview_warning": "PREVIEW ONLY. Training is not justified and no valid same-base before baseline is pinned. This manifest cannot authorize API calls."
+}

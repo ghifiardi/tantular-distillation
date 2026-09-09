@@ -15,6 +15,19 @@ supports_fp8: true          # irrelevant here: the student is served at bf16
 quantization: bf16
 gpu_memory_utilization: 0.90
 
+# NO gpu_memory_gb IS DECLARED HERE, deliberately, and no teacher_serving flag
+# either. src/distill_plan.py reads a declared capacity as "this host may serve
+# a teacher", and this card is the measurement instrument: putting the teacher
+# on it during a generation run would perturb the very endpoint the before/after
+# gates read. Leaving it undeclared keeps it out of the teacher fleet, which is
+# the fail-closed answer.
+#
+# `teacher_serving: false` is NOT the way to express that: src/config.py's
+# resolve() reads that flag to mean "this host serves no model from
+# configs/teachers/", and the STUDENT lives in configs/teachers/ (see the note
+# at the top of configs/teachers/office-student-9b.yaml). Setting it here makes
+# the gate runner refuse to resolve the student's own endpoint.
+
 # Reached over an SSH tunnel or private pod address. Pass
 # `--student-base-url http://<reachable-host>:8020/v1` to train_qlora.py, or set
 # HOST_BASE_URL when the pod exists. Left unset deliberately so a stale rental

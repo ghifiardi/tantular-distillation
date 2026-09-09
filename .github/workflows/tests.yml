@@ -32,8 +32,8 @@ jobs:
     timeout-minutes: 30
 
     env:
-      EXPECTED_EXCLUDED_CORPUS: "13"
-      EXPECTED_EXCLUDED_ADDIN: "28"
+      EXPECTED_EXCLUDED_CORPUS: "37"
+      EXPECTED_EXCLUDED_ADDIN: "36"
 
     steps:
       - uses: actions/checkout@v7
