@@ -73,6 +73,13 @@ def main() -> None:
                         metavar="N", help="trace index where a session boundary falls")
     parser.add_argument("--resume-reason", default="",
                         help="why the run was resumed rather than restarted")
+    parser.add_argument("--harness-aware", action="store_true",
+                        help="declare that this pass was generated under a "
+                             "harness (generate.py --harness) and must carry "
+                             "uniform harness attribution. Never inferred: a "
+                             "corpus is not treated as harness-aware by "
+                             "accident, and one that lost its attribution must "
+                             "not read as a valid legacy pass.")
     args = parser.parse_args()
 
     if not args.pass_dir.is_dir():
@@ -82,6 +89,22 @@ def main() -> None:
     if not files:
         sys.exit(f"no .jsonl traces in {args.pass_dir}")
 
+    # Harness attribution, summarized once by the shared helper so this
+    # manifest, promotion, the freeze and the trainer cannot disagree about
+    # what the pass is. Declared by --harness-aware, never inferred.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import harness_distill
+
+    all_traces = []
+    for path in files:
+        all_traces.extend(json.loads(line) for line in
+                          path.read_text(encoding="utf-8").splitlines() if line.strip())
+    try:
+        harness_summary = harness_distill.summarize_harness_attribution(
+            all_traces, required=args.harness_aware)
+    except harness_distill.HarnessPlanError as exc:
+        sys.exit(f"harness attribution: {exc}")
+
     manifest = {
         "_what": "Digests of an on-disk generation pass. The traces themselves are "
                  "gitignored (see .gitignore: *.jsonl); this pins which bytes a "
@@ -89,6 +112,7 @@ def main() -> None:
         "_note": args.note,
         "location": str(args.pass_dir),
         "files": {path.name: describe(path) for path in files},
+        "harness": harness_summary,
     }
 
     # Session structure is part of what a pass IS, not incidental logistics. A

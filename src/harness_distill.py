@@ -204,6 +204,98 @@ def harness_provenance(spec: dict[str, Any], *,
     }
 
 
+# The shape every consumer records. Fixed keys, present in both the attributed
+# and the legacy case, so a reader never has to distinguish "absent" from
+# "false" — that ambiguity is how a declaration quietly disappears between the
+# pass manifest, promotion, the freeze and the trainer.
+_LEGACY_SUMMARY = {
+    "required": False,
+    "attributed": False,
+    "name": None,
+    "digest": None,
+    "prompt_verified": False,
+    "prompt_sha256": None,
+    "execution_model_registry": None,
+}
+
+
+def summarize_harness_attribution(traces: list[dict[str, Any]], *,
+                                  required: bool) -> dict[str, Any]:
+    """The single answer to "is this corpus harness-attributed, and by what?".
+
+    Reused by the pass manifest, promotion, the freeze, the trainer, the audit
+    and the corpus gate. Six implementations of this question would be six ways
+    for those to disagree, and the disagreement would surface only as a corpus
+    nobody can explain.
+
+    `required` is DECLARED, never inferred from the traces. Inferring it would
+    mean a corpus that lost its attribution reads as a valid legacy corpus,
+    which is exactly the silent failure this prevents.
+
+    Refuses rather than summarizing when the corpus is not internally coherent:
+    a partially attributed file is neither a valid legacy corpus nor a valid
+    harness-aware one, and two execution models in one file is the confound the
+    factorial arms exist to remove — those arms are separate generation passes.
+    """
+    if not traces:
+        raise HarnessPlanError(
+            "cannot summarize harness attribution of an empty corpus")
+
+    blocks = [t.get("harness_provenance") for t in traces]
+    attributed = [b for b in blocks if b]
+
+    if not required:
+        if attributed:
+            raise HarnessPlanError(
+                f"{len(attributed)}/{len(blocks)} trace(s) carry harness "
+                "attribution but harness-aware mode was not declared. Declare it "
+                "explicitly (--harness-aware); a corpus is not treated as "
+                "harness-aware by accident.")
+        return dict(_LEGACY_SUMMARY)
+
+    missing = len(blocks) - len(attributed)
+    if missing:
+        raise HarnessPlanError(
+            f"harness-aware mode is declared but {missing}/{len(blocks)} "
+            "trace(s) are not attributed. A partially attributed corpus is "
+            "neither a valid legacy corpus nor a valid harness-aware one.")
+
+    def one(field: str, label: str) -> Any:
+        seen = sorted({json.dumps(b.get(field), sort_keys=True) for b in attributed})
+        if len(seen) != 1:
+            raise HarnessPlanError(
+                f"the corpus mixes {len(seen)} {label}: "
+                + ", ".join(s[:24] for s in seen))
+        return json.loads(seen[0])
+
+    digest = one("digest", "harness digests")
+    name = one("name", "harness names")
+    prompt_sha = one("prompt_sha256", "harness prompt hashes")
+    model = one("execution_model_registry", "execution models")
+    verified = one("prompt_verified", "prompt verification states")
+
+    if verified is not True or not isinstance(prompt_sha, str) or \
+            not re.fullmatch(r"[0-9a-f]{64}", prompt_sha):
+        raise HarnessPlanError(
+            "harness-aware corpus carries an unverified prompt identity "
+            f"(prompt_verified={verified!r}). Attribution naming a prompt "
+            "nobody checked is worse than none: it looks like evidence.")
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise HarnessPlanError(f"harness digest is not a sha256: {digest!r}")
+    if not model:
+        raise HarnessPlanError("harness-aware corpus names no execution model")
+
+    return {
+        "required": True,
+        "attributed": True,
+        "name": name,
+        "digest": digest,
+        "prompt_verified": True,
+        "prompt_sha256": prompt_sha,
+        "execution_model_registry": model,
+    }
+
+
 def build_plan(experiment: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "student_model",

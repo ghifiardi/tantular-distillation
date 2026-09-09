@@ -45,10 +45,11 @@ except ImportError:
     sys.exit("pyyaml is required: pip install -r requirements.txt")
 
 ROOT = Path(__file__).resolve().parent.parent
-# v4/v5 add the provenance_audit block. The bump exists so an older
-# manifest cannot be mistaken for one that simply had nothing to report.
-SCHEMA_VERSION = 4
-TINKER_SCHEMA_VERSION = 5
+# v4/v5 added the provenance_audit block; v6/v7 add harness attribution. Each
+# bump exists so an older manifest cannot be mistaken for one that simply had
+# nothing to report — absence and "false" are different claims.
+SCHEMA_VERSION = 6
+TINKER_SCHEMA_VERSION = 7
 REQUIRED_INT4_WAIVER = ROOT / "calibration" / "INT4_WAIVER.md"
 
 
@@ -72,6 +73,44 @@ def load_json(path: Path, label: str) -> dict:
 
 def resolve(path: Path) -> Path:
     return path if path.is_absolute() else ROOT / path
+
+
+def harness_attribution(corpus: Path, promotion: dict) -> dict:
+    """Recompute the corpus's harness attribution and require it to match what
+    the promotion manifest declares.
+
+    RECOMPUTED, NOT TRUSTED. A freeze that copied the declaration forward would
+    record whatever the previous step asserted, so a doctored promotion manifest
+    would propagate into the run manifest unchallenged. The declaration decides
+    which mode to check in; the corpus bytes decide what is recorded.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import harness_distill
+
+    try:
+        traces = [json.loads(line) for line in
+                  corpus.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except json.JSONDecodeError as exc:
+        sys.exit(f"{corpus} is not readable JSONL: {exc}")
+
+    declared = ((promotion.get("source_corpus") or {}).get("harness")
+                if isinstance(promotion, dict) else None)
+    required = bool(declared and declared.get("required"))
+
+    try:
+        summary = harness_distill.summarize_harness_attribution(
+            traces, required=required)
+    except harness_distill.HarnessPlanError as exc:
+        sys.exit(f"harness attribution: {exc}\nRefusing to freeze a corpus whose "
+                 "attribution cannot be established.")
+    if declared and declared != summary:
+        sys.exit(
+            "the promotion manifest declares a different harness state than the "
+            f"corpus carries:\n  declared   {json.dumps(declared, sort_keys=True)}\n"
+            f"  recomputed {json.dumps(summary, sort_keys=True)}\n"
+            "A freeze records what the bytes say, not what a previous step "
+            "asserted about them.")
+    return summary
 
 
 def provenance_audit(corpus: Path, frozen_at: str) -> dict:
@@ -536,6 +575,7 @@ def main() -> None:
         "Written before training, never edited after."
     )
     audit = provenance_audit(args.corpus, args.frozen_at)
+    harness = harness_attribution(args.corpus, promotion)
 
     manifest = {
         "schema_version": schema_version,
@@ -569,6 +609,7 @@ def main() -> None:
             "sha256": digest(args.waiver) if args.waiver else None,
         },
         "provenance_audit": audit,
+        "harness": harness,
         "claims_this_run_may_NOT_support": [
             "Any statement about performance on real Office documents — the corpus is "
             "entirely source_class: synthetic.",

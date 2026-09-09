@@ -47,7 +47,7 @@ import freeze_training_run
 import train_qlora
 from tinker_payload import PayloadError, render_files, verify_upload_against_audit
 
-TINKER_MANIFEST_SCHEMA_VERSION = 5   # v5 records provenance_audit
+TINKER_MANIFEST_SCHEMA_VERSION = 7   # v7 records provenance_audit + harness
 CONFIRMATION_PHRASE = "I AUTHORIZE TANTULAR TINKER SFT V1"
 
 

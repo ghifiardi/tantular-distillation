@@ -206,6 +206,46 @@ def main() -> None:
         print("  Not removed: two families may answer different instructions the same")
         print("  way, and discarding one would delete a valid example.")
 
+    # --- harness attribution -------------------------------------------------
+    #
+    # Read the SOURCE PASS's declaration rather than guessing from the traces,
+    # then recompute independently over what is actually being promoted and
+    # require the two to agree. Trusting either one alone is how a harness-aware
+    # corpus quietly becomes a legacy one between the pass and the freeze.
+    import harness_distill
+
+    pass_manifest_path = args.traces.parent / "MANIFEST.json"
+    declared = None
+    if pass_manifest_path.is_file():
+        try:
+            pass_manifest = json.loads(pass_manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            sys.exit(f"{pass_manifest_path} is not readable JSON: {exc}")
+        entry = (pass_manifest.get("files") or {}).get(args.traces.name)
+        if entry:
+            actual = hashlib.sha256(args.traces.read_bytes()).hexdigest()
+            if entry.get("sha256") != actual:
+                sys.exit(
+                    f"{pass_manifest_path} describes different bytes than "
+                    f"{args.traces}:\n  manifest {entry.get('sha256')}\n"
+                    f"  on disk  {actual}\n"
+                    "Refusing to carry a harness declaration forward from a "
+                    "manifest that does not describe this corpus.")
+        declared = pass_manifest.get("harness")
+
+    # No declaration at all means a pass that predates harness attribution.
+    required = bool(declared and declared.get("required"))
+    try:
+        harness_summary = harness_distill.summarize_harness_attribution(
+            traces, required=required)
+    except harness_distill.HarnessPlanError as exc:
+        sys.exit(f"harness attribution in {args.traces}: {exc}")
+    if declared and declared != harness_summary:
+        sys.exit(
+            f"{pass_manifest_path} declares a different harness state than the "
+            f"corpus carries:\n  declared  {json.dumps(declared, sort_keys=True)}\n"
+            f"  recomputed {json.dumps(harness_summary, sort_keys=True)}")
+
     # --- split the promoted set --------------------------------------------
     out = defaultdict(list)
     for trace in kept:
@@ -214,6 +254,17 @@ def main() -> None:
     for split in ("train", "eval", "challenge"):
         note = "  <- held out of both outputs" if split == "challenge" else ""
         print(f"  {split:<10} {len(out[split]):>3}{note}")
+
+    for split in ("train", "eval"):
+        try:
+            promoted_summary = harness_distill.summarize_harness_attribution(
+                out[split], required=required) if out[split] else harness_summary
+        except harness_distill.HarnessPlanError as exc:
+            sys.exit(f"harness attribution in the promoted {split} split: {exc}")
+        if promoted_summary != harness_summary:
+            sys.exit(
+                f"the promoted {split} split does not match the source corpus's "
+                "harness attribution; promotion must not change it")
 
     if not args.write:
         print("\ndry run — pass --write to apply")
@@ -241,6 +292,11 @@ def main() -> None:
             "path": str(args.traces),
             "sha256": hashlib.sha256(args.traces.read_bytes()).hexdigest(),
             "traces": len(traces),
+            # Carried forward from the source pass, then INDEPENDENTLY
+            # recomputed over the promoted outputs and required to agree.
+            # Without this the declaration disappears between the pass and the
+            # freeze, and a harness-aware corpus silently becomes a legacy one.
+            "harness": harness_summary,
         },
         "bar": {
             "mechanical_strata_promoted": sorted(checked),

@@ -1,7 +1,7 @@
 {
-  "schema_version": 7,
+  "schema_version": 5,
   "_what": "Preview of exact inputs and controls for a possible training run. It does not authorize or record a started run.",
-  "frozen_at": "2026-09-09T00:00:00+07:00",
+  "frozen_at": "2026-09-03T00:00:00+07:00",
   "corpus": {
     "path": "data/v3-candidate/traces.r0.jsonl",
     "sha256": "1d16204ddc384fce1904a075c2dca2e5a9d50c5262f6fb1f56755a3280a757f2",
@@ -101,7 +101,7 @@
           "identifier": "apache-2.0",
           "output_training_permitted": true,
           "reviewed_at": "2026-09-03",
-          "age_days": 6,
+          "age_days": 0,
           "max_age_days": 180,
           "evidence_present": true,
           "status": "FRESH",
@@ -129,16 +129,7 @@
     "trainable_as_is": false,
     "authorizes_training": false,
     "_what": "Mechanical limits of the corpus at freeze time. Additive evidence: it does not decide the gate, and it authorises nothing.",
-    "as_of_date": "2026-09-09"
-  },
-  "harness": {
-    "required": false,
-    "attributed": false,
-    "name": null,
-    "digest": null,
-    "prompt_verified": false,
-    "prompt_sha256": null,
-    "execution_model_registry": null
+    "as_of_date": "2026-09-03"
   },
   "claims_this_run_may_NOT_support": [
     "Any statement about performance on real Office documents \u2014 the corpus is entirely source_class: synthetic.",

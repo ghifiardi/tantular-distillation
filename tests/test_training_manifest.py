@@ -62,9 +62,9 @@ def doctor(source: Path, out: Path, edit) -> Path:
     return out
 
 
-def test_freeze_v4_pins_promotion_outputs_and_failed_gate(valid_freeze):
+def test_freeze_v6_pins_promotion_outputs_and_failed_gate(valid_freeze):
     payload = json.loads(valid_freeze.read_text())
-    assert payload["schema_version"] == 4
+    assert payload["schema_version"] == 6
     assert payload["promotion_manifest"]["sha256"]
     assert payload["promotion_manifest"]["promoted"]["train"]["traces"] == 136
     assert payload["promotion_manifest"]["promoted"]["eval"]["traces"] == 47
@@ -80,12 +80,12 @@ def test_checked_in_v1_freeze_is_current_and_accepted():
     proc = subprocess.run([PY, TRAINER, "--dry-run"],
                           capture_output=True, text=True, cwd=ROOT)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "schema             4" in proc.stdout
+    assert "schema             6" in proc.stdout
     assert "waiver verified" in proc.stdout
     assert "DRY RUN OK" in proc.stdout
 
 
-def test_valid_v4_freeze_allows_complete_cpu_dry_run(valid_freeze):
+def test_valid_v6_freeze_allows_complete_cpu_dry_run(valid_freeze):
     proc = run_trainer(valid_freeze)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "waiver verified" in proc.stdout
@@ -266,13 +266,16 @@ def test_the_checked_in_freeze_is_dated_when_it_was_actually_made():
     payload = json.loads((ROOT / "train" / "RUN_MANIFEST.v1.json").read_text())
     audit = payload["provenance_audit"]
 
-    assert payload["schema_version"] == 4
-    assert payload["frozen_at"].startswith("2026-09-03")
-    assert audit["as_of_date"] == "2026-09-03"
+    assert payload["schema_version"] == 6
+    assert payload["frozen_at"].startswith("2026-09-09")
+    assert audit["as_of_date"] == "2026-09-09"
 
     resolved = audit["license_freshness"]["resolved"][0]
     assert resolved["reviewed_at"] == "2026-09-03"
-    assert resolved["age_days"] == 0, "the licence review is same-day, not -15"
+    # Six days old at this freeze date, and still inside the 180-day window.
+    # Not -15: a review dated after the freeze would be a data error, which is
+    # what the fixture below still exercises.
+    assert resolved["age_days"] == 6
     assert resolved["status"] == "FRESH"
 
     # Still not trainable, and for the honest reasons.
@@ -292,3 +295,80 @@ def test_the_archived_schema_2_freeze_still_holds_the_august_record():
     # The failed gate it recorded is preserved, not tidied away.
     assert archived["gate"]["exit_code"] == 1
     assert archived["gate"]["verdict"] == "FAILED"
+
+
+# --- v6: harness attribution is recomputed, never trusted -------------------
+
+@pytest.mark.requires_local_corpus
+def test_the_freeze_records_the_legacy_corpus_as_unattributed(valid_freeze):
+    """The existing corpus predates harness attribution. It must say so
+    explicitly — absent and false are different claims, and only one of them
+    survives being read by a later tool."""
+    harness = json.loads(valid_freeze.read_text())["harness"]
+    assert harness == {
+        "required": False, "attributed": False, "name": None, "digest": None,
+        "prompt_verified": False, "prompt_sha256": None,
+        "execution_model_registry": None,
+    }
+
+
+@pytest.mark.requires_local_corpus
+def test_a_doctored_harness_digest_is_rejected_by_the_trainer(valid_freeze, tmp_path):
+    """Checking that a `harness` object exists would accept a forged one. The
+    corpus bytes decide."""
+    doctored = doctor(valid_freeze, tmp_path / "forged.json",
+                      lambda p: p.__setitem__("harness", dict(
+                          p["harness"], required=True, attributed=True,
+                          name="tantular-office-current", digest="a" * 64,
+                          prompt_verified=True, prompt_sha256="b" * 64,
+                          execution_model_registry="muse-glimmer-30b")))
+    proc = run_trainer(doctored)
+    assert proc.returncode != 0
+    assert "harness attribution" in proc.stdout + proc.stderr
+
+
+@pytest.mark.requires_local_corpus
+def test_a_manifest_with_no_harness_block_is_rejected(valid_freeze, tmp_path):
+    """A freeze predating harness attribution cannot be told apart from one
+    that lost it, so the trainer refuses rather than assuming the benign case."""
+    doctored = doctor(valid_freeze, tmp_path / "stripped.json",
+                      lambda p: p.pop("harness"))
+    proc = run_trainer(doctored)
+    assert proc.returncode != 0
+    assert "records no harness attribution" in proc.stdout + proc.stderr
+
+
+def test_the_schema_4_and_5_archives_are_preserved():
+    """Each schema bump archives the prior form byte-for-byte. Regenerating a
+    manifest must never be the only copy of what it replaced."""
+    archive = ROOT / "train" / "archive"
+    for name, version in (("RUN_MANIFEST.v1.schema-2.json", 2),
+                          ("RUN_MANIFEST.v1.schema-4.json", 4),
+                          ("RUN_MANIFEST.tinker-sft-v1.preview.schema-5.json", 5)):
+        payload = json.loads((archive / name).read_text(encoding="utf-8"))
+        assert payload["schema_version"] == version, name
+        # The failed gate each one recorded is preserved, not tidied away.
+        assert payload["gate"]["exit_code"] == 1, name
+        assert payload["gate"]["verdict"] == "FAILED", name
+    # The older archives predate the block they were archived before.
+    assert "harness" not in json.loads(
+        (archive / "RUN_MANIFEST.v1.schema-4.json").read_text())
+    assert "provenance_audit" not in json.loads(
+        (archive / "RUN_MANIFEST.v1.schema-2.json").read_text())
+
+
+def test_the_regenerated_manifests_still_say_what_they_said_before():
+    """A schema bump must not quietly relax a verdict."""
+    for name, version in (("RUN_MANIFEST.v1.json", 6),
+                          ("RUN_MANIFEST.tinker-sft-v1.preview.json", 7)):
+        payload = json.loads((ROOT / "train" / name).read_text(encoding="utf-8"))
+        audit = payload["provenance_audit"]
+        assert payload["schema_version"] == version, name
+        assert payload["frozen_at"].startswith("2026-09-09"), name
+        assert audit["authorizes_training"] is False, name
+        assert audit["fp8_gate"]["status"] == "UNMET", name
+        assert audit["source_classes"] == {"synthetic": 260}, name
+        assert audit["real_office_claim"]["supported"] is False, name
+        assert payload["gate"]["verdict"] == "FAILED", name
+        assert payload["harness"]["required"] is False, name
+        assert payload["harness"]["attributed"] is False, name

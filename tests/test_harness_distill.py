@@ -377,3 +377,100 @@ def test_the_shipped_harnesses_cover_both_planned_arms():
                   ["compatible_registry_models"])
         assert "qwen35-9b-instruct" in models, name
         assert "muse-glimmer-30b" in models, name
+
+
+# --- one attribution summary, used by every consumer -------------------------
+#
+# The pass manifest, promotion, the freeze, the trainer, the audit and the
+# corpus gate all need the same answer to "is this corpus harness-attributed,
+# and by what?". Six implementations of that question would be six ways for them
+# to disagree, and the disagreement would only surface as a corpus nobody can
+# explain.
+
+def trace(**over):
+    block = {
+        "schema_version": 1, "name": "h", "status": "candidate",
+        "digest": "a" * 64,
+        "compatible_registry_models": ["m1", "m2"],
+        "execution_model_registry": "m1",
+        "prompt_sha256": "b" * 64, "prompt_verified": True,
+        "tool_policy_digest": "c" * 64,
+        "verification_policy_digest": "d" * 64,
+    }
+    block.update(over)
+    return {"family": "f", "completion": "x", "harness_provenance": block}
+
+
+def test_uniform_attribution_produces_one_pinned_summary():
+    summary = hd.summarize_harness_attribution([trace(), trace()], required=True)
+    assert summary == {
+        "required": True, "attributed": True, "name": "h", "digest": "a" * 64,
+        "prompt_verified": True, "prompt_sha256": "b" * 64,
+        "execution_model_registry": "m1",
+    }
+
+
+def test_unattributed_legacy_traces_stay_valid():
+    legacy = [{"family": "f", "provenance": {"teacher": "t"}}] * 3
+    assert hd.summarize_harness_attribution(legacy, required=False) == {
+        "required": False, "attributed": False, "name": None, "digest": None,
+        "prompt_verified": False, "prompt_sha256": None,
+        "execution_model_registry": None,
+    }
+
+
+def test_missing_attribution_under_required_refuses():
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.summarize_harness_attribution([trace(), {"family": "f"}], required=True)
+    assert "not attributed" in str(exc.value)
+
+
+def test_mixed_harness_digests_refuse():
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.summarize_harness_attribution([trace(), trace(digest="e" * 64)],
+                                         required=True)
+    assert "mixes 2 harness digests" in str(exc.value)
+
+
+def test_mixed_prompt_hashes_refuse():
+    """Same harness digest, different prompt identity: the harness definition
+    did not change but what the model was told did."""
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.summarize_harness_attribution([trace(), trace(prompt_sha256="f" * 64)],
+                                         required=True)
+    assert "prompt" in str(exc.value)
+
+
+def test_an_unverified_prompt_under_required_refuses():
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.summarize_harness_attribution(
+            [trace(prompt_verified=False, prompt_sha256=None)], required=True)
+    assert "unverified" in str(exc.value)
+
+
+def test_mixed_execution_models_refuse():
+    """The factorial arms are SEPARATE generation passes. One file holding both
+    is the confound the design exists to remove."""
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.summarize_harness_attribution(
+            [trace(), trace(execution_model_registry="m2")], required=True)
+    assert "execution model" in str(exc.value)
+
+
+def test_attributed_traces_under_legacy_mode_refuse():
+    """Not a valid legacy corpus and not a declared harness-aware one. Silently
+    accepting it is how the declaration gets lost."""
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.summarize_harness_attribution([trace()], required=False)
+    assert "harness-aware" in str(exc.value)
+
+
+def test_a_partially_attributed_legacy_file_refuses():
+    with pytest.raises(hd.HarnessPlanError):
+        hd.summarize_harness_attribution(
+            [trace(), {"family": "f"}], required=False)
+
+
+def test_an_empty_corpus_refuses():
+    with pytest.raises(hd.HarnessPlanError):
+        hd.summarize_harness_attribution([], required=True)
