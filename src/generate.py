@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -34,6 +35,7 @@ from bridge_client import TeacherClient, write_traces
 from config import base_url, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
+HARNESS_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 BATCH_INSTRUCTION = (
     "Berikut {n} permintaan independen. Jawab SETIAP permintaan pada baris "
@@ -120,8 +122,124 @@ def normalize(value: str) -> str:
     return re.sub(r"[^A-Z_]", "", str(value or "").upper())
 
 
+def _existing_harness_blocks(out_path: Path) -> list[dict | None]:
+    """The harness attribution already present in an output file, one entry per
+    record (None where a record carries none)."""
+    path = Path(out_path)
+    if not path.is_file() or not path.read_text(encoding="utf-8").strip():
+        return []
+    blocks: list[dict | None] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            blocks.append(json.loads(line).get("harness_provenance"))
+        except json.JSONDecodeError:
+            raise SystemExit(f"{path} is not readable JSONL; refusing to append to it")
+    return blocks
+
+
+def legacy_output_guard(out_path: Path) -> None:
+    """A run WITHOUT --harness must not append to an attributed corpus.
+
+    write_traces appends. Diluting attributed traces with unattributed ones
+    would leave a file that cannot answer the question attribution exists for,
+    and the dilution is invisible afterwards.
+    """
+    blocks = _existing_harness_blocks(out_path)
+    if any(block for block in blocks):
+        raise SystemExit(
+            f"{out_path} already holds harness-attributed traces, and this run "
+            "has no --harness. Appending unattributed traces would strip the "
+            "corpus of the attribution it was generated for. Write to a new "
+            "file, or pass the harness these traces were produced under."
+        )
+
+
+def harness_preflight(name: str, resolved: dict, out_path: Path) -> dict:
+    """Everything harness-related that must hold BEFORE the network is touched.
+
+    All of it is free and local. A refusal that arrives after an hour of
+    generation has already cost the thing it was protecting, so this runs before
+    any client is constructed.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import harness_distill as hd
+
+    registry_model = (resolved.get("TEACHER_REGISTRY_MODEL") or "").strip()
+    if not registry_model:
+        raise SystemExit(
+            f"serving config {resolved.get('TEACHER_NAME')!r} declares no "
+            "registry_model, so the model that would produce these traces "
+            "cannot be named. Harness attribution records the registry model "
+            "and will not infer it from the teacher name, the repo basename, or "
+            "the served alias — those identities diverge. Add registry_model to "
+            "the serving config."
+        )
+
+    try:
+        spec = hd.load_harness(name)
+    except hd.HarnessPlanError as exc:
+        raise SystemExit(f"harness {name!r}: {exc}")
+
+    try:
+        block = hd.harness_provenance(spec, execution_model_registry=registry_model)
+    except hd.HarnessPlanError as exc:
+        raise SystemExit(f"harness {name!r}: {exc}")
+
+    # Planning and auditing may describe an unverified harness. GENERATING an
+    # attributed corpus with one may not: the attribution would name a prompt
+    # identity nobody has checked, which is worse than no attribution because it
+    # looks like evidence.
+    if not block["prompt_verified"] or not HARNESS_SHA256_RE.match(
+            str(block["prompt_sha256"] or "")):
+        raise SystemExit(
+            f"harness {name!r} prompt identity is unverified; run "
+            "verify_harness_identity.py against a published, reproducible "
+            "prompt registry before generation.\n"
+            "Until the prompts are pinned, an attributed corpus would carry a "
+            "harness digest that cannot be reproduced or checked."
+        )
+
+    # Append mode: refuse to mix attribution rather than discover it later.
+    for existing in _existing_harness_blocks(out_path):
+        if not existing:
+            raise SystemExit(
+                f"{out_path} holds traces with no harness attribution, and this "
+                f"run would append attributed ones under {name!r}. A file that "
+                "is half attributed cannot be audited; write to a new file."
+            )
+        if existing.get("digest") != block["digest"]:
+            raise SystemExit(
+                f"{out_path} was produced under a different harness "
+                f"(digest {str(existing.get('digest'))[:16]}… vs "
+                f"{block['digest'][:16]}…). Two harnesses in one corpus make the "
+                "comparison the corpus exists for impossible."
+            )
+        if existing.get("execution_model_registry") != block["execution_model_registry"]:
+            raise SystemExit(
+                f"{out_path} was produced by a different execution model "
+                f"({existing.get('execution_model_registry')!r} vs "
+                f"{block['execution_model_registry']!r}). Mixing model arms in one "
+                "file is the confound the four-arm design exists to avoid."
+            )
+    return block
+
+
 async def run(args: argparse.Namespace) -> None:
     resolved = resolve(args.teacher, args.host)
+
+    # Harness attribution first: it is entirely local, and everything it refuses
+    # is cheaper to refuse now than after a client exists.
+    harness_block = None
+    if getattr(args, "harness", None):
+        harness_block = harness_preflight(args.harness, resolved, Path(args.out))
+        print(f"harness    {harness_block['name']}  "
+              f"{harness_block['digest'][:16]}…  "
+              f"model {harness_block['execution_model_registry']}")
+    else:
+        legacy_output_guard(Path(args.out))
 
     # A gateway host carries its own URL and names the env var holding its
     # key; a self-hosted one is addressed by port on localhost.
@@ -278,6 +396,11 @@ async def run(args: argparse.Namespace) -> None:
                 "split_fingerprint": manifest["fingerprint"],
             },
         }
+        # Which HARNESS produced it, alongside which model did. Stamped on
+        # every record from this run — accepted and quarantined alike, because
+        # a quarantined trace is still evidence about the harness that made it.
+        if harness_block is not None:
+            record["harness_provenance"] = dict(harness_block)
         # Evaluation metadata travels with the trace. Without it a calibration
         # run produces traces nobody can score.
         if prompt.get("checks"):
@@ -360,6 +483,12 @@ def main() -> None:
                              "on an off-premises host")
     parser.add_argument("--api-key", default="",
                         help="only needed behind a gateway; local vLLM needs none")
+    parser.add_argument("--harness", default="",
+                        help="name under configs/harnesses/: stamp harness "
+                             "attribution on every trace. Requires a VERIFIED "
+                             "prompt identity and a serving config declaring "
+                             "registry_model. Omit for the legacy, "
+                             "unattributed path.")
     asyncio.run(run(parser.parse_args()))
 
 

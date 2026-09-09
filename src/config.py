@@ -136,6 +136,13 @@ def resolve(teacher_name: str, host_name: str) -> dict:
         "TEACHER_PORT": str(teacher.get("port", 8001)),
         "TEACHER_SERVED_MODEL_NAME": teacher.get("served_model_name", teacher_name),
         "TEACHER_LICENSE": teacher.get("license", "unknown"),
+        # The model REGISTRY name (configs/models/), not the serving alias and
+        # not the repo. Harness attribution records which registry model
+        # executed a trace, and those three identities diverge: a served alias
+        # may be "muse-glimmer", the repo "meta-models/Muse-Glimmer-30B-assistant",
+        # and the registry entry "muse-glimmer-30b". Inferring one from another
+        # is how a trace ends up attributed to a model that did not produce it.
+        "TEACHER_REGISTRY_MODEL": teacher.get("registry_model", ""),
         "TEACHER_CHAT_TEMPLATE": teacher.get("chat_template", ""),
         "HOST_NAME": host.get("name", host_name),
         "HOST_RUNTIME": host.get("runtime", "vllm"),
