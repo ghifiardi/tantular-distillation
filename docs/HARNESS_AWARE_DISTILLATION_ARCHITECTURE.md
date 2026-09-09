@@ -230,6 +230,101 @@ The implementation:
 
 It performs no network request, model call, trace generation, or training.
 
+## 8. How to run the four-arm bakeoff
+
+**Procedure only. Nothing below is authorized by this document, and nothing in
+this repository will execute it today.** Every command listed either reads local
+files or refuses; the one step that would call a model is blocked, deliberately,
+and section 8.2 says by what.
+
+### 8.1 Precondition: a real, approved capability gap
+
+The bakeoff exists to answer whether an improvement belongs to the model or to
+the harness. It is not a warm-up exercise, and running it "to see" is how a
+comparison acquires a conclusion before it has evidence.
+
+So the entry condition is the same one `train/TRAINING_BLOCKED.md` states for
+training: a REAL OBSERVED FAILURE in the product, written down, that a better
+harness or a better student is a plausible fix for. "The teacher is bigger" and
+"the harness has more tools" are not capability gaps.
+
+### 8.2 What blocks it today
+
+Both shipped harnesses declare `prompts.system.verified: false`, and
+`src/generate.py --harness` refuses to generate against an unverified harness:
+
+    HARNESS IDENTITY UNVERIFIED: harness 'tantular-office-current' prompt
+    identity is unverified; run verify_harness_identity.py against a published,
+    reproducible prompt registry before generation
+
+That is not a missing feature. The add-in that owns the prompts is not published
+to a stable ref — `docs/CI.md` records that its checkout is ahead of its remote
+and its lockfile is tracked nowhere — so a prompt digest measured here could not
+be reproduced by anyone else. An attributed corpus carrying an unreproducible
+digest would look like evidence without being evidence.
+
+**Unblocking is an upstream decision, not a code change**: publish the add-in and
+its `package-lock.json`, then pin the prompts.
+
+### 8.3 The sequence, once the precondition holds
+
+    # 0. Pin the prompt identity of each harness under test. Reads the add-in's
+    #    own prompt registry; refuses if node, the registry, or a hash is absent.
+    ./.venv/bin/python src/verify_harness_identity.py tantular-office-current --write
+    ./.venv/bin/python src/verify_harness_identity.py tantular-office-candidate --write
+
+    # 1. Confirm the plan the experiment declares, and read its warnings.
+    #    Emits nothing and authorizes nothing.
+    ./.venv/bin/python src/harness_distill.py plan \
+        configs/experiments/harness-before-weights.yaml
+
+    # 2. FOUR SEPARATE GENERATION PASSES, one per arm. Separate, because two
+    #    execution models or two harnesses in one file is the confound the
+    #    design exists to remove — the tooling refuses to mix them.
+    #      student x current    student x candidate
+    #      teacher x current    teacher x candidate
+    ./.venv/bin/python src/generate.py \
+        --teacher <serving-config> --host <host> \
+        --harness <harness-name> \
+        --prompts <held-out-prompts>.jsonl \
+        --out data/raw/<arm>.jsonl
+
+    # 3. Declare each pass harness-aware. Never inferred: a pass that lost its
+    #    attribution must not read as a valid legacy pass.
+    ./.venv/bin/python src/pass_manifest.py data/raw/<arm> --harness-aware
+
+    # 4. Gate each arm. The corpus gate reads the pass manifest's declaration,
+    #    and refuses a corpus that claims attribution it does not carry.
+    ./.venv/bin/python src/verify_corpus.py data/raw/<arm>/traces.r0.jsonl --gate
+
+    # 5. One combined report per arm: teacher quantization, source_class, the
+    #    FP8 gate, teacher licence freshness, and harness coverage together.
+    ./.venv/bin/python src/distill_plan.py provenance-audit \
+        data/raw/<arm>/traces.r0.jsonl --today <YYYY-MM-DD>
+
+    # 6. Score the arms with the product's own gates, into a measurements JSON.
+    ./.venv/bin/python src/run_gates.py run --stage before \
+        --host <student-host> --teacher <serving-config> \
+        --expect-model <model-id> --out data/gates/<arm>.json
+
+    # 7. Evaluate the comparison. Reads the measurements; decides nothing about
+    #    training.
+    ./.venv/bin/python src/harness_distill.py evaluate \
+        configs/experiments/harness-before-weights.yaml \
+        <measurements>.json
+
+### 8.4 What the result can and cannot say
+
+`evaluate` reports whether the candidate harness beat the current one, on the
+same model, against the declared guardrails. That is a statement about the
+scaffolding.
+
+It is NOT authorization to distil anything into weights. If the harness alone
+closes the gap, the correct outcome is to ship the harness — which is the whole
+point of testing the harness first. Weight distillation remains behind
+`train/TRAINING_BLOCKED.md`, and every command above still reports
+`training_authorized: false`.
+
 ## 8. Sources
 
 - Prime Agent: A Self-Improving RLM Harness, arXiv:2608.23552

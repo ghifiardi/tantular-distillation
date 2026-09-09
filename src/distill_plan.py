@@ -671,6 +671,55 @@ def _resolve_teacher_specs(corpus_teachers: list, overrides: list | None):
     return specs, unresolved
 
 
+def _harness_coverage(path: Path) -> dict:
+    """Harness attribution for the combined audit: what was DECLARED, and what
+    the traces actually carry.
+
+    Both halves matter, and separately. The declaration comes from the adjacent
+    pass manifest exactly as the corpus gate reads it; the coverage is counted
+    from the bytes. A corpus that declares harness-aware mode and does not
+    deliver it is not simply "0% covered" — it is a disagreement, and saying so
+    is more useful than either number alone.
+
+    Reuses harness_distill rather than recomputing: a second implementation of
+    "is this attributed?" is a second answer waiting to differ.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import harness_distill
+    import verify_corpus
+
+    declared = verify_corpus.harness_declaration([path])
+    required = bool(declared)
+
+    try:
+        counted = harness_distill.audit_traces(path)
+    except harness_distill.HarnessPlanError as exc:
+        return {"required": required, "attributed": False, "coverage": 0.0,
+                "error": str(exc)}
+
+    block = {
+        "required": required,
+        "attributed": counted["harness_attributed"] > 0,
+        "coverage": counted["harness_coverage"],
+    }
+    if counted["harness_digests"]:
+        block["digests"] = counted["harness_digests"]
+
+    if required:
+        block["declared"] = declared
+        try:
+            block["observed"] = harness_distill.summarize_harness_attribution(
+                _load_jsonl(path), required=True)
+        except harness_distill.HarnessPlanError as exc:
+            block["disagreement"] = str(exc)
+        else:
+            if block["observed"] != declared:
+                block["disagreement"] = (
+                    "the pass manifest declares a different harness state than "
+                    "the traces carry")
+    return block
+
+
 def audit_corpus(corpus: str | Path, today: _dt.date,
                  teacher_overrides: list | None = None) -> dict:
     """The mechanical limits of a promoted corpus, as a dict.
@@ -765,6 +814,19 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
         and all(s["status"] == "FRESH" for s in freshness)
         and identity_verified and not unresolved)
 
+    harness = _harness_coverage(path)
+    if harness.get("required") and (harness.get("disagreement")
+                                    or harness["coverage"] < 1.0):
+        limits.append(
+            "harness-aware mode is declared but attribution is incomplete: "
+            f"{harness['coverage']:.0%} coverage"
+            + (f" — {harness['disagreement']}" if harness.get("disagreement") else ""))
+    # No limit line for an unattributed corpus. That is the state of every
+    # corpus predating harness attribution, so a line here would fire on every
+    # legacy audit and reshape a report that is supposed to gain a block, not a
+    # complaint. The harness block already says coverage is 0.0; what earns a
+    # limit is a corpus that CLAIMS attribution and does not deliver it.
+
     result = {
         "corpus": str(path),
         "records": n,
@@ -788,6 +850,7 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
             "resolved": freshness,
             "unresolved_corpus_teachers": unresolved,
         },
+        "harness": harness,
         "identity_verification": {
             "all_verified": identity_verified,
             "unverified_models": unverified,

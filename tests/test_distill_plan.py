@@ -624,3 +624,85 @@ def test_dry_run_names_the_serving_configs_not_the_registry_names():
     assert "--teacher muse-glimmer \\" in text
     assert "--teacher office-student-9b" in text
     assert "muse-glimmer-30b" not in text
+
+
+# --- one audit, every limit ---------------------------------------------------
+#
+# Model quant, source_class, FP8 status, licence freshness AND harness
+# attribution in one report, so nobody has to remember to run a second command
+# to discover that a corpus cannot support the claim being made of it.
+
+def harness_block(**over) -> dict:
+    value = {
+        "schema_version": 1, "name": "h", "status": "candidate",
+        "digest": "a" * 64, "compatible_registry_models": ["muse-glimmer-30b"],
+        "execution_model_registry": "muse-glimmer-30b",
+        "prompt_sha256": "b" * 64, "prompt_verified": True,
+        "tool_policy_digest": "c" * 64, "verification_policy_digest": "d" * 64,
+    }
+    value.update(over)
+    return value
+
+
+DECLARED = {"required": True, "attributed": True, "name": "h", "digest": "a" * 64,
+            "prompt_verified": True, "prompt_sha256": "b" * 64,
+            "execution_model_registry": "muse-glimmer-30b"}
+
+
+def declaring_pass(tmp_path: Path, records: list[dict], declared=DECLARED) -> Path:
+    import hashlib
+    directory = tmp_path / "pass"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "traces.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+    (directory / "MANIFEST.json").write_text(json.dumps({
+        "files": {path.name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest()}},
+        "harness": declared}), encoding="utf-8")
+    return path
+
+
+@pytest.mark.requires_local_corpus
+def test_the_legacy_corpus_audit_reports_no_attribution():
+    report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
+    assert report["harness"] == {"required": False, "attributed": False,
+                                 "coverage": 0.0}
+    assert report["authorizes_training"] is False
+    # No limit line: an unattributed corpus is the norm today, and a complaint
+    # on every legacy audit would drown the limits that are actionable.
+    assert not any("harness" in limit for limit in report["limits"])
+
+
+@pytest.mark.requires_local_corpus
+def test_the_audit_keeps_every_pre_existing_key():
+    """The harness block is additive. A reshaped report would break every reader
+    that predates it."""
+    report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
+    for key in ("corpus", "records", "teachers", "repos", "quantizations", "hosts",
+                "licenses_recorded", "source_classes", "fp8_gate",
+                "real_office_claim", "license_freshness", "identity_verification",
+                "limits", "trainable_as_is", "authorizes_training"):
+        assert key in report, key
+
+
+def test_a_declared_harness_aware_corpus_reports_full_coverage(tmp_path):
+    path = declaring_pass(tmp_path, [trace(**{"harness_provenance": harness_block()}),
+                                     trace(**{"harness_provenance": harness_block()})])
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    assert report["harness"]["required"] is True
+    assert report["harness"]["coverage"] == 1.0
+    assert report["harness"]["observed"] == DECLARED
+    assert "disagreement" not in report["harness"]
+    assert not any("harness" in limit for limit in report["limits"])
+
+
+def test_a_declared_but_under_attributed_corpus_reports_the_disagreement(tmp_path):
+    """Not merely "0% covered": the corpus claims to be something it is not, and
+    saying so is more useful than either number alone."""
+    path = declaring_pass(tmp_path, [trace(**{"harness_provenance": harness_block()}),
+                                     trace()])
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    assert report["harness"]["required"] is True
+    assert report["harness"]["coverage"] == 0.5
+    assert "not attributed" in report["harness"]["disagreement"]
+    assert any("attribution is incomplete" in limit for limit in report["limits"])
+    assert report["trainable_as_is"] is False
