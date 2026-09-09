@@ -344,6 +344,11 @@ def test_an_empty_directory_is_not_a_verified_prompt_identity(tmp_path, capsys):
     assert "empty directory" in capsys.readouterr().err
 
 
+# The ONLY test here that needs the real add-in. The synthetic prompt-registry
+# tests above need node but not the add-in, and must keep running in CI: they
+# are what prove a prompt change moves the digest and an unrelated source change
+# does not.
+@pytest.mark.requires_addin
 @node
 def test_the_real_harnesses_measure_but_stay_unpinned():
     """The add-in is present in this checkout and the registry reads cleanly,

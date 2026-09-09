@@ -18,7 +18,7 @@ Deselection happens only in `.github/workflows/tests.yml`, as an explicit `-m`
 expression a reader can see. It is a workflow policy, not a property of the
 tests.
 
-## Gap 1 — the corpus (37 tests)
+## Gap 1 — the corpus (44 tests)
 
 `.gitignore` excludes `*.jsonl` (except `prompts/*.jsonl`), `data/raw/` and
 `data/promoted/`: *"Corpora and weights never belong in git — HF hosts those."*
@@ -28,7 +28,7 @@ A fresh clone therefore lacks:
     data/promoted/train.jsonl              the promoted training split
     data/promoted/eval.jsonl               the promoted held-out split
 
-Thirty-seven tests read them, across `tests/test_training_manifest.py`,
+Forty-four tests read them, across `tests/test_training_manifest.py`,
 `tests/test_tinker_sft.py` (the freeze, payload-rendering and checkpoint-label
 paths all start from a real freeze) and
 `tests/test_run_gates.py::test_trainer_refuses_ai19_end_to_end`.
@@ -54,7 +54,7 @@ without touching the corpus and the wiring assertion could return to CI. That is
 a trainer-ordering question with its own tradeoffs (failing early on a bad
 freeze is also worth something), so it is recorded rather than decided.
 
-## Gap 2 — the Office add-in (36 tests)
+## Gap 2 — the Office add-in (37 tests)
 
 `train/qlora_9b.yaml` points the `office_json_contract` and
 `edit_contract_output` gates at `../tantular_office_addin` — a SIBLING of this
@@ -71,9 +71,17 @@ Pinning a feature branch and using `npm install` instead would produce a
 non-reproducible dependency tree pinned to a moving ref. That trades away the
 determinism the gates depend on, so it is not done.
 
-**Thirty-six tests** carry `requires_addin`: twenty-eight in
+**Thirty-seven tests** carry `requires_addin`: twenty-eight in
 `tests/test_run_gates.py`, which fail without the add-in source, its parser or
-its Node suite, and eight in `tests/test_faithful_edit_scorer.py`.
+its Node suite, eight in `tests/test_faithful_edit_scorer.py`, and one in
+`tests/test_verify_harness_identity.py`.
+
+That last one is the ONLY harness test needing the real add-in. The synthetic
+prompt-registry tests beside it need `node` but not the add-in, and they run in
+CI — they are what prove that changing a prompt moves the harness prompt digest
+while changing an unrelated source file does not, which is the distinction the
+whole prompt-registry approach rests on. Marking them would have removed that
+proof from CI to save nothing.
 
 Those eight were nearly missed. They already carried a pre-existing
 `pytest.mark.skipif` (`needs_addin`) that makes them SKIP when the add-in is
@@ -123,18 +131,19 @@ version control. This is the standing argument for the upstream fix above.
 The workflow collects each partition into the job log every run and asserts its
 size independently:
 
-    EXPECTED_EXCLUDED_CORPUS: 37
-    EXPECTED_EXCLUDED_ADDIN:  36
+    EXPECTED_EXCLUDED_CORPUS: 44
+    EXPECTED_EXCLUDED_ADDIN:  37
 
 Both assertions fail in **both** directions. If a number moves, investigate; do
 not update it to match. A changed count means a new dependency was introduced or
 an existing test stopped exercising one, and both are worth knowing.
 
-The **final deselected total is read from the run**, never computed as 37 + 36.
+The **final deselected total is read from the run**, never computed as 44 + 37.
 A test could in principle carry both markers, in which case the union is smaller
-than the sum. Today the union collects 73, which happens to equal the sum — that
-is a measurement, not an assumption, and it is re-measured whenever either
-number moves.
+than the sum. Today the union collects 81, which happens to equal the sum — that is a
+measurement, not an assumption, and it is re-measured whenever either number
+moves. It has already moved twice: 13/28 on `main` before the distillation
+branch landed, 37/36 after it, 44/37 with harness attribution.
 
 ### A test that only LOOKED add-in dependent
 
@@ -178,5 +187,5 @@ machine with both the corpus and the add-in:
 
     pytest tests/ -q
 
-Latest recorded result: **333 passed, 4 skipped**, exit 0, with
+Latest recorded result: **441 passed, 4 skipped**, exit 0, with
 `git status --short` empty afterwards.
