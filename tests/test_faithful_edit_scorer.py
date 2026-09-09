@@ -29,6 +29,11 @@ PY_BIN = str(ROOT / ".venv" / "bin" / "python")
 ITEMS = ROOT / "prompts" / "faithful_edit_pilot.v1.jsonl"
 ADDIN = (ROOT.parent / "tantular_office_addin" / "src").resolve()
 
+# Also carries requires_addin so CI DESELECTS these explicitly and counts them,
+# rather than letting them vanish into a silent skip. The skipif below predates
+# this and is left alone: it means absence produces a SKIP locally rather than
+# the failure the corpus markers produce. That inconsistency is recorded in
+# docs/CI.md as a follow-up, not fixed here.
 needs_addin = pytest.mark.skipif(
     shutil.which("node") is None or not (ADDIN / "chat" / "editContract.js").is_file(),
     reason="node and the add-in source are required for the real contract parser")
@@ -85,6 +90,7 @@ def failing(report: dict, item_id: str) -> dict:
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_hand_authored_correct_answers_all_pass(tmp_path):
     report = score(tmp_path, dict(CORRECT))
     bad = [r["id"] for r in report["results"] if not r["passed"]]
@@ -94,6 +100,7 @@ def test_hand_authored_correct_answers_all_pass(tmp_path):
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_editing_the_wrong_occurrence_fails_lands(tmp_path):
     """The classic defect: valid JSON, wrong paragraph."""
     answers = dict(CORRECT)
@@ -104,6 +111,7 @@ def test_editing_the_wrong_occurrence_fails_lands(tmp_path):
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_silently_changing_a_figure_fails_preserves(tmp_path):
     answers = dict(CORRECT)
     answers["fce::0003"] = edits(
@@ -114,6 +122,7 @@ def test_silently_changing_a_figure_fails_preserves(tmp_path):
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_wrong_bullet_count_fails_structure(tmp_path):
     answers = dict(CORRECT)
     # ISOLATE the defect: all three locations and all three figures are kept,
@@ -132,6 +141,7 @@ def test_wrong_bullet_count_fails_structure(tmp_path):
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_inventing_a_figure_when_absent_fails_no_new_facts(tmp_path):
     """The worst failure this eval exists to catch."""
     answers = dict(CORRECT)
@@ -142,6 +152,7 @@ def test_inventing_a_figure_when_absent_fails_no_new_facts(tmp_path):
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_emitting_edits_for_absent_information_fails(tmp_path):
     answers = dict(CORRECT)
     answers["fce::0010"] = edits(("Kuota peserta terbatas.",
@@ -151,6 +162,7 @@ def test_emitting_edits_for_absent_information_fails(tmp_path):
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_unparseable_output_fails_contract(tmp_path):
     answers = dict(CORRECT)
     answers["fce::0005"] = "Tentu, berikut hasil penyuntingannya."
@@ -158,6 +170,7 @@ def test_unparseable_output_fails_contract(tmp_path):
 
 
 @needs_addin
+@pytest.mark.requires_addin
 def test_informal_replacement_fails_voice(tmp_path):
     answers = dict(CORRECT)
     answers["fce::0007"] = edits(("setting", "gak usah diatur", 1),
@@ -167,7 +180,8 @@ def test_informal_replacement_fails_voice(tmp_path):
 
 # --- hermeticity: scoring must not write inside the repository --------------
 
-def test_the_contract_checker_writes_its_cases_outside_the_repository(monkeypatch):
+def test_the_contract_checker_writes_its_cases_outside_the_repository(monkeypatch,
+                                                                     tmp_path):
     """Running the suite must leave the working tree clean.
 
     The cases file used to be data/gates/fce/_cases.json — a fixed path INSIDE
@@ -189,8 +203,18 @@ def test_the_contract_checker_writes_its_cases_outside_the_repository(monkeypatc
         seen["existed_during_call"] = seen["cases"].is_file()
         return subprocess.CompletedProcess(cmd, 0, json.dumps({"results": []}), "")
 
+    # A FAKE add-in tree, not the real one. run_contract_checker refuses before
+    # it runs anything unless <addin_src>/chat/editContract.js exists, so
+    # pointing at the real add-in would make this test depend on a sibling
+    # checkout it does not actually use — the subprocess is mocked, and what is
+    # under test is where the scratch file goes, not the product's parser.
+    fake_addin = tmp_path / "addin" / "src"
+    (fake_addin / "chat").mkdir(parents=True)
+    (fake_addin / "chat" / "editContract.js").write_text("// sentinel\n",
+                                                         encoding="utf-8")
+
     monkeypatch.setattr(score_faithful_edit.subprocess, "run", fake_run)
-    score_faithful_edit.run_contract_checker([{"id": "a"}], ADDIN)
+    score_faithful_edit.run_contract_checker([{"id": "a"}], fake_addin)
 
     cases = seen["cases"]
     assert seen["existed_during_call"], "the checker was handed a real file"

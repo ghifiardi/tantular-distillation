@@ -38,6 +38,7 @@ def first_train_row() -> dict:
     return json.loads(line)
 
 
+@pytest.mark.requires_local_corpus
 def test_default_invocation_is_local_only_and_blocked_by_decision():
     proc = subprocess.run(
         [PY, RUNNER],
@@ -52,6 +53,7 @@ def test_default_invocation_is_local_only_and_blocked_by_decision():
     assert "EXECUTION BLOCKED" in proc.stdout
 
 
+@pytest.mark.requires_local_corpus
 def test_execute_with_preview_manifest_refuses_before_dependencies_or_key():
     proc = subprocess.run(
         [
@@ -77,6 +79,7 @@ def test_execute_with_preview_manifest_refuses_before_dependencies_or_key():
 
 
 @pytest.mark.parametrize("source_class", ["local_real", "Synthetic", None])
+@pytest.mark.requires_local_corpus
 def test_non_synthetic_or_unclassified_row_is_rejected(source_class):
     row = first_train_row()
     if source_class is None:
@@ -87,6 +90,7 @@ def test_non_synthetic_or_unclassified_row_is_rejected(source_class):
         tinker_payload.render_rows([row], split="train")
 
 
+@pytest.mark.requires_local_corpus
 def test_rendered_payload_shape_and_sidecar_bind_the_same_bytes():
     row = first_train_row()
     upload, audit, summary = tinker_payload.render_rows([row], split="train")
@@ -109,6 +113,7 @@ def test_rendered_payload_shape_and_sidecar_bind_the_same_bytes():
     assert summary["rows"] == 1
 
 
+@pytest.mark.requires_local_corpus
 def test_train_and_eval_payloads_remain_separate_and_disjoint():
     rendered = tinker_payload.render_files(
         ROOT / "data" / "promoted" / "train.jsonl",
@@ -142,6 +147,7 @@ def test_local_qlora_manifest_remains_schema_6():
     assert manifest["schema_version"] == 6
 
 
+@pytest.mark.requires_local_corpus
 def test_nonpreview_tinker_freeze_requires_baseline_and_authorization(tmp_path):
     proc = subprocess.run(
         [
@@ -173,6 +179,7 @@ def test_nonpreview_tinker_freeze_requires_baseline_and_authorization(tmp_path):
     )
 
 
+@pytest.mark.requires_local_corpus
 def test_preview_is_an_explicit_flag_not_a_filename_convention(tmp_path):
     out = tmp_path / "ordinary-name.json"
     proc = subprocess.run(
@@ -227,6 +234,7 @@ def test_tinker_config_does_not_copy_local_peft_targets():
     assert config["serving"]["chat_template"] == "templates/role_colon.jinja"
 
 
+@pytest.mark.requires_local_corpus
 def test_render_only_writes_no_promotable_adapter_shape(tmp_path):
     out = tmp_path / "payload"
     proc = subprocess.run(
@@ -273,6 +281,7 @@ def test_exporter_refuses_a_forged_minimal_run_record(tmp_path):
     assert not output.exists()
 
 
+@pytest.mark.requires_local_corpus
 def test_exporter_refuses_a_record_pinning_the_preview_manifest(tmp_path):
     """The checked-in manifest is preview-only and never authorized a run."""
     run_record = genuine_run_record(tmp_path / "RUN.json")
@@ -405,6 +414,7 @@ def test_authorized_manifest_revalidates_baseline_contents(monkeypatch, tmp_path
         )
 
 
+@pytest.mark.requires_local_corpus
 def test_pricing_bound_includes_every_scheduled_eval_pass():
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     rendered = tinker_payload.render_files(
@@ -580,6 +590,7 @@ def test_print_token_report_tolerates_the_real_report_shape(capsys):
     assert "role_colon" not in out
 
 
+@pytest.mark.requires_local_corpus
 def test_render_only_still_runs_a_requested_renderer_verification(tmp_path):
     """--verify-renderer must not be silently skipped by --render-only."""
     proc = subprocess.run(
@@ -596,6 +607,7 @@ def test_render_only_still_runs_a_requested_renderer_verification(tmp_path):
     assert "wrote local payload" not in proc.stdout
 
 
+@pytest.mark.requires_local_corpus
 def test_pricing_eval_bound_covers_a_step_zero_and_final_evaluation():
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     rendered = tinker_payload.render_files(
@@ -670,6 +682,7 @@ def authorized_execute(monkeypatch, tmp_path, execute_impl, *, argv_extra=()):
     return run_dir
 
 
+@pytest.mark.requires_local_corpus
 def test_training_exception_leaves_durable_evidence(monkeypatch, tmp_path):
     def blow_up(log_path):
         log_path.mkdir(parents=True, exist_ok=True)
@@ -694,6 +707,7 @@ def test_training_exception_leaves_durable_evidence(monkeypatch, tmp_path):
     assert (run_dir / "RUN.request.json").is_file()
 
 
+@pytest.mark.requires_local_corpus
 def test_missing_checkpoint_file_never_becomes_trained_unvalidated(
     monkeypatch, tmp_path
 ):
@@ -711,6 +725,7 @@ def test_missing_checkpoint_file_never_becomes_trained_unvalidated(
     {"step": 68, "final": True, "state_path": "tinker://s/68"},
     {"step": 68, "final": True, "sampler_path": "tinker://p/68"},
 ])
+@pytest.mark.requires_local_corpus
 def test_incomplete_final_checkpoint_is_not_trained_unvalidated(
     monkeypatch, tmp_path, final_row
 ):
@@ -728,6 +743,7 @@ def test_incomplete_final_checkpoint_is_not_trained_unvalidated(
     assert record["checkpoint_evidence"]["rows"] == [final_row]
 
 
+@pytest.mark.requires_local_corpus
 def test_only_a_validated_final_checkpoint_produces_trained_unvalidated(
     monkeypatch, tmp_path, capsys
 ):
@@ -1751,6 +1767,7 @@ def test_the_accepted_snapshot_retains_full_gate_metadata(tmp_path):
 
 # --- offline verification, runtime pinning, node-suite serialisation --------
 
+@pytest.mark.requires_local_corpus
 def test_offline_flag_sets_the_hub_variables_before_any_loader_runs(
     monkeypatch, tmp_path
 ):

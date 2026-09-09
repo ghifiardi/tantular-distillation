@@ -116,6 +116,7 @@ def config(tmp_path):
     return path
 
 
+@pytest.mark.requires_addin
 def test_pass_when_every_gate_meets_threshold(config, tmp_path):
     traces = write_traces(tmp_path / "t.jsonl", n_bad=0)
     proc = run(config, tmp_path / "before.json", traces)
@@ -126,6 +127,7 @@ def test_pass_when_every_gate_meets_threshold(config, tmp_path):
         "indonesian_voice", "office_json_contract", "edit_contract_output"}
 
 
+@pytest.mark.requires_addin
 def test_fail_when_a_gate_misses_threshold(config, tmp_path):
     """At --stage after, missing the threshold is a failure. (At --stage before
     it is a recorded baseline; see the stage-semantics tests below.)"""
@@ -142,6 +144,7 @@ def test_fail_when_a_gate_misses_threshold(config, tmp_path):
     assert report["verdict"] == "FAIL"
 
 
+@pytest.mark.requires_addin
 def test_missing_runner_fails_closed(config, tmp_path):
     """A gate declared in config with no implementation must ABORT, not skip."""
     cfg = yaml.safe_load(config.read_text())
@@ -175,6 +178,7 @@ def test_after_stage_requires_an_adapter(config, tmp_path):
     assert "requires --adapter" in (proc.stdout + proc.stderr)
 
 
+@pytest.mark.requires_addin
 def test_compare_detects_regression(config, tmp_path):
     adapter = make_adapter(tmp_path / "adapter")
     before = tmp_path / "before.json"; after = tmp_path / "after.json"
@@ -189,6 +193,7 @@ def test_compare_detects_regression(config, tmp_path):
     assert "REGRESSED" in proc.stdout
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_mismatched_configs(config, tmp_path):
     """Comparing runs from different configs would blame the adapter for a
     config change."""
@@ -207,6 +212,7 @@ def test_compare_refuses_mismatched_configs(config, tmp_path):
     assert "DIFFERENT configs" in (proc.stdout + proc.stderr)
 
 
+@pytest.mark.requires_addin
 def test_model_independent_gate_is_labelled(config, tmp_path):
     """office_json_contract cannot detect an adapter regression; the report must
     say so rather than let 'same' read as evidence."""
@@ -235,6 +241,7 @@ def run_edit(config: Path, out: Path, voice_traces: Path, edit_traces: Path,
     return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
 
 
+@pytest.mark.requires_addin
 def test_edit_gate_passes_on_valid_contract(config, tmp_path):
     proc = run_edit(config, tmp_path / "b.json",
                     write_traces(tmp_path / "v.jsonl", 0),
@@ -247,6 +254,7 @@ def test_edit_gate_passes_on_valid_contract(config, tmp_path):
     assert gate["breakdown"]["contract_ok"] == gate["items"]
 
 
+@pytest.mark.requires_addin
 def test_edit_gate_fails_when_output_is_not_json(config, tmp_path):
     proc = run_edit(config, tmp_path / "b.json",
                     write_traces(tmp_path / "v.jsonl", 0),
@@ -258,6 +266,7 @@ def test_edit_gate_fails_when_output_is_not_json(config, tmp_path):
     assert gate["breakdown"]["parse_ok"] < gate["items"]
 
 
+@pytest.mark.requires_addin
 def test_edit_gate_fails_when_json_parses_but_find_is_absent(config, tmp_path):
     """The case parse_ok alone would miss: valid JSON, useless edits."""
     proc = run_edit(config, tmp_path / "b.json",
@@ -271,6 +280,7 @@ def test_edit_gate_fails_when_json_parses_but_find_is_absent(config, tmp_path):
     assert gate["passed"] is False
 
 
+@pytest.mark.requires_addin
 def test_edit_gate_missing_output_fails_closed(config, tmp_path):
     proc = run_edit(config, tmp_path / "b.json",
                     write_traces(tmp_path / "v.jsonl", 0),
@@ -279,6 +289,7 @@ def test_edit_gate_missing_output_fails_closed(config, tmp_path):
     assert "no model output" in (proc.stdout + proc.stderr)
 
 
+@pytest.mark.requires_addin
 def test_edit_gate_missing_parser_fails_closed(config, tmp_path):
     cfg = yaml.safe_load(config.read_text())
     for g in cfg["eval_gates"]:
@@ -292,6 +303,7 @@ def test_edit_gate_missing_parser_fails_closed(config, tmp_path):
     assert "add-in parser missing" in (proc.stdout + proc.stderr)
 
 
+@pytest.mark.requires_addin
 def test_both_contract_gates_coexist(config, tmp_path):
     """The model-independent gate is retained, not replaced."""
     run_edit(config, tmp_path / "b.json",
@@ -403,6 +415,7 @@ def test_declaring_a_rental_does_not_help_when_running_ON_ai19():
     assert "this machine" in str(e.value)
 
 
+@pytest.mark.requires_local_corpus
 def test_trainer_refuses_ai19_end_to_end(tmp_path):
     run_manifest = tmp_path / "RUN.json"
     freeze = subprocess.run(
@@ -439,6 +452,7 @@ def _adapter(tmp_path, name="adapter"):
     return make_adapter(tmp_path / name)
 
 
+@pytest.mark.requires_addin
 def test_before_low_baseline_is_measured_not_failed(config, tmp_path):
     """Case 1: baseline below target, but fully measured -> the run continues."""
     # 12 bad answers -> 28/40 = 0.70, far under 0.95
@@ -467,6 +481,7 @@ def test_before_low_baseline_is_measured_not_failed(config, tmp_path):
     assert voice["threshold"] == 0.95
 
 
+@pytest.mark.requires_addin
 def test_before_still_exits_2_on_infrastructure_failure(config, tmp_path):
     """A tolerant threshold must not become a tolerant runner."""
     cfg = yaml.safe_load(config.read_text())
@@ -479,6 +494,7 @@ def test_before_still_exits_2_on_infrastructure_failure(config, tmp_path):
     assert "scorer missing" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_improved_but_under_threshold_is_not_promotable(config, tmp_path):
     """Case 2: the adapter improves a lot and still misses 0.95.
 
@@ -507,6 +523,7 @@ def test_improved_but_under_threshold_is_not_promotable(config, tmp_path):
     assert cmp["gates"]["indonesian_voice"]["after"] == pytest.approx(0.90)
 
 
+@pytest.mark.requires_addin
 def test_reaching_threshold_without_regression_is_promotable(config, tmp_path):
     """Case 3: 0.95 met, nothing regressed -> promotable."""
     before, after = tmp_path / "before.json", tmp_path / "after.json"
@@ -531,6 +548,7 @@ def test_reaching_threshold_without_regression_is_promotable(config, tmp_path):
     assert cmp["baseline_below_target"] == ["indonesian_voice"]
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_stages_the_wrong_way_round(config, tmp_path):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 0))
@@ -608,6 +626,7 @@ def test_adapter_model_id_equal_to_the_served_base_alias_is_refused(config, tmp_
     assert "is a BASE model id/alias" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_report_records_which_model_id_produced_the_answers(config, tmp_path):
     """The positive case: the report must be able to prove what it measured."""
     proc = run(config, tmp_path / "after.json", write_traces(tmp_path / "t.jsonl", 0),
@@ -621,6 +640,7 @@ def test_report_records_which_model_id_produced_the_answers(config, tmp_path):
             assert g["generated_by_model_id"] == ADAPTER_ID
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_an_after_report_generated_from_the_base(config, tmp_path):
     """(3) the endpoint never served the adapter, so the answers are the base's.
 
@@ -645,6 +665,7 @@ def test_compare_refuses_an_after_report_generated_from_the_base(config, tmp_pat
     assert "not from the adapter id" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_different_expected_base_models(config, tmp_path):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -660,6 +681,7 @@ def test_compare_refuses_different_expected_base_models(config, tmp_path):
     assert "DIFFERENT base model identities" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_different_shared_evaluation_config(config, tmp_path):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -677,6 +699,7 @@ def test_compare_refuses_different_shared_evaluation_config(config, tmp_path):
     assert "DIFFERENT shared evaluation configs" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_an_after_report_with_only_a_digest(config, tmp_path):
     """(4) the shape of every report produced before this check existed."""
     before, after = tmp_path / "before.json", tmp_path / "after.json"
@@ -1074,6 +1097,7 @@ def test_rejected_thinking_control_aborts_instead_of_falling_back():
         "must not be retried at all")
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_different_stop_sequences(config, tmp_path):
     """Different truncation rules make the same model look different."""
     before, after = tmp_path / "before.json", tmp_path / "after.json"
@@ -1092,6 +1116,7 @@ def test_compare_refuses_different_stop_sequences(config, tmp_path):
     assert "different stop sequences" in proc.stderr
 
 
+@pytest.mark.requires_addin
 def test_model_dependent_gate_reports_record_their_stop_sequences(config, tmp_path):
     before = tmp_path / "before.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -1102,6 +1127,7 @@ def test_model_dependent_gate_reports_record_their_stop_sequences(config, tmp_pa
         assert gate["stop_sequences"] == []
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_an_after_report_missing_a_before_gate(config, tmp_path):
     """Deleting a FAILING gate from the after report printed PROMOTABLE."""
     before, after = tmp_path / "before.json", tmp_path / "after.json"
@@ -1121,6 +1147,7 @@ def test_compare_refuses_an_after_report_missing_a_before_gate(config, tmp_path)
     assert "PROMOTABLE" not in proc.stdout
 
 
+@pytest.mark.requires_addin
 def test_compare_refuses_an_after_gate_absent_from_before(config, tmp_path):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
@@ -1138,6 +1165,7 @@ def test_compare_refuses_an_after_gate_absent_from_before(config, tmp_path):
 
 
 @pytest.mark.parametrize("side", ["before", "after"])
+@pytest.mark.requires_addin
 def test_compare_refuses_duplicate_gate_names(config, tmp_path, side):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     run(config, before, write_traces(tmp_path / "b.jsonl", 3))
