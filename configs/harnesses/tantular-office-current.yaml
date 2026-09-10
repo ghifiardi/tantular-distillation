@@ -1,0 +1,66 @@
+schema_version: 1
+name: tantular-office-current
+status: current
+
+model_contract:
+  protocol: openai_chat
+  # The SAME harness runs against student and teacher: that is what makes the
+  # four-arm comparison a comparison. Compatibility is declared; which model
+  # actually ran is recorded per trace, not fixed here.
+  compatible_registry_models:
+    - qwen35-9b-instruct
+    - muse-glimmer-30b
+
+prompts:
+  system:
+    # The add-in's own registry of every production prompt, which exposes each
+    # prompt's content hash. Digesting the whole src/ tree would change on any
+    # unrelated JavaScript edit and would not change when a prompt moved
+    # between files — it answers the wrong question.
+    source: prompt_registry
+    path: ../tantular_office_addin/src/promptRegistry.js
+    sha256: null
+    verified: false
+
+# src/generate.py has NO harness executor: it sends a prompt through an ordinary
+# chat client. It supplies none of the tools below, runs none of the verifiers,
+# and enforces neither the memory nor the approval policy. Attributing a trace
+# to this harness there would assert that all of it ran.
+#
+# A purpose-built harness runner must issue an execution receipt before this can
+# become true. See docs/HARNESS_AWARE_DISTILLATION_ARCHITECTURE.md section 8.
+trace_generation:
+  supported_by_generate_py: false
+
+tools:
+  allow:
+    - office_read
+    - office_edit
+  state_change_requires_approval: true
+
+memory:
+  active_context: bounded
+  ephemeral_execution: request
+  durable_task_state: none
+  product_memory: disabled
+
+execution:
+  isolation: companion_process
+  network: denied_by_default
+  max_steps: 4
+  max_wall_seconds: 300
+
+verification:
+  before_action:
+    - request_schema
+  after_action:
+    - edit_contract
+    - faithful_edit
+  repair_attempts: 0
+
+mutation:
+  production_self_modify: false
+  candidate_workspace_only: true
+  evaluator_mutation_allowed: false
+  human_approval_required: true
+

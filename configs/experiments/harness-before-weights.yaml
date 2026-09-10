@@ -1,0 +1,30 @@
+schema_version: 1
+name: office-harness-before-weights
+
+student_model: qwen35-9b-instruct
+teacher_model: muse-glimmer-30b
+current_harness: tantular-office-current
+candidate_harness: tantular-office-candidate
+
+arms:
+  - student_current
+  - student_candidate
+  - teacher_current
+  - teacher_candidate
+
+decision:
+  capability_metric: capability_pass_rate
+  higher_is_better: true
+  target: 0.90
+  minimum_residual_gap: 0.05
+  noise_floor: 0.025
+  guardrails:
+    indonesian_voice:
+      minimum: 0.95
+      max_regression: 0.00
+    edit_contract_output:
+      minimum: 0.90
+      max_regression: 0.00
+
+training_authorized: false
+

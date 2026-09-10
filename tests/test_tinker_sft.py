@@ -127,9 +127,9 @@ def test_train_and_eval_payloads_remain_separate_and_disjoint():
     assert rendered["train"]["sha256"] != rendered["eval"]["sha256"]
 
 
-def test_checked_in_preview_is_schema_5_and_cannot_authorize_execution():
+def test_checked_in_preview_is_schema_7_and_cannot_authorize_execution():
     manifest = json.loads(PREVIEW.read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 5
+    assert manifest["schema_version"] == 7
     assert manifest["backend"]["name"] == "tinker"
     assert manifest["backend"]["base_model"] == "Qwen/Qwen3.5-9B-Base"
     assert manifest["backend"]["renderer"] == "role_colon"
@@ -140,11 +140,11 @@ def test_checked_in_preview_is_schema_5_and_cannot_authorize_execution():
     assert manifest["training_authorization"] is None
 
 
-def test_local_qlora_manifest_remains_schema_4():
+def test_local_qlora_manifest_remains_schema_6():
     manifest = json.loads(
         (ROOT / "train" / "RUN_MANIFEST.v1.json").read_text(encoding="utf-8")
     )
-    assert manifest["schema_version"] == 4
+    assert manifest["schema_version"] == 6
 
 
 @pytest.mark.requires_local_corpus

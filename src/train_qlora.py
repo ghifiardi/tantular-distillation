@@ -58,7 +58,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = str(ROOT / ".venv" / "bin" / "python")
-RUN_MANIFEST_SCHEMA_VERSION = 4   # v4 records provenance_audit
+RUN_MANIFEST_SCHEMA_VERSION = 6   # v6 records provenance_audit + harness
 REQUIRED_INT4_WAIVER = ROOT / "calibration" / "INT4_WAIVER.md"
 
 
@@ -320,6 +320,8 @@ def check_run_freeze(run_manifest_path: Path, config_path: Path,
     print(f"  promotion manifest {promotion_entry['sha256'][:16]}…")
     print(f"  corpus gate        exit {recorded_exit} "
           f"({'waiver verified' if recorded_exit else 'passed'})")
+    verify_harness_attribution(freeze, rows)
+
     return {
         "manifest": freeze,
         "manifest_path": str(run_manifest_path),
@@ -328,6 +330,40 @@ def check_run_freeze(run_manifest_path: Path, config_path: Path,
         "promotion": promotion,
         "waiver": waiver_status,
     }
+
+
+def verify_harness_attribution(freeze: dict, rows: list[dict]) -> dict:
+    """Recompute the corpus's harness attribution and compare it to the freeze.
+
+    Checking only that a `harness` object EXISTS would accept a doctored one.
+    The bytes decide; the manifest is compared against them. A freeze claiming
+    attributed: false over an attributed corpus, or naming a digest the traces
+    do not carry, is rejected here rather than trained on.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import harness_distill
+
+    recorded = freeze.get("harness")
+    if recorded is None:
+        die("run manifest records no harness attribution. Re-run "
+            "src/freeze_training_run.py; a freeze that predates harness "
+            "attribution cannot be distinguished from one that lost it.")
+    try:
+        recorded = harness_distill.validate_harness_summary(recorded)
+    except harness_distill.HarnessPlanError as exc:
+        die(f"the run manifest's harness declaration is invalid: {exc}")
+    try:
+        summary = harness_distill.summarize_harness_attribution(
+            rows, required=bool(recorded.get("required")))
+    except harness_distill.HarnessPlanError as exc:
+        die(f"harness attribution: {exc}")
+    if summary != recorded:
+        die("the run manifest's harness attribution does not match the corpus.\n"
+            f"  manifest   {json.dumps(recorded, sort_keys=True)}\n"
+            f"  recomputed {json.dumps(summary, sort_keys=True)}\n"
+            "A manifest is evidence about the bytes, not a substitute for them.")
+    print(f"  harness            {'attributed to ' + str(summary['name']) if summary['attributed'] else 'not attributed (legacy corpus)'}")
+    return summary
 
 
 def check_eval_held_out(config: dict) -> dict:

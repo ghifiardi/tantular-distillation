@@ -671,6 +671,66 @@ def _resolve_teacher_specs(corpus_teachers: list, overrides: list | None):
     return specs, unresolved
 
 
+def _harness_coverage(path: Path) -> dict:
+    """Harness attribution for the combined audit: what was DECLARED, and what
+    the traces actually carry.
+
+    Both halves matter, and separately. The declaration comes from the adjacent
+    pass manifest exactly as the corpus gate reads it; the coverage is counted
+    from the bytes. A corpus that declares harness-aware mode and does not
+    deliver it is not simply "0% covered" — it is a disagreement, and saying so
+    is more useful than either number alone.
+
+    Reuses harness_distill rather than recomputing: a second implementation of
+    "is this attributed?" is a second answer waiting to differ.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    import harness_distill
+    import verify_corpus
+
+    declared = verify_corpus.harness_declaration([path])
+    required = bool(declared)
+
+    try:
+        counted = harness_distill.audit_traces(path)
+    except harness_distill.HarnessPlanError as exc:
+        return {"required": required, "attributed": False, "coverage": 0.0,
+                "error": str(exc)}
+
+    block = {
+        "required": required,
+        "attributed": counted["harness_attributed"] > 0,
+        "coverage": counted["harness_coverage"],
+    }
+    if counted["harness_digests"]:
+        block["digests"] = counted["harness_digests"]
+
+    # Strict in BOTH modes. Running it only when required=True meant a corpus
+    # DECLARED legacy while carrying attributed traces reported attributed:
+    # true with no disagreement — a contradiction stated as a fact. The
+    # declaration decides which mode to check in; it does not decide whether to
+    # check at all.
+    try:
+        observed = harness_distill.summarize_harness_attribution(
+            _load_jsonl(path), required=required)
+    except harness_distill.HarnessPlanError as exc:
+        block["disagreement"] = str(exc)
+        return block
+
+    # The strict check RUNS in both modes; only its bookkeeping is recorded for
+    # a harness-aware corpus. A legacy corpus keeps the minimal three-key block
+    # it has always reported, so a reader cannot mistake extra fields for the
+    # corpus having gained an attribution it does not have.
+    if required:
+        block["declared"] = declared
+        block["observed"] = observed
+        if observed != declared:
+            block["disagreement"] = (
+                "the pass manifest declares a different harness state than "
+                "the traces carry")
+    return block
+
+
 def audit_corpus(corpus: str | Path, today: _dt.date,
                  teacher_overrides: list | None = None) -> dict:
     """The mechanical limits of a promoted corpus, as a dict.
@@ -753,6 +813,10 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
             f"Could not resolve a registry model for corpus teacher(s) {unresolved}; "
             "licence freshness UNKNOWN. Pass --teacher <name>.")
 
+    harness = _harness_coverage(path)
+    harness_ready = not harness.get("disagreement") and (
+        not harness.get("required") or harness.get("coverage") == 1.0)
+
     # Identity is a REQUIREMENT, not a footnote. An unverified tokenizer digest
     # means the compatibility key that decided the distillation mode was never
     # checked against real files, so "trainable as is" would be a claim about a
@@ -760,10 +824,33 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
     unverified = [s["registry_model"] for s in freshness if not s["digests_verified"]]
     identity_verified = bool(freshness) and not unverified
 
-    trainable_as_is = (
-        fp8_met and synthetic == 0 and bool(freshness)
-        and all(s["status"] == "FRESH" for s in freshness)
-        and identity_verified and not unresolved)
+    # Each requirement, named and reported separately. A single boolean says a
+    # corpus is not trainable; it does not say WHY, and "still false" is not
+    # evidence that the reason is unchanged — a new blocker can appear while an
+    # old one is fixed and the verdict never moves. trainable_as_is is derived
+    # from this block rather than computed alongside it, so the two cannot drift.
+    readiness = {
+        "fp8_ready": fp8_met,
+        "source_ready": synthetic == 0,
+        "identity_ready": identity_verified,
+        "license_ready": bool(freshness)
+                         and all(s["status"] == "FRESH" for s in freshness)
+                         and not unresolved,
+        "harness_ready": harness_ready,
+    }
+    trainable_as_is = all(readiness.values())
+
+    if harness.get("disagreement"):
+        limits.append("harness attribution is incoherent: " + harness["disagreement"])
+    elif harness.get("required") and harness["coverage"] < 1.0:
+        limits.append(
+            "harness-aware mode is declared but attribution is incomplete: "
+            f"{harness['coverage']:.0%} coverage")
+    # No limit line for an unattributed corpus. That is the state of every
+    # corpus predating harness attribution, so a line here would fire on every
+    # legacy audit and reshape a report that is supposed to gain a block, not a
+    # complaint. The harness block already says coverage is 0.0; what earns a
+    # limit is a corpus that CLAIMS attribution and does not deliver it.
 
     result = {
         "corpus": str(path),
@@ -788,6 +875,8 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
             "resolved": freshness,
             "unresolved_corpus_teachers": unresolved,
         },
+        "harness": harness,
+        "readiness": readiness,
         "identity_verification": {
             "all_verified": identity_verified,
             "unverified_models": unverified,
