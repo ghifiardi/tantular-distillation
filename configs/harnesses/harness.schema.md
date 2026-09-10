@@ -82,8 +82,13 @@ whole point of the block is that it is not.
 `prompt_registry` (preferred for the Office add-in) resolves the identity through
 the add-in's own `promptRegistry.js`, which enumerates every production prompt
 and returns each one's text. The digest is sha256 over canonical JSON of the
-sorted `{id, sha256}` pairs, where each `sha256` is computed HERE over the
-prompt text.
+sorted `{id, content_sha256, registry_content_hash}` rows, where
+`content_sha256` is computed HERE over the prompt text.
+
+Each id travels in one object with its own content hash, so the aggregate BINDS
+id to content: swapping text between two prompt ids changes the identity. A
+digest over the ids and a separate digest over the contents would both be
+unchanged by that swap.
 
 The registry also publishes a `contentHash`, and it is recorded alongside for
 cross-checking — but it is deliberately not the identity. That value is a djb2

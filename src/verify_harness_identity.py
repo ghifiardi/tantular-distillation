@@ -164,9 +164,12 @@ def prompt_registry_digest(path: Path) -> tuple[str, list[dict]]:
         if not isinstance(registry_hash, str) or not HEX_RE.match(registry_hash):
             die(f"prompt {row['id']!r} has a contentHash that is not lowercase "
                 f"hex: {registry_hash!r}")
+        # id and content travel in ONE object, so the aggregate binds them:
+        # swapping text between two prompt ids changes the identity, which a
+        # digest over two independent lists would not catch.
         normalized.append({
             "id": row["id"],
-            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
             "registry_content_hash": registry_hash,
         })
 
@@ -249,7 +252,7 @@ def main() -> None:
     print(f"harness   {args.harness}")
     print(f"prompt    {prompt_path}  ({shape})")
     for row in rows:
-        print(f"            {row['id']:<22} {row['sha256'][:16]}")
+        print(f"            {row['id']:<22} {row['content_sha256'][:16]}")
     print(f"measured  {measured}")
     print(f"pinned    {pinned or '(none)'}")
 

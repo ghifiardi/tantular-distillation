@@ -418,7 +418,7 @@ def test_the_identity_does_not_inherit_the_addin_short_hash(registry):
     a registry reported the same contentHash for both."""
     path, src = registry
     digest, rows = vhi.prompt_registry_digest(src / "promptRegistry.js")
-    assert all(vhi.SHA256_RE.match(r["sha256"]) for r in rows)
+    assert all(vhi.SHA256_RE.match(r["content_sha256"]) for r in rows)
     assert all("registry_content_hash" in r for r in rows)
 
     (src / "promptRegistry.js").write_text(
@@ -437,3 +437,31 @@ def test_the_identity_does_not_inherit_the_addin_short_hash(registry):
         '}\n', encoding="utf-8")
     second, _ = vhi.prompt_registry_digest(src / "promptRegistry.js")
     assert first != second, "identity must follow the content, not the short hash"
+
+
+@node
+def test_the_identity_binds_prompt_id_to_prompt_content(tmp_path):
+    """Swapping text between two prompt ids must change the aggregate identity.
+
+    A digest over the ids and a separate digest over the contents would both be
+    unchanged by such a swap — the PAIRING is what matters, so each id travels
+    in one object with its own content hash.
+    """
+    template = (
+        'export function allPromptIds() { return ["alpha", "beta"]; }\n'
+        'const C = { alpha: %s, beta: %s };\n'
+        'export function getPrompt(id) {\n'
+        '  return { id, content: C[id], contentHash: "deadbeef" };\n'
+        '}\n')
+    registry = tmp_path / "promptRegistry.js"
+
+    registry.write_text(template % ('"ONE"', '"TWO"'), encoding="utf-8")
+    original, rows = vhi.prompt_registry_digest(registry)
+
+    registry.write_text(template % ('"TWO"', '"ONE"'), encoding="utf-8")
+    swapped, swapped_rows = vhi.prompt_registry_digest(registry)
+
+    assert original != swapped, "the identity must bind id to content"
+    # The same two content hashes appear in both — only the pairing differs.
+    assert {r["content_sha256"] for r in rows} == \
+        {r["content_sha256"] for r in swapped_rows}
