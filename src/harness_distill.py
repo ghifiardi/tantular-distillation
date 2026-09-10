@@ -518,7 +518,7 @@ def evaluate(experiment: dict[str, Any], measurements: dict[str, Any]) -> dict[s
 def audit_traces(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise HarnessPlanError(f"missing trace file: {path}")
-    total = model_attributed = harness_attributed = 0
+    total = model_attributed = harness_attributed = malformed = 0
     harnesses: dict[str, int] = {}
     for line_number, line in enumerate(
         path.read_text(encoding="utf-8").splitlines(), 1
@@ -537,26 +537,38 @@ def audit_traces(path: Path) -> dict[str, Any]:
         provenance = row.get("provenance") or {}
         if provenance.get("teacher") or provenance.get("model_id"):
             model_attributed += 1
-        harness = row.get("harness_provenance") or {}
-        digest = harness.get("digest")
-        if isinstance(digest, str) and digest:
-            harness_attributed += 1
-            harnesses[digest] = harnesses.get(digest, 0) + 1
+        # PRESENCE, not truthiness — the same distinction the summary makes.
+        # Counting a malformed block as "not attributed" reported a corpus with
+        # broken attribution as a clean legacy corpus, which is the reading this
+        # whole module exists to prevent.
+        if "harness_provenance" in row:
+            harness = row.get("harness_provenance")
+            digest = harness.get("digest") if isinstance(harness, dict) else None
+            if isinstance(digest, str) and digest:
+                harness_attributed += 1
+                harnesses[digest] = harnesses.get(digest, 0) + 1
+            else:
+                malformed += 1
     return {
         "path": str(path),
         "traces": total,
         "model_attributed": model_attributed,
         "harness_attributed": harness_attributed,
+        "harness_malformed": malformed,
         "harness_coverage": harness_attributed / total if total else 0.0,
         "harness_digests": harnesses,
-        "distillation_attribution_ready": total > 0 and harness_attributed == total,
+        "distillation_attribution_ready": (total > 0 and harness_attributed == total
+                                           and not malformed),
         "limits": (
-            []
-            if total > 0 and harness_attributed == total
-            else [
+            [] if total > 0 and harness_attributed == total and not malformed
+            else ([
+                f"{malformed} trace(s) carry a harness_provenance key with no "
+                "usable digest. That is a MALFORMED attribution, not an absent "
+                "one, and it must not be read as a legacy corpus."
+            ] if malformed else []) + ([
                 "trace quality cannot be attributed between model and harness "
                 "without harness_provenance.digest"
-            ]
+            ] if harness_attributed != total else [])
         ),
         "training_authorized": False,
     }

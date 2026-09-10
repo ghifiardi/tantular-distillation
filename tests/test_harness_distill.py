@@ -474,3 +474,35 @@ def test_a_partially_attributed_legacy_file_refuses():
 def test_an_empty_corpus_refuses():
     with pytest.raises(hd.HarnessPlanError):
         hd.summarize_harness_attribution([], required=True)
+
+
+def test_audit_traces_distinguishes_malformed_from_absent(tmp_path):
+    """The standalone audit is a REPORTING surface, and it must not report a
+    corpus with broken attribution as a clean legacy corpus. It counted by the
+    truthiness of the digest, so `{"harness_provenance": {}}` read as an
+    ordinary unattributed trace — the same defect the summary had, surviving on
+    a path the summary does not guard."""
+    path = tmp_path / "t.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in [
+        {"family": "a", "provenance": {"teacher": "t"}, "harness_provenance": {}},
+        {"family": "b", "provenance": {"teacher": "t"},
+         "harness_provenance": {"digest": ""}},
+        {"family": "c", "provenance": {"teacher": "t"}},
+    ]) + "\n", encoding="utf-8")
+
+    report = hd.audit_traces(path)
+    assert report["harness_malformed"] == 2
+    assert report["harness_attributed"] == 0
+    assert report["distillation_attribution_ready"] is False
+    assert any("MALFORMED" in limit for limit in report["limits"])
+
+
+def test_audit_traces_on_a_clean_legacy_corpus_reports_no_malformed(tmp_path):
+    path = tmp_path / "t.jsonl"
+    path.write_text("\n".join(json.dumps(
+        {"family": f, "provenance": {"teacher": "t"}}) for f in "abc") + "\n",
+        encoding="utf-8")
+    report = hd.audit_traces(path)
+    assert report["harness_malformed"] == 0
+    assert report["harness_coverage"] == 0.0
+    assert not any("MALFORMED" in limit for limit in report["limits"])
