@@ -710,15 +710,21 @@ def _harness_coverage(path: Path) -> dict:
     # true with no disagreement — a contradiction stated as a fact. The
     # declaration decides which mode to check in; it does not decide whether to
     # check at all.
-    if required:
-        block["declared"] = declared
     try:
-        block["observed"] = harness_distill.summarize_harness_attribution(
+        observed = harness_distill.summarize_harness_attribution(
             _load_jsonl(path), required=required)
     except harness_distill.HarnessPlanError as exc:
         block["disagreement"] = str(exc)
-    else:
-        if required and block["observed"] != declared:
+        return block
+
+    # The strict check RUNS in both modes; only its bookkeeping is recorded for
+    # a harness-aware corpus. A legacy corpus keeps the minimal three-key block
+    # it has always reported, so a reader cannot mistake extra fields for the
+    # corpus having gained an attribution it does not have.
+    if required:
+        block["declared"] = declared
+        block["observed"] = observed
+        if observed != declared:
             block["disagreement"] = (
                 "the pass manifest declares a different harness state than "
                 "the traces carry")
@@ -818,14 +824,21 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
     unverified = [s["registry_model"] for s in freshness if not s["digests_verified"]]
     identity_verified = bool(freshness) and not unverified
 
-    trainable_as_is = (
-        fp8_met and synthetic == 0 and bool(freshness)
-        and all(s["status"] == "FRESH" for s in freshness)
-        and identity_verified and not unresolved
-        # An incoherent or incomplete harness declaration describes a corpus
-        # nobody can characterise, and that is not trainable as is however
-        # clean its quantization and licence may be.
-        and harness_ready)
+    # Each requirement, named and reported separately. A single boolean says a
+    # corpus is not trainable; it does not say WHY, and "still false" is not
+    # evidence that the reason is unchanged — a new blocker can appear while an
+    # old one is fixed and the verdict never moves. trainable_as_is is derived
+    # from this block rather than computed alongside it, so the two cannot drift.
+    readiness = {
+        "fp8_ready": fp8_met,
+        "source_ready": synthetic == 0,
+        "identity_ready": identity_verified,
+        "license_ready": bool(freshness)
+                         and all(s["status"] == "FRESH" for s in freshness)
+                         and not unresolved,
+        "harness_ready": harness_ready,
+    }
+    trainable_as_is = all(readiness.values())
 
     if harness.get("disagreement"):
         limits.append("harness attribution is incoherent: " + harness["disagreement"])
@@ -863,6 +876,7 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
             "unresolved_corpus_teachers": unresolved,
         },
         "harness": harness,
+        "readiness": readiness,
         "identity_verification": {
             "all_verified": identity_verified,
             "unverified_models": unverified,

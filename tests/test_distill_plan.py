@@ -738,3 +738,51 @@ def test_incomplete_required_attribution_blocks_trainable_as_is(tmp_path, monkey
     assert report["identity_verification"]["all_verified"] is True
     assert report["harness"]["disagreement"]
     assert report["trainable_as_is"] is False, "harness incoherence must block it"
+
+
+# --- the legacy verdict must keep its historical REASONS ---------------------
+
+@pytest.mark.requires_local_corpus
+def test_the_legacy_corpus_is_blocked_by_exactly_its_historical_reasons():
+    """`trainable_as_is: false` is not evidence that nothing changed.
+
+    A new blocker can appear while an old one is fixed and the verdict never
+    moves. Harness readiness in particular must contribute NOTHING here: a
+    legacy corpus declares no harness and carries no attribution, so it is
+    coherent, and its refusal must still come from quantization, synthetic
+    sources and unverified identity.
+    """
+    report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
+
+    assert report["readiness"] == {
+        "fp8_ready": False,        # int4_ollama traces
+        "source_ready": False,     # 136/136 synthetic
+        "identity_ready": False,   # digests_verified is not true
+        "license_ready": True,     # apache-2.0, reviewed and in date
+        "harness_ready": True,     # no declaration, no attribution: coherent
+    }
+    assert report["trainable_as_is"] is False
+
+    assert report["harness"] == {"required": False, "attributed": False,
+                                 "coverage": 0.0}
+    assert "disagreement" not in report["harness"]
+    assert not any("harness" in limit for limit in report["limits"])
+
+
+@pytest.mark.requires_local_corpus
+def test_trainable_as_is_is_exactly_the_conjunction_of_readiness():
+    """Derived, not computed alongside — so the block and the verdict cannot
+    drift apart and disagree about why."""
+    report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
+    assert report["trainable_as_is"] == all(report["readiness"].values())
+
+
+def test_a_harness_disagreement_shows_up_as_a_named_blocker(tmp_path):
+    """The corollary: when harness readiness IS the blocker, it says so rather
+    than hiding inside a single false."""
+    path = declaring_pass(tmp_path, [trace(**{"harness_provenance": harness_block()}),
+                                     trace()])
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    assert report["readiness"]["harness_ready"] is False
+    assert report["readiness"]["fp8_ready"] is True
+    assert report["trainable_as_is"] is False
