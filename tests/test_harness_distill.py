@@ -475,34 +475,90 @@ def test_an_empty_corpus_refuses():
     with pytest.raises(hd.HarnessPlanError):
         hd.summarize_harness_attribution([], required=True)
 
+# --- audit_traces: every attribution state, named -----------------------------
+#
+# The real 136-trace corpus exercises exactly one of these — all keys absent —
+# so it cannot stand as evidence for the malformed-versus-absent distinction.
+# That is the finding-2 mistake (presence versus truthiness) one module over, so
+# each state is pinned with its own fixture.
 
-def test_audit_traces_distinguishes_malformed_from_absent(tmp_path):
-    """The standalone audit is a REPORTING surface, and it must not report a
-    corpus with broken attribution as a clean legacy corpus. It counted by the
-    truthiness of the digest, so `{"harness_provenance": {}}` read as an
-    ordinary unattributed trace — the same defect the summary had, surviving on
-    a path the summary does not guard."""
-    path = tmp_path / "t.jsonl"
-    path.write_text("\n".join(json.dumps(r) for r in [
-        {"family": "a", "provenance": {"teacher": "t"}, "harness_provenance": {}},
-        {"family": "b", "provenance": {"teacher": "t"},
-         "harness_provenance": {"digest": ""}},
-        {"family": "c", "provenance": {"teacher": "t"}},
-    ]) + "\n", encoding="utf-8")
+VALID_BLOCK = {
+    "schema_version": 1, "name": "h", "status": "candidate", "digest": "a" * 64,
+    "compatible_registry_models": ["m1"], "execution_model_registry": "m1",
+    "prompt_sha256": "b" * 64, "prompt_verified": True,
+    "tool_policy_digest": "c" * 64, "verification_policy_digest": "d" * 64,
+}
 
-    report = hd.audit_traces(path)
-    assert report["harness_malformed"] == 2
+
+def corpus_of(tmp_path: Path, *rows: dict) -> Path:
+    path = tmp_path / "traces.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    return path
+
+
+def absent() -> dict:
+    return {"family": "f", "provenance": {"teacher": "t"}}
+
+
+def with_block(value) -> dict:
+    return {"family": "f", "provenance": {"teacher": "t"},
+            "harness_provenance": value}
+
+
+@pytest.mark.parametrize("rows,attributed,malformed,ready", [
+    # the key is absent: an ordinary legacy trace
+    ([absent(), absent()],                          0, 0, False),
+    # present but empty: asserted attribution, then said nothing
+    ([with_block({})],                              0, 1, False),
+    ([with_block(None)],                            0, 1, False),
+    # present but not a mapping at all
+    ([with_block("a-string")],                      0, 1, False),
+    ([with_block(["a", "list"])],                   0, 1, False),
+    ([with_block({"digest": ""})],                  0, 1, False),
+    # a real block
+    ([with_block(VALID_BLOCK)],                     1, 0, True),
+    ([with_block(VALID_BLOCK), with_block(VALID_BLOCK)], 2, 0, True),
+    # partial: some attributed, some not
+    ([with_block(VALID_BLOCK), absent()],           1, 0, False),
+    # partial AND malformed
+    ([with_block(VALID_BLOCK), with_block({})],     1, 1, False),
+])
+def test_audit_traces_reports_each_attribution_state(tmp_path, rows, attributed,
+                                                     malformed, ready):
+    report = hd.audit_traces(corpus_of(tmp_path, *rows))
+    assert report["harness_attributed"] == attributed
+    assert report["harness_malformed"] == malformed
+    assert report["distillation_attribution_ready"] is ready
+    if malformed:
+        assert any("MALFORMED" in limit for limit in report["limits"])
+    else:
+        assert not any("MALFORMED" in limit for limit in report["limits"])
+
+
+@pytest.mark.parametrize("rows", [
+    [absent()], [with_block({})], [with_block(VALID_BLOCK)],
+    [with_block(VALID_BLOCK), absent()],
+    [with_block(VALID_BLOCK), with_block({})],
+])
+def test_attribution_readiness_is_exactly_its_definition(tmp_path, rows):
+    """Stated directly, so a matching boolean cannot hide a moved reason."""
+    report = hd.audit_traces(corpus_of(tmp_path, *rows))
+    assert report["distillation_attribution_ready"] == (
+        report["traces"] > 0
+        and report["harness_attributed"] == report["traces"]
+        and report["harness_malformed"] == 0
+    )
+
+
+@pytest.mark.requires_local_corpus
+def test_the_legacy_corpus_is_absent_not_malformed():
+    """The real corpus, pinned by all three numbers rather than the verdict: it
+    is not attribution-ready because it carries NO attribution, not because its
+    attribution is broken."""
+    report = hd.audit_traces(ROOT / "data" / "promoted" / "train.jsonl")
+    assert report["traces"] == 136
     assert report["harness_attributed"] == 0
-    assert report["distillation_attribution_ready"] is False
-    assert any("MALFORMED" in limit for limit in report["limits"])
-
-
-def test_audit_traces_on_a_clean_legacy_corpus_reports_no_malformed(tmp_path):
-    path = tmp_path / "t.jsonl"
-    path.write_text("\n".join(json.dumps(
-        {"family": f, "provenance": {"teacher": "t"}}) for f in "abc") + "\n",
-        encoding="utf-8")
-    report = hd.audit_traces(path)
     assert report["harness_malformed"] == 0
     assert report["harness_coverage"] == 0.0
+    assert report["distillation_attribution_ready"] is False
     assert not any("MALFORMED" in limit for limit in report["limits"])

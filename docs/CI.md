@@ -18,7 +18,7 @@ Deselection happens only in `.github/workflows/tests.yml`, as an explicit `-m`
 expression a reader can see. It is a workflow policy, not a property of the
 tests.
 
-## Gap 1 — the corpus (46 tests)
+## Gap 1 — the corpus (47 tests)
 
 `.gitignore` excludes `*.jsonl` (except `prompts/*.jsonl`), `data/raw/` and
 `data/promoted/`: *"Corpora and weights never belong in git — HF hosts those."*
@@ -28,7 +28,7 @@ A fresh clone therefore lacks:
     data/promoted/train.jsonl              the promoted training split
     data/promoted/eval.jsonl               the promoted held-out split
 
-Forty-six tests read them, across `tests/test_training_manifest.py`,
+Forty-seven tests read them, across `tests/test_training_manifest.py`,
 `tests/test_tinker_sft.py` (the freeze, payload-rendering and checkpoint-label
 paths all start from a real freeze) and
 `tests/test_run_gates.py::test_trainer_refuses_ai19_end_to_end`.
@@ -131,20 +131,21 @@ version control. This is the standing argument for the upstream fix above.
 The workflow collects each partition into the job log every run and asserts its
 size independently:
 
-    EXPECTED_EXCLUDED_CORPUS: 46
+    EXPECTED_EXCLUDED_CORPUS: 47
     EXPECTED_EXCLUDED_ADDIN:  37
 
 Both assertions fail in **both** directions. If a number moves, investigate; do
 not update it to match. A changed count means a new dependency was introduced or
 an existing test stopped exercising one, and both are worth knowing.
 
-The **final deselected total is read from the run**, never computed as 46 + 37.
+The **final deselected total is read from the run**, never computed as 47 + 37.
 A test could in principle carry both markers, in which case the union is smaller
-than the sum. Today the union collects 83, which happens to equal the sum — that is a
+than the sum. Today the union collects 84, which happens to equal the sum — that is a
 measurement, not an assumption, and it is re-measured whenever either number
 moves. It has already moved twice: 13/28 on `main` before the distillation
 branch landed, 37/36 after it, 44/37 with harness attribution, 46/37 once the
-readiness block was pinned by tests that read the real corpus.
+readiness block was pinned by tests that read the real corpus, 47/37 once the
+legacy corpus was pinned as absent-not-malformed.
 
 ### A test that only LOOKED add-in dependent
 
