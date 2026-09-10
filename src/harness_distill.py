@@ -261,6 +261,73 @@ _LEGACY_SUMMARY = {
 }
 
 
+def validate_harness_summary(value: object) -> dict[str, Any]:
+    """Validate a DECLARED harness summary, or refuse.
+
+    A declaration is read from a manifest, so a malformed one is not something
+    to count and report — it means the reader cannot establish what was
+    declared, and must fail closed rather than guess.
+
+    The canonical shape is all seven keys, always. Accepting a partial block
+    would let a manifest that LOST its attribution fields read as an ordinary
+    legacy declaration, which is the ambiguity the fixed shape exists to
+    prevent: `{"required": false}` alone is indistinguishable from a
+    harness-aware manifest with its identity stripped out.
+
+    Returns the validated dict. There is no third state.
+    """
+    if not isinstance(value, dict):
+        raise HarnessPlanError(
+            f"harness declaration must be a mapping, got {type(value).__name__}")
+    expected = set(_LEGACY_SUMMARY)
+    got = set(value)
+    if got != expected:
+        missing = sorted(expected - got)
+        extra = sorted(got - expected)
+        detail = []
+        if missing:
+            detail.append(f"missing {missing}")
+        if extra:
+            detail.append(f"unexpected {extra}")
+        raise HarnessPlanError(
+            "harness declaration is not the canonical seven-key summary: "
+            + "; ".join(detail)
+            + ". A partial block cannot be told apart from one whose "
+              "attribution fields were lost.")
+
+    if value["required"] is False:
+        if value != _LEGACY_SUMMARY:
+            raise HarnessPlanError(
+                "a declaration with required: false must be the canonical legacy "
+                f"summary; got {json.dumps(value, sort_keys=True)}")
+        return dict(value)
+
+    if value["required"] is not True:
+        raise HarnessPlanError(
+            f"harness declaration 'required' must be a boolean, got "
+            f"{value['required']!r}")
+
+    problems: list[str] = []
+    if value["attributed"] is not True:
+        problems.append("required: true but attributed is not true")
+    if not isinstance(value["name"], str) or not value["name"]:
+        problems.append("name is empty")
+    for field in ("digest", "prompt_sha256"):
+        if not isinstance(value[field], str) or not re.fullmatch(
+                r"[0-9a-f]{64}", value[field]):
+            problems.append(f"{field} is not a 64-character sha256")
+    if value["prompt_verified"] is not True:
+        problems.append("prompt_verified is not true")
+    if not isinstance(value["execution_model_registry"], str) or \
+            not value["execution_model_registry"]:
+        problems.append("execution_model_registry is empty")
+    if problems:
+        raise HarnessPlanError(
+            "harness-aware declaration is incomplete or contradictory:\n  - "
+            + "\n  - ".join(problems))
+    return dict(value)
+
+
 def summarize_harness_attribution(traces: list[dict[str, Any]], *,
                                   required: bool) -> dict[str, Any]:
     """The single answer to "is this corpus harness-attributed, and by what?".

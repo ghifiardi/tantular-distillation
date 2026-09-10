@@ -95,7 +95,13 @@ def harness_attribution(corpus: Path, promotion: dict) -> dict:
 
     declared = ((promotion.get("source_corpus") or {}).get("harness")
                 if isinstance(promotion, dict) else None)
-    required = bool(declared and declared.get("required"))
+    if declared is not None:
+        try:
+            declared = harness_distill.validate_harness_summary(declared)
+        except harness_distill.HarnessPlanError as exc:
+            sys.exit(f"the promotion manifest's harness declaration is invalid: "
+                     f"{exc}")
+    required = bool(declared and declared["required"])
 
     try:
         summary = harness_distill.summarize_harness_attribution(

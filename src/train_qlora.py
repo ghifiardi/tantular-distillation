@@ -344,10 +344,14 @@ def verify_harness_attribution(freeze: dict, rows: list[dict]) -> dict:
     import harness_distill
 
     recorded = freeze.get("harness")
-    if not isinstance(recorded, dict):
+    if recorded is None:
         die("run manifest records no harness attribution. Re-run "
             "src/freeze_training_run.py; a freeze that predates harness "
             "attribution cannot be distinguished from one that lost it.")
+    try:
+        recorded = harness_distill.validate_harness_summary(recorded)
+    except harness_distill.HarnessPlanError as exc:
+        die(f"the run manifest's harness declaration is invalid: {exc}")
     try:
         summary = harness_distill.summarize_harness_attribution(
             rows, required=bool(recorded.get("required")))

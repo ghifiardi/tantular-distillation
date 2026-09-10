@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PY_BIN = str(ROOT / ".venv" / "bin" / "python")
 TOOL = str(ROOT / "src" / "verify_corpus.py")
 sys.path.insert(0, str(ROOT / "src"))
+import harness_distill as hd                                  # noqa: E402
 import splits as splits_module                                # noqa: E402
 import verify_corpus as vc                                    # noqa: E402
 
@@ -103,8 +104,9 @@ def test_a_corpus_with_no_pass_manifest_is_legacy(tmp_path):
 
 
 def test_a_declared_legacy_pass_is_legacy(tmp_path):
-    corpus = make_pass(tmp_path, [{"family": "f"}],
-                       declared={"required": False, "attributed": False})
+    """An EXPLICIT legacy declaration must be the complete canonical summary,
+    not an abbreviation of it."""
+    corpus = make_pass(tmp_path, [{"family": "f"}], declared=dict(hd._LEGACY_SUMMARY))
     assert vc.harness_declaration([corpus]) is None
 
 
@@ -159,7 +161,50 @@ def test_a_malformed_harness_block_fails_before_scoring(tmp_path):
     corpus = make_pass(tmp_path, [{"family": "f"}], declared={"attributed": True})
     with pytest.raises(SystemExit) as exc:
         vc.harness_declaration([corpus])
-    assert "malformed harness block" in str(exc.value)
+    assert "canonical seven-key summary" in str(exc.value)
+
+
+# --- a declaration is complete, or it is refused ----------------------------
+#
+# `{"required": false}` alone is indistinguishable from a harness-aware
+# manifest whose identity fields were stripped out. A malformed declaration is
+# not a state to report: it means what was declared cannot be established.
+
+def aware(**over) -> dict:
+    value = {"required": True, "attributed": True, "name": "h", "digest": "a" * 64,
+             "prompt_verified": True, "prompt_sha256": "b" * 64,
+             "execution_model_registry": "m1"}
+    value.update(over)
+    return value
+
+
+def test_no_harness_field_is_historical_legacy(tmp_path):
+    corpus = make_pass(tmp_path, [{"family": "f"}], declared=None)
+    assert vc.harness_declaration([corpus]) is None
+
+
+def test_a_complete_harness_aware_declaration_is_returned(tmp_path):
+    corpus = make_pass(tmp_path, [attributed()], declared=aware())
+    assert vc.harness_declaration([corpus]) == aware()
+
+
+@pytest.mark.parametrize("declared,marker", [
+    ({"required": False},                        "seven-key"),
+    (dict(hd._LEGACY_SUMMARY, attributed=True),  "canonical legacy"),
+    (aware(attributed=False),                    "attributed is not true"),
+    (aware(name=""),                             "name is empty"),
+    (aware(digest="not-a-digest"),               "digest is not a 64-character"),
+    (aware(prompt_verified=False),               "prompt_verified is not true"),
+    (aware(prompt_sha256="abc"),                 "prompt_sha256 is not a 64-character"),
+    (aware(execution_model_registry=""),         "execution_model_registry is empty"),
+    ({"required": True},                         "seven-key"),
+    ("not-a-mapping",                            "must be a mapping"),
+])
+def test_a_partial_or_contradictory_declaration_is_refused(tmp_path, declared, marker):
+    corpus = make_pass(tmp_path, [{"family": "f"}], declared=declared)
+    with pytest.raises(SystemExit) as exc:
+        vc.harness_declaration([corpus])
+    assert marker in str(exc.value), str(exc.value)[:200]
 
 
 def test_a_manifest_digest_mismatch_fails_before_scoring(tmp_path):

@@ -237,8 +237,15 @@ def main() -> None:
                 "that does not describe this corpus.")
         declared = pass_manifest.get("harness")
 
-    # No declaration at all means a pass that predates harness attribution.
-    required = bool(declared and declared.get("required"))
+    # No declaration at all means a pass that predates harness attribution. A
+    # declaration that IS present must be complete: a partial block cannot be
+    # told apart from one whose attribution fields were lost.
+    if declared is not None:
+        try:
+            declared = harness_distill.validate_harness_summary(declared)
+        except harness_distill.HarnessPlanError as exc:
+            sys.exit(f"{pass_manifest_path}: {exc}")
+    required = bool(declared and declared["required"])
     try:
         harness_summary = harness_distill.summarize_harness_attribution(
             traces, required=required)

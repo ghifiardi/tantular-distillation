@@ -176,11 +176,17 @@ def harness_declaration(paths: list[Path]) -> dict | None:
         if declared is None and isinstance(entry, dict):
             declared = entry.get("harness")
         if declared is not None:
-            if not isinstance(declared, dict) or "required" not in declared:
-                sys.exit(f"{manifest_path} has a malformed harness block: "
-                         f"{declared!r}")
-            if not declared.get("required"):
-                declared = None
+            # One validator, shared with the freeze, the trainer and promotion.
+            # A malformed declaration is not a third state to report: it means
+            # what was declared cannot be established, so it refuses.
+            sys.path.insert(0, str(ROOT / "src"))
+            import harness_distill
+            try:
+                declared = harness_distill.validate_harness_summary(declared)
+            except harness_distill.HarnessPlanError as exc:
+                sys.exit(f"{manifest_path}: {exc}")
+            if not declared["required"]:
+                declared = None          # explicit, complete legacy declaration
         declarations.append((path, declared))
 
     aware = [(p, d) for p, d in declarations if d]
