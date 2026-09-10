@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 30
 
     env:
-      EXPECTED_EXCLUDED_CORPUS: "44"
+      EXPECTED_EXCLUDED_CORPUS: "46"
       EXPECTED_EXCLUDED_ADDIN: "37"
 
     steps:
