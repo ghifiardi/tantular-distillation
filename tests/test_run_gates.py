@@ -158,10 +158,19 @@ def test_missing_runner_fails_closed(config, tmp_path):
 
 
 def test_missing_eval_source_fails_closed(config, tmp_path):
+    """A declared eval set that does not exist must abort, not skip.
+
+    The config is reduced to the gate under test. Leaving the whole set in
+    place made this assert on gate ORDERING — whichever gate ran first decided
+    the message — so an unrelated failure in an earlier gate turned this into a
+    confusing red about the wrong thing. It is testing the missing-source
+    refusal, not the order the runner happens to iterate in.
+    """
     cfg = yaml.safe_load(config.read_text())
+    cfg["eval_gates"] = [g for g in cfg["eval_gates"]
+                         if g["name"] == "indonesian_voice"]
     for g in cfg["eval_gates"]:
-        if g["name"] == "indonesian_voice":
-            g["source"] = "prompts/does_not_exist.jsonl"
+        g["source"] = "prompts/does_not_exist.jsonl"
     config.write_text(yaml.safe_dump(cfg))
     traces = write_traces(tmp_path / "t.jsonl", n_bad=0)
     proc = run(config, tmp_path / "before.json", traces)

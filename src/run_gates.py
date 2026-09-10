@@ -66,6 +66,8 @@ import argparse
 import contextlib
 import hashlib
 import json
+import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -435,6 +437,76 @@ def node_suite_lock(suite: Path):
         handle.close()
 
 
+# How long the CLEANUP after a timeout may itself take. The cleanup needs its
+# own deadline for the same reason the test does: see reap_timed_out_gate.
+GATE_CLEANUP_TIMEOUT_S = 30
+
+
+def reap_timed_out_gate(proc, name: str, per_file_timeout: int) -> None:
+    """Stop a timed-out gate subprocess and report, in BOUNDED time.
+
+    The previous version killed the process group and then called
+    `proc.communicate()` with no timeout. That reads both pipes until EOF, and
+    EOF arrives only when every writer has closed — including any descendant
+    that escaped the group kill and inherited the write end. When one does, the
+    handler blocks forever.
+
+    That is not theoretical. Observed 2026-09-10: a gate run sat in
+    select/poll for 82 minutes with 1.02s of CPU and no children, having
+    consumed exactly one second of work; the suite never returned. The handler
+    written because "a gate that hangs yields no verdict and stalls the run"
+    reproduced precisely that, and worse — the 300s timeout at least ends.
+
+    So every wait here has a deadline, and after it expires we close OUR ends of
+    the pipes rather than waiting for a writer we no longer control. Only the
+    session this runner created is signalled; no PID is searched for or guessed
+    at.
+    """
+    group_stopped = False
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        group_stopped = True
+    except (ProcessLookupError, PermissionError):
+        # Not our session any more, or never was: fall back to the direct child.
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+    detached_may_remain = False
+    try:
+        proc.communicate(timeout=GATE_CLEANUP_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        # Someone still holds the write end. Stop waiting for EOF and drop our
+        # own handles; the descendant is outside the group we can signal.
+        detached_may_remain = True
+        for stream in (proc.stdout, proc.stderr, proc.stdin):
+            if stream is not None:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+        try:
+            proc.wait(timeout=GATE_CLEANUP_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            pass
+
+    detail = (
+        "a detached descendant may still be running: it outlived the group "
+        "stop and kept the output pipes open past the cleanup deadline"
+        if detached_may_remain else
+        "the launched process group stopped and its pipes closed"
+    )
+    fail(f"office_json_contract: {name} did not finish in {per_file_timeout}s. "
+         "Failing closed rather than waiting: a gate that hangs yields no "
+         "verdict and stalls the run.\n"
+         f"  test timed out           yes ({per_file_timeout}s)\n"
+         f"  process-group stop sent  {'yes' if group_stopped else 'no (direct child only)'}\n"
+         f"  cleanup also timed out   {'yes' if detached_may_remain else 'no'} "
+         f"({GATE_CLEANUP_TIMEOUT_S}s deadline)\n"
+         f"  {detail}.")
+
+
 def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> dict:
     suite = (ROOT / spec["source"]).resolve()
     if not suite.is_dir():
@@ -479,18 +551,7 @@ def gate_office_json_contract(spec: dict, stage: str, args, out_dir: Path) -> di
             try:
                 stdout, stderr = proc.communicate(timeout=per_file_timeout)
             except subprocess.TimeoutExpired:
-                import os as _os
-                import signal as _signal
-                try:
-                    _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    proc.kill()
-                proc.communicate()
-                fail(f"office_json_contract: {test_file.name} did not finish in "
-                     f"{per_file_timeout}s. Failing closed rather than waiting: a "
-                     "gate that hangs yields no verdict and stalls the run.\n"
-                     "Its whole process group was killed, so nothing is left behind "
-                     "to interfere with the next attempt.")
+                reap_timed_out_gate(proc, test_file.name, per_file_timeout)
             proc = subprocess.CompletedProcess(proc.args, proc.returncode,
                                                stdout, stderr)
             out = proc.stdout + proc.stderr
