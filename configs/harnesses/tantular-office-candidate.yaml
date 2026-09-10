@@ -22,6 +22,16 @@ prompts:
     sha256: null
     verified: false
 
+# src/generate.py has NO harness executor: it sends a prompt through an ordinary
+# chat client. It supplies none of the tools below, runs none of the verifiers,
+# and enforces neither the memory nor the approval policy. Attributing a trace
+# to this harness there would assert that all of it ran.
+#
+# A purpose-built harness runner must issue an execution receipt before this can
+# become true. See docs/HARNESS_AWARE_DISTILLATION_ARCHITECTURE.md section 8.
+trace_generation:
+  supported_by_generate_py: false
+
 tools:
   allow:
     - office_read

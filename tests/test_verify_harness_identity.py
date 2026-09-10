@@ -219,10 +219,9 @@ const CONTENT = {
   router: "ROUTER PROMPT",
   edit: "EDIT PROMPT",
 };
+import { createHash } from "node:crypto";
 function hashText(text) {
-  let h = 0;
-  for (const ch of text) { h = (h * 31 + ch.codePointAt(0)) >>> 0; }
-  return String(h);
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 export function allPromptIds() { return Object.keys(CONTENT); }
 export function getPrompt(id) {
@@ -365,3 +364,76 @@ def test_the_real_harnesses_measure_but_stay_unpinned():
         assert system.get("source") == "prompt_registry", name
         assert system.get("verified") is not True, name
         assert not system.get("sha256"), name
+
+
+# --- regressions: the registry's rows must be well-formed and unique --------
+
+@node
+def test_duplicate_prompt_ids_are_refused(registry, capsys):
+    """One prompt would silently shadow another, and the digest would stop
+    meaning "these are the prompts"."""
+    path, src = registry
+    (src / "promptRegistry.js").write_text(
+        'export function allPromptIds() { return ["a", "a"]; }\n'
+        'export function getPrompt(id) {\n'
+        '  return { id, content: "x", contentHash: "abcd1234" };\n'
+        '}\n', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert "more than once" in capsys.readouterr().err
+
+
+@node
+def test_a_non_hex_content_hash_is_refused(registry, capsys):
+    path, src = registry
+    (src / "promptRegistry.js").write_text(
+        'export function allPromptIds() { return ["a"]; }\n'
+        'export function getPrompt(id) {\n'
+        '  return { id, content: "x", contentHash: "NOT-HEX!" };\n'
+        '}\n', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert "not lowercase" in capsys.readouterr().err
+
+
+@node
+def test_a_prompt_without_content_is_refused(registry, capsys):
+    """The identity is sha256 over the prompt TEXT, so no text means no
+    identity — it must not fall back to the registry's own short hash."""
+    path, src = registry
+    (src / "promptRegistry.js").write_text(
+        'export function allPromptIds() { return ["a"]; }\n'
+        'export function getPrompt(id) {\n'
+        '  return { id, contentHash: "abcd1234" };\n'
+        '}\n', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert "could not be read" in capsys.readouterr().err
+
+
+@node
+def test_the_identity_does_not_inherit_the_addin_short_hash(registry):
+    """The add-in's hashText is a djb2 32-bit value, not a commitment. Two
+    prompts differing only in content must produce different identities even if
+    a registry reported the same contentHash for both."""
+    path, src = registry
+    digest, rows = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert all(vhi.SHA256_RE.match(r["sha256"]) for r in rows)
+    assert all("registry_content_hash" in r for r in rows)
+
+    (src / "promptRegistry.js").write_text(
+        'import { createHash } from "node:crypto";\n'
+        'const C = { a: "one" };\n'
+        'export function allPromptIds() { return Object.keys(C); }\n'
+        'export function getPrompt(id) {\n'
+        '  return { id, content: C[id], contentHash: "deadbeef" };\n'
+        '}\n', encoding="utf-8")
+    first, _ = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    (src / "promptRegistry.js").write_text(
+        'const C = { a: "two" };\n'
+        'export function allPromptIds() { return Object.keys(C); }\n'
+        'export function getPrompt(id) {\n'
+        '  return { id, content: C[id], contentHash: "deadbeef" };\n'
+        '}\n', encoding="utf-8")
+    second, _ = vhi.prompt_registry_digest(src / "promptRegistry.js")
+    assert first != second, "identity must follow the content, not the short hash"

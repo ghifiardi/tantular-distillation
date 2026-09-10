@@ -198,3 +198,45 @@ def test_two_execution_models_cannot_be_verified_together(tmp_path):
     with pytest.raises(SystemExit) as exc:
         vc.harness_declaration([one, two])
     assert "different execution models" in str(exc.value)
+
+
+# --- regressions: a manifest may only speak for a corpus it describes --------
+
+def test_a_manifest_that_lists_no_files_cannot_lend_its_declaration(tmp_path):
+    """A MANIFEST.json describing nothing still handed its pass-level harness
+    declaration to whatever sat beside it."""
+    directory = tmp_path / "pass"
+    directory.mkdir()
+    corpus = directory / "traces.r0.jsonl"
+    corpus.write_text(json.dumps({"family": "f"}) + "\n", encoding="utf-8")
+    (directory / "MANIFEST.json").write_text(
+        json.dumps({"files": {}, "harness": summary()}), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        vc.harness_declaration([corpus])
+    assert "does not describe" in str(exc.value)
+
+
+def test_a_manifest_describing_a_different_file_refuses(tmp_path):
+    directory = tmp_path / "pass"
+    directory.mkdir()
+    corpus = directory / "traces.r0.jsonl"
+    corpus.write_text(json.dumps({"family": "f"}) + "\n", encoding="utf-8")
+    (directory / "MANIFEST.json").write_text(json.dumps({
+        "files": {"some-other.jsonl": {"sha256": "a" * 64}},
+        "harness": summary()}), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        vc.harness_declaration([corpus])
+    assert "does not describe" in str(exc.value)
+
+
+def test_a_matching_entry_without_a_sha256_refuses(tmp_path):
+    directory = tmp_path / "pass"
+    directory.mkdir()
+    corpus = directory / "traces.r0.jsonl"
+    corpus.write_text(json.dumps({"family": "f"}) + "\n", encoding="utf-8")
+    (directory / "MANIFEST.json").write_text(json.dumps({
+        "files": {"traces.r0.jsonl": {"traces": 1}}, "harness": summary()}),
+        encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        vc.harness_declaration([corpus])
+    assert "records no sha256" in str(exc.value)

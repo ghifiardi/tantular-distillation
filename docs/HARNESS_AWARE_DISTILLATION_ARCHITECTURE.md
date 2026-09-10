@@ -250,8 +250,28 @@ harness or a better student is a plausible fix for. "The teacher is bigger" and
 
 ### 8.2 What blocks it today
 
-Both shipped harnesses declare `prompts.system.verified: false`, and
-`src/generate.py --harness` refuses to generate against an unverified harness:
+**There is no harness executor.** `src/generate.py` sends a prompt through an
+ordinary chat client: it supplies none of the declared tools, runs none of the
+`before_action`/`after_action` verifiers, executes no repair loop, and enforces
+neither the memory nor the approval policy. Attributing a full product harness
+to a trace produced that way would assert that all of it ran — the same
+ambiguity `harness_provenance` exists to remove, reintroduced one layer up.
+
+So both shipped harnesses declare `trace_generation.supported_by_generate_py:
+false`, and `--harness` refuses them:
+
+    harness 'tantular-office-current' cannot be executed by src/generate.py:
+      - trace_generation.supported_by_generate_py is not true...
+
+A harness may opt in only if it claims nothing `generate.py` cannot honour — no
+tools, no verifiers, no repair loop — which in practice means a PROMPT-ONLY
+harness, and even then every prompt's system message must hash to the harness's
+pinned prompt. Attributing the real product harness needs a purpose-built runner
+returning an execution receipt: which prompt id and content hash were used,
+which tools were offered and called, which verifiers ran and what they returned.
+
+**And separately**, both harnesses declare `prompts.system.verified: false`, so
+even a prompt-only variant could not be attributed yet:
 
     HARNESS IDENTITY UNVERIFIED: harness 'tantular-office-current' prompt
     identity is unverified; run verify_harness_identity.py against a published,
@@ -278,7 +298,9 @@ its `package-lock.json`, then pin the prompts.
     ./.venv/bin/python src/harness_distill.py plan \
         configs/experiments/harness-before-weights.yaml
 
-    # 2. FOUR SEPARATE GENERATION PASSES, one per arm. Separate, because two
+    # 2. FOUR SEPARATE GENERATION PASSES, one per arm. Requires the harness
+    #    runner described in 8.2 — generate.py alone cannot attribute a product
+    #    harness, and will refuse. Separate, because two
     #    execution models or two harnesses in one file is the confound the
     #    design exists to remove — the tooling refuses to mix them.
     #      student x current    student x candidate

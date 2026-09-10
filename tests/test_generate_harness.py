@@ -71,14 +71,17 @@ def verified_harness(tmp_path, monkeypatch):
                            "compatible_registry_models": ["muse-glimmer-30b"]},
         "prompts": {"system": {"source": "path", "path": str(prompt),
                                "sha256": PROMPT_SHA, "verified": True}},
-        "tools": {"allow": ["read"], "state_change_requires_approval": True},
+        # A PROMPT-ONLY harness. generate.py supplies no tools and runs no
+        # verifier, so a harness it may execute must claim none.
+        "trace_generation": {"supported_by_generate_py": True},
+        "tools": {"allow": [], "state_change_requires_approval": True},
         "memory": {"active_context": "bounded", "ephemeral_execution": "request",
                    "durable_task_state": "none", "product_memory": "disabled"},
         "execution": {"isolation": "companion_process",
                       "network": "denied_by_default",
                       "max_steps": 4, "max_wall_seconds": 300},
-        "verification": {"before_action": ["request_schema"],
-                         "after_action": ["edit_contract"], "repair_attempts": 0},
+        "verification": {"before_action": [], "after_action": [],
+                         "repair_attempts": 0},
         "mutation": {"production_self_modify": False, "candidate_workspace_only": True,
                      "evaluator_mutation_allowed": False, "human_approval_required": True},
     }
@@ -92,7 +95,7 @@ def verified_harness(tmp_path, monkeypatch):
 def test_a_verified_harness_passes_preflight(verified_harness, tmp_path):
     block = generate.harness_preflight(
         "fixture-harness", {"TEACHER_REGISTRY_MODEL": "muse-glimmer-30b"},
-        tmp_path / "out.jsonl")
+        tmp_path / "out.jsonl", [{"system": PROMPT_TEXT}])
     assert block["prompt_verified"] is True
     assert block["execution_model_registry"] == "muse-glimmer-30b"
 
@@ -115,15 +118,21 @@ def test_an_unverified_harness_cannot_generate(verified_harness, tmp_path, monke
 
 
 def test_the_shipped_harnesses_cannot_generate_today(tmp_path):
-    """Documented consequence, not an accident: the add-in is unpublished, so no
-    attributed corpus can be produced yet. Delete this when it is published and
-    the prompts are pinned."""
+    """Two independent reasons, and the first one is the important one.
+
+    generate.py has no harness executor: it supplies none of the declared
+    tools, runs none of the declared verifiers, and enforces no memory or
+    approval policy. A full product harness therefore cannot be attributed
+    here at all — regardless of whether its prompt is pinned. (The prompts are
+    also unverified, which would block it independently.)"""
     for name in ("tantular-office-current", "tantular-office-candidate"):
         with pytest.raises(SystemExit) as exc:
             generate.harness_preflight(
                 name, {"TEACHER_REGISTRY_MODEL": "muse-glimmer-30b"},
                 tmp_path / "out.jsonl")
-        assert "prompt identity is unverified" in str(exc.value), name
+        message = str(exc.value)
+        assert "cannot be executed by src/generate.py" in message, name
+        assert "tools" in message and "verifiers" in message, name
 
 
 def test_an_incompatible_execution_model_is_refused(verified_harness, tmp_path):
@@ -242,7 +251,7 @@ class StubClient:
 def generation(tmp_path, monkeypatch, verified_harness):
     prompts = tmp_path / "prompts.jsonl"
     prompts.write_text(json.dumps({
-        "family": "document:email::0001", "user": "halo", "system": "s",
+        "family": "document:email::0001", "user": "halo", "system": PROMPT_TEXT,
         "source_class": "synthetic"}) + "\n", encoding="utf-8")
     monkeypatch.setattr(generate, "TeacherClient", StubClient)
     StubClient.built = 0
@@ -298,3 +307,71 @@ def test_without_harness_the_output_is_byte_identical_to_the_legacy_path(generat
     assert rows
     for row in rows:
         assert "harness_provenance" not in row
+
+
+# --- regressions: attribution must describe a run that happened -------------
+
+def test_a_harness_declaring_tools_cannot_be_attributed_here(verified_harness,
+                                                             tmp_path):
+    """generate.py supplies no tools. A harness that declares them describes an
+    execution this path cannot perform, so its identity must not be stamped —
+    the block would assert a tool policy that was never in force."""
+    spec = dict(verified_harness)
+    spec["tools"] = {"allow": ["office_edit"], "state_change_requires_approval": True}
+    (hd.HARNESS_DIR / "fixture-harness.yaml").write_text(yaml.safe_dump(spec),
+                                                         encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        generate.harness_preflight("fixture-harness",
+                                   {"TEACHER_REGISTRY_MODEL": "muse-glimmer-30b"},
+                                   tmp_path / "out.jsonl", [{"system": PROMPT_TEXT}])
+    assert "does not supply" in str(exc.value)
+
+
+def test_a_harness_declaring_verifiers_cannot_be_attributed_here(verified_harness,
+                                                                 tmp_path):
+    spec = dict(verified_harness)
+    spec["verification"] = {"before_action": [], "after_action": ["edit_contract"],
+                            "repair_attempts": 0}
+    (hd.HARNESS_DIR / "fixture-harness.yaml").write_text(yaml.safe_dump(spec),
+                                                         encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        generate.harness_preflight("fixture-harness",
+                                   {"TEACHER_REGISTRY_MODEL": "muse-glimmer-30b"},
+                                   tmp_path / "out.jsonl", [{"system": PROMPT_TEXT}])
+    assert "does not run" in str(exc.value)
+
+
+def test_an_arbitrary_prompt_cannot_receive_harness_attribution(verified_harness,
+                                                                tmp_path):
+    """The harness prompt is what the harness IS. Sending some other system
+    message and stamping the harness identity attributes a run that did not
+    happen — which is what the previous implementation did."""
+    with pytest.raises(SystemExit) as exc:
+        generate.harness_preflight(
+            "fixture-harness", {"TEACHER_REGISTRY_MODEL": "muse-glimmer-30b"},
+            tmp_path / "out.jsonl",
+            [{"system": PROMPT_TEXT, "family": "ok"},
+             {"system": "something else entirely", "family": "wrong"}])
+    message = str(exc.value)
+    assert "not harness" in message and "pinned prompt" in message
+    assert "wrong" in message
+
+
+@pytest.mark.parametrize("value", [{}, None, "a-string", ["a", "list"], 7])
+def test_a_present_but_meaningless_attribution_block_refuses(tmp_path, value):
+    """`{"harness_provenance": {}}` asserted attribution and then said nothing.
+    Treating it as an absent key let it pass as an ordinary legacy trace."""
+    out = tmp_path / "out.jsonl"
+    out.write_text(json.dumps({"family": "f", "harness_provenance": value}) + "\n",
+                   encoding="utf-8")
+    with pytest.raises(SystemExit):
+        generate.legacy_output_guard(out)
+
+
+def test_legacy_append_refuses_whenever_the_key_is_present(tmp_path):
+    for value in ({}, None, {"digest": "a" * 64}):
+        out = tmp_path / f"out-{id(value)}.jsonl"
+        out.write_text(json.dumps({"family": "f", "harness_provenance": value}) + "\n",
+                       encoding="utf-8")
+        with pytest.raises(SystemExit):
+            generate.legacy_output_guard(out)

@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -150,13 +151,24 @@ def harness_declaration(paths: list[Path]) -> dict | None:
             sys.exit(f"{manifest_path} is not readable JSON: {exc}\n"
                      "Refusing to score a corpus whose pass manifest cannot be read.")
 
-        entry = (payload.get("files") or {}).get(path.name)
-        if isinstance(entry, dict) and entry.get("sha256"):
-            actual = hashlib.sha256(path.read_bytes()).hexdigest()
-            if entry["sha256"] != actual:
-                sys.exit(f"{manifest_path} describes different bytes than {path}:\n"
-                         f"  manifest {entry['sha256']}\n  on disk  {actual}\n"
-                         "The declaration cannot be trusted to be about this corpus.")
+        # The manifest must DESCRIBE this corpus before it may speak for it.
+        # Without this, a MANIFEST.json listing no files at all still lent its
+        # pass-level harness declaration to whatever sat beside it.
+        files = payload.get("files")
+        if not isinstance(files, dict) or path.name not in files:
+            sys.exit(f"{manifest_path} does not describe {path.name}. A manifest "
+                     "that does not cover this corpus cannot lend it a harness "
+                     "identity; refusing rather than borrowing the declaration.")
+        entry = files[path.name]
+        recorded = entry.get("sha256") if isinstance(entry, dict) else None
+        if not isinstance(recorded, str) or not re.fullmatch(r"[0-9a-f]{64}", recorded):
+            sys.exit(f"{manifest_path} records no sha256 for {path.name}; the "
+                     "declaration cannot be tied to these bytes.")
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if recorded != actual:
+            sys.exit(f"{manifest_path} describes different bytes than {path}:\n"
+                     f"  manifest {recorded}\n  on disk  {actual}\n"
+                     "The declaration cannot be trusted to be about this corpus.")
 
         # The pass-level block is where a pass records its harness (one pass is
         # one harness); a per-file block is accepted for tolerance.

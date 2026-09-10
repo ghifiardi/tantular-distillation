@@ -122,21 +122,29 @@ def normalize(value: str) -> str:
     return re.sub(r"[^A-Z_]", "", str(value or "").upper())
 
 
-def _existing_harness_blocks(out_path: Path) -> list[dict | None]:
+_ABSENT = object()          # distinguishes "no key" from "key with no content"
+
+
+def _existing_harness_blocks(out_path: Path) -> list[object]:
     """The harness attribution already present in an output file, one entry per
     record (None where a record carries none)."""
     path = Path(out_path)
     if not path.is_file() or not path.read_text(encoding="utf-8").strip():
         return []
-    blocks: list[dict | None] = []
+    blocks: list[object] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            blocks.append(json.loads(line).get("harness_provenance"))
+            row = json.loads(line)
         except json.JSONDecodeError:
             raise SystemExit(f"{path} is not readable JSONL; refusing to append to it")
+        # PRESENCE, not truthiness: a record carrying the key with {} or null
+        # asserted attribution and then said nothing. That is a malformed
+        # record, and it must not read as an ordinary legacy trace.
+        blocks.append(row["harness_provenance"] if "harness_provenance" in row
+                      else _ABSENT)
     return blocks
 
 
@@ -148,7 +156,7 @@ def legacy_output_guard(out_path: Path) -> None:
     and the dilution is invisible afterwards.
     """
     blocks = _existing_harness_blocks(out_path)
-    if any(block for block in blocks):
+    if any(block is not _ABSENT for block in blocks):
         raise SystemExit(
             f"{out_path} already holds harness-attributed traces, and this run "
             "has no --harness. Appending unattributed traces would strip the "
@@ -157,7 +165,8 @@ def legacy_output_guard(out_path: Path) -> None:
         )
 
 
-def harness_preflight(name: str, resolved: dict, out_path: Path) -> dict:
+def harness_preflight(name: str, resolved: dict, out_path: Path,
+                      prompts: list[dict] | None = None) -> dict:
     """Everything harness-related that must hold BEFORE the network is touched.
 
     All of it is free and local. A refusal that arrives after an hour of
@@ -188,6 +197,19 @@ def harness_preflight(name: str, resolved: dict, out_path: Path) -> dict:
     except hd.HarnessPlanError as exc:
         raise SystemExit(f"harness {name!r}: {exc}")
 
+    # generate.py has no harness executor. A harness that declares tools,
+    # verifiers or a repair loop describes an execution this path cannot
+    # perform, and stamping its identity would assert that policy ran.
+    blockers = hd.generation_support(spec)
+    if blockers:
+        raise SystemExit(
+            f"harness {name!r} cannot be executed by src/generate.py:\n  - "
+            + "\n  - ".join(blockers)
+            + "\nAttribution here would name tools and verifiers that never ran, "
+              "which is the ambiguity harness_provenance exists to remove. A "
+              "purpose-built harness runner must issue an execution receipt "
+              "before a full product harness can attribute traces.")
+
     # Planning and auditing may describe an unverified harness. GENERATING an
     # attributed corpus with one may not: the attribution would name a prompt
     # identity nobody has checked, which is worse than no attribution because it
@@ -202,14 +224,35 @@ def harness_preflight(name: str, resolved: dict, out_path: Path) -> dict:
             "harness digest that cannot be reproduced or checked."
         )
 
+    # The prompts actually sent must BE the harness's prompt. Without this the
+    # block would name a prompt identity the traces never used — the concrete
+    # form of "attributed a harness that did not run".
+    if prompts is not None:
+        import hashlib
+        wrong = [p.get("family", "?") for p in prompts
+                 if hashlib.sha256(str(p.get("system", "")).encode()).hexdigest()
+                 != block["prompt_sha256"]]
+        if wrong:
+            raise SystemExit(
+                f"{len(wrong)} prompt(s) carry a system message that is not "
+                f"harness {name!r}'s pinned prompt (first: {wrong[0]}).\n"
+                "The harness prompt is what the harness IS; sending a different "
+                "one and stamping the harness identity would attribute a run "
+                "that did not happen.")
+
     # Append mode: refuse to mix attribution rather than discover it later.
     for existing in _existing_harness_blocks(out_path):
-        if not existing:
+        if existing is _ABSENT:
             raise SystemExit(
                 f"{out_path} holds traces with no harness attribution, and this "
                 f"run would append attributed ones under {name!r}. A file that "
                 "is half attributed cannot be audited; write to a new file."
             )
+        if not isinstance(existing, dict) or not existing:
+            raise SystemExit(
+                f"{out_path} holds a record whose harness_provenance is present "
+                "but empty. That is a malformed attribution, not a legacy trace; "
+                "refusing to append to it.")
         if existing.get("digest") != block["digest"]:
             raise SystemExit(
                 f"{out_path} was produced under a different harness "
@@ -234,7 +277,8 @@ async def run(args: argparse.Namespace) -> None:
     # is cheaper to refuse now than after a client exists.
     harness_block = None
     if getattr(args, "harness", None):
-        harness_block = harness_preflight(args.harness, resolved, Path(args.out))
+        harness_block = harness_preflight(args.harness, resolved, Path(args.out),
+                                          load_prompts(Path(args.prompts)))
         print(f"harness    {harness_block['name']}  "
               f"{harness_block['digest'][:16]}…  "
               f"model {harness_block['execution_model_registry']}")

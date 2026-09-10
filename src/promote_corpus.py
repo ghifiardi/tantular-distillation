@@ -221,16 +221,20 @@ def main() -> None:
             pass_manifest = json.loads(pass_manifest_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             sys.exit(f"{pass_manifest_path} is not readable JSON: {exc}")
-        entry = (pass_manifest.get("files") or {}).get(args.traces.name)
-        if entry:
-            actual = hashlib.sha256(args.traces.read_bytes()).hexdigest()
-            if entry.get("sha256") != actual:
-                sys.exit(
-                    f"{pass_manifest_path} describes different bytes than "
-                    f"{args.traces}:\n  manifest {entry.get('sha256')}\n"
-                    f"  on disk  {actual}\n"
-                    "Refusing to carry a harness declaration forward from a "
-                    "manifest that does not describe this corpus.")
+        files = pass_manifest.get("files")
+        entry = files.get(args.traces.name) if isinstance(files, dict) else None
+        if not isinstance(entry, dict):
+            sys.exit(f"{pass_manifest_path} does not describe {args.traces.name}. "
+                     "A manifest that does not cover this corpus cannot lend it a "
+                     "harness identity.")
+        recorded = entry.get("sha256")
+        actual = hashlib.sha256(args.traces.read_bytes()).hexdigest()
+        if not isinstance(recorded, str) or recorded != actual:
+            sys.exit(
+                f"{pass_manifest_path} does not pin these bytes:\n"
+                f"  manifest {recorded}\n  on disk  {actual}\n"
+                "Refusing to carry a harness declaration forward from a manifest "
+                "that does not describe this corpus.")
         declared = pass_manifest.get("harness")
 
     # No declaration at all means a pass that predates harness attribution.

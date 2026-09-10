@@ -704,5 +704,37 @@ def test_a_declared_but_under_attributed_corpus_reports_the_disagreement(tmp_pat
     assert report["harness"]["required"] is True
     assert report["harness"]["coverage"] == 0.5
     assert "not attributed" in report["harness"]["disagreement"]
-    assert any("attribution is incomplete" in limit for limit in report["limits"])
+    assert any("harness attribution is incoherent" in limit
+               for limit in report["limits"])
     assert report["trainable_as_is"] is False
+
+
+def test_a_legacy_declaration_over_attributed_traces_is_a_contradiction(tmp_path):
+    """No adjacent manifest means legacy. Traces carrying attribution then
+    contradict the declaration, and the audit must say so rather than reporting
+    attributed: true as though it were fine."""
+    path = tmp_path / "traces.jsonl"
+    path.write_text("\n".join(json.dumps(trace(**{"harness_provenance": harness_block()}))
+                              for _ in range(2)) + "\n", encoding="utf-8")
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    assert report["harness"]["required"] is False
+    assert "harness-aware" in report["harness"]["disagreement"]
+    assert any("incoherent" in limit for limit in report["limits"])
+    assert report["trainable_as_is"] is False
+
+
+def test_incomplete_required_attribution_blocks_trainable_as_is(tmp_path, monkeypatch):
+    """Everything else clean — fp8, real sources, verified identity — and it is
+    still not trainable, because a corpus whose attribution is incoherent is a
+    corpus nobody can characterise."""
+    verified = dict(dp._load("models", "muse-glimmer-30b"))
+    verified["digests_verified"] = True
+    monkeypatch.setattr(dp, "_resolve_teacher_specs",
+                        lambda teachers, overrides: ({"muse-glimmer-30b": verified}, []))
+    path = declaring_pass(tmp_path, [trace(**{"harness_provenance": harness_block()}),
+                                     trace()])
+    report = dp.audit_corpus(path, TODAY)
+    assert report["fp8_gate"]["status"] == "MET"
+    assert report["identity_verification"]["all_verified"] is True
+    assert report["harness"]["disagreement"]
+    assert report["trainable_as_is"] is False, "harness incoherence must block it"

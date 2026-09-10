@@ -141,6 +141,48 @@ def _policy_digest(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def generation_support(spec: dict[str, Any]) -> list[str]:
+    """Why src/generate.py may not stamp this harness onto a trace.
+
+    generate.py sends a prompt through an ordinary chat client. It supplies no
+    tools, runs no before/after verifier, enforces no memory or approval policy,
+    and provides no companion-process isolation. A harness declaring any of
+    those describes an execution that generate.py cannot perform, so stamping
+    its full identity onto a trace would assert that policy ran when it did not
+    — which is precisely the attribution ambiguity harness_provenance exists to
+    remove.
+
+    A harness must therefore OPT IN via trace_generation.supported_by_generate_py,
+    and may only do so if it claims nothing generate.py cannot honour. Returns
+    the reasons it may not; empty means it may.
+    """
+    reasons: list[str] = []
+    declared = ((spec.get("trace_generation") or {})
+                .get("supported_by_generate_py"))
+    if declared is not True:
+        reasons.append(
+            "trace_generation.supported_by_generate_py is not true. "
+            "src/generate.py has no harness executor: it cannot supply the "
+            "declared tools, run the verifiers, or enforce the memory and "
+            "approval policy, so it must not claim that it did.")
+        return reasons
+
+    tools = (spec.get("tools") or {}).get("allow") or []
+    if tools:
+        reasons.append(f"the harness declares tools {sorted(tools)}, which "
+                       "generate.py does not supply to the model")
+    verification = spec.get("verification") or {}
+    for phase in ("before_action", "after_action"):
+        declared_checks = verification.get(phase) or []
+        if declared_checks:
+            reasons.append(f"the harness declares {phase} {sorted(declared_checks)}, "
+                           "which generate.py does not run")
+    if (verification.get("repair_attempts") or 0):
+        reasons.append("the harness declares a repair loop, which generate.py "
+                       "does not run")
+    return reasons
+
+
 def harness_provenance(spec: dict[str, Any], *,
                        execution_model_registry: str) -> dict[str, Any]:
     """The provenance block stamped onto every harness-aware trace.
@@ -241,8 +283,24 @@ def summarize_harness_attribution(traces: list[dict[str, Any]], *,
         raise HarnessPlanError(
             "cannot summarize harness attribution of an empty corpus")
 
+    # PRESENCE, not truthiness. `{"harness_provenance": {}}` is not the same
+    # claim as a trace that never carried the key: the first says "this was
+    # attributed" and then says nothing, which is a malformed record, while the
+    # second is an ordinary legacy trace. Treating them alike let an empty block
+    # pass as legacy and defeated the partial-attribution guarantee.
+    present = [("harness_provenance" in t) for t in traces]
     blocks = [t.get("harness_provenance") for t in traces]
-    attributed = [b for b in blocks if b]
+
+    malformed = [i for i, (has, b) in enumerate(zip(present, blocks), 1)
+                 if has and not (isinstance(b, dict) and b)]
+    if malformed:
+        raise HarnessPlanError(
+            f"{len(malformed)} trace(s) carry a harness_provenance key that is "
+            "not a non-empty mapping (first at record "
+            f"{malformed[0]}). An attribution block that says nothing is a "
+            "malformed record, not an absent one.")
+
+    attributed = [b for b, has in zip(blocks, present) if has]
 
     if not required:
         if attributed:

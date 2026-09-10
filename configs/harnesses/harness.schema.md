@@ -24,6 +24,9 @@ prompts:
     sha256: null
     verified: false
 
+trace_generation:
+  supported_by_generate_py: false   # see below
+
 tools:
   allow: [office_edit]
   state_change_requires_approval: true
@@ -78,8 +81,16 @@ whole point of the block is that it is not.
 
 `prompt_registry` (preferred for the Office add-in) resolves the identity through
 the add-in's own `promptRegistry.js`, which enumerates every production prompt
-and owns each one's content hash. The digest is canonical JSON over the sorted
-`{id, contentHash}` pairs.
+and returns each one's text. The digest is sha256 over canonical JSON of the
+sorted `{id, sha256}` pairs, where each `sha256` is computed HERE over the
+prompt text.
+
+The registry also publishes a `contentHash`, and it is recorded alongside for
+cross-checking — but it is deliberately not the identity. That value is a djb2
+32-bit hash (about eight hex characters), which is right for the add-in's own
+cache-busting and wrong as a commitment: it is short enough to collide and is
+not collision-resistant by construction. Inheriting it would make the harness
+prompt identity only as strong as that.
 
 The alternative, `path`, digests a file or a directory tree. It is the wrong
 answer for the add-in: a tree digest changes on any unrelated JavaScript edit
@@ -90,3 +101,28 @@ Either way `src/verify_harness_identity.py` is the only thing that may set
 `sha256` and `verified: true`, and it fails closed rather than guessing — on a
 missing registry, a missing `node`, a missing export, an empty prompt list, an
 entry without a hash, or an empty directory.
+
+
+## `trace_generation.supported_by_generate_py`
+
+Defaults to false when absent, and `src/generate.py --harness` refuses any
+harness that has not opted in.
+
+`generate.py` sends a prompt through an ordinary chat client. It supplies no
+tools, runs no `before_action` or `after_action` verifier, executes no repair
+loop, and enforces neither the memory nor the approval policy. Stamping a full
+product harness onto a trace produced that way would assert that all of that
+ran — which is exactly the attribution ambiguity `harness_provenance` exists to
+remove, reintroduced one layer up.
+
+A harness may only opt in if it claims nothing `generate.py` cannot honour: no
+tools, no verifiers, no repair loop. In practice that means a PROMPT-ONLY
+harness. When it does opt in, `generate.py` additionally requires every prompt's
+`system` message to hash to the harness's pinned `prompts.system.sha256` — the
+harness prompt is what the harness IS, and sending a different one would
+attribute a run that did not happen.
+
+Attributing a full product harness needs a purpose-built runner that returns an
+execution receipt: which prompt id and content hash were used, which tools were
+offered and called, which verifiers ran and what they returned. Until that
+exists, the honest answer is that such a corpus cannot be produced.

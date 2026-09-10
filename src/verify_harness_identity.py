@@ -49,6 +49,9 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 HARNESS_DIR = ROOT / "configs" / "harnesses"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+# The add-in publishes a short djb2 hash, not a sha256; accepted for
+# cross-checking only, never as the identity itself.
+HEX_RE = re.compile(r"^[0-9a-f]{1,64}$")
 
 
 def die(msg: str, code: int = 2) -> None:
@@ -93,7 +96,10 @@ const rows = [...ids].sort().map((id) => {
   if (!entry || typeof entry.contentHash !== "string" || !entry.contentHash) {
     throw new Error(`prompt ${id} has no contentHash`);
   }
-  return { id, contentHash: entry.contentHash };
+  if (typeof entry.content !== "string" || entry.content.length === 0) {
+    throw new Error(`prompt ${id} has no content`);
+  }
+  return { id, contentHash: entry.contentHash, content: entry.content };
 });
 process.stdout.write(JSON.stringify(rows));
 """
@@ -135,13 +141,38 @@ def prompt_registry_digest(path: Path) -> tuple[str, list[dict]]:
         die(f"the prompt registry produced no readable JSON: {exc}")
     if not isinstance(rows, list) or not rows:
         die("the prompt registry reported no prompts")
+    # WE hash the content; we do not inherit the add-in's hash. Its hashText is
+    # a djb2 32-bit value (~8 hex chars), which is fine for the add-in's own
+    # cache-busting but is not a commitment: it is short enough to collide and
+    # is not collision-resistant by construction. Digesting it would make the
+    # harness prompt identity only as strong as that. The registry's own value
+    # is kept alongside, so a mismatch between the two is visible, but the
+    # identity is sha256 over the prompt text.
+    seen: set[str] = set()
+    normalized = []
     for row in rows:
-        if not isinstance(row, dict) or not row.get("id") or not row.get("contentHash"):
+        if not isinstance(row, dict) or not row.get("id"):
             die(f"malformed prompt registry entry: {row!r}")
+        if row["id"] in seen:
+            die(f"the prompt registry reports {row['id']!r} more than once; one "
+                "prompt would silently shadow another.")
+        seen.add(row["id"])
+        content = row.get("content")
+        if not isinstance(content, str) or not content:
+            die(f"prompt {row['id']!r} has no content to hash")
+        registry_hash = row.get("contentHash")
+        if not isinstance(registry_hash, str) or not HEX_RE.match(registry_hash):
+            die(f"prompt {row['id']!r} has a contentHash that is not lowercase "
+                f"hex: {registry_hash!r}")
+        normalized.append({
+            "id": row["id"],
+            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "registry_content_hash": registry_hash,
+        })
 
-    canonical = json.dumps(rows, ensure_ascii=False, sort_keys=True,
+    canonical = json.dumps(normalized, ensure_ascii=False, sort_keys=True,
                            separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest(), rows
+    return hashlib.sha256(canonical).hexdigest(), normalized
 
 
 def set_scalar(lines: list[str], path: tuple[str, ...], value: str) -> list[str]:
@@ -218,7 +249,7 @@ def main() -> None:
     print(f"harness   {args.harness}")
     print(f"prompt    {prompt_path}  ({shape})")
     for row in rows:
-        print(f"            {row['id']:<22} {row['contentHash'][:16]}")
+        print(f"            {row['id']:<22} {row['sha256'][:16]}")
     print(f"measured  {measured}")
     print(f"pinned    {pinned or '(none)'}")
 
