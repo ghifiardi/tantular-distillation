@@ -303,17 +303,6 @@ def test_provenance_refuses_an_unsafe_harness():
             execution_model_registry="student")
 
 
-def test_the_shipped_draft_harnesses_are_unverified_today():
-    """Documented state, not aspiration: neither draft harness has had its
-    system prompt hashed, so both must say so. Delete this when they are
-    verified against the real add-in."""
-    for name in ("tantular-office-current", "tantular-office-candidate"):
-        block = hd.harness_provenance(hd.load_harness(name),
-                                      execution_model_registry="qwen35-9b-instruct")
-        assert block["prompt_verified"] is False, name
-        assert block["prompt_sha256"] is None, name
-
-
 # --- the harness is model-COMPATIBLE, not model-bound ------------------------
 #
 # The whole point of the four-arm design is running ONE harness against a
@@ -562,3 +551,95 @@ def test_the_legacy_corpus_is_absent_not_malformed():
     assert report["harness_coverage"] == 0.0
     assert report["distillation_attribution_ready"] is False
     assert not any("MALFORMED" in limit for limit in report["limits"])
+
+
+# --- repository-backed prompt sources: static shape only ---------------------
+#
+# validate_harness runs everywhere a harness is loaded, including in CI with no
+# add-in checkout and no network. It therefore checks the SHAPE of a
+# repository-backed prompt source -- that the pin is complete and well formed --
+# and leaves "does this checkout really contain that commit?" to
+# verify_harness_identity.py, which is given a checkout to look at.
+
+GOOD_REPOSITORY = {
+    "url": "https://github.com/ghifiardi/LLM-Indonesia.git",
+    "ref": "tantular-office-addin-harness-baseline-2026-09-11",
+    "peeled_commit": "3e14d25468ab0cd793ba8dc48cf5f755796c94e2",
+}
+
+
+def repo_backed(**changes):
+    repository = {**GOOD_REPOSITORY, **changes.pop("repository", {})}
+    for key in changes.pop("drop_repository_keys", []):
+        repository.pop(key)
+    spec = safe_harness()
+    spec["prompts"]["system"] = {
+        "source": "prompt_registry",
+        "repository": repository,
+        "path": changes.pop("path", "tantular_office_addin/src/promptRegistry.js"),
+        "sha256": changes.pop("sha256", None),
+        "verified": changes.pop("verified", False),
+    }
+    assert not changes, changes
+    return spec
+
+
+def test_a_complete_repository_pin_validates_without_git_or_network():
+    assert hd.validate_harness(repo_backed()) == ["system prompt identity is unverified"]
+    assert hd.validate_harness(repo_backed(sha256="a" * 64, verified=True)) == []
+
+
+@pytest.mark.parametrize("missing", ["url", "ref", "peeled_commit"])
+def test_a_partial_repository_block_is_malformed_not_a_local_path(missing):
+    """A half-written pin must not quietly fall back to local-path semantics:
+    that is how an unreproducible machine-local prompt got in here before."""
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.validate_harness(repo_backed(drop_repository_keys=[missing]))
+    assert missing in str(exc.value)
+
+
+@pytest.mark.parametrize("bad", [
+    "3e14d25",                                      # display abbreviation
+    "3E14D25468AB0CD793BA8DC48CF5F755796C94E2",     # uppercase
+    "3e14d25468ab0cd793ba8dc48cf5f755796c94e2a",    # 41 chars
+    "z" * 40,                                       # not hex
+    "",
+    None,
+    3141592653589793,
+])
+def test_an_incomplete_git_object_id_is_refused(bad):
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.validate_harness(repo_backed(repository={"peeled_commit": bad}))
+    assert "peeled_commit" in str(exc.value)
+
+
+@pytest.mark.parametrize("oid_length", [40, 64])
+def test_both_git_object_formats_are_accepted(oid_length):
+    """SHA-1 today, SHA-256 repositories later. A prompt digest is always
+    SHA-256; a Git object id is a different type and a different length."""
+    assert hd.validate_harness(
+        repo_backed(repository={"peeled_commit": "a" * oid_length})
+    ) == ["system prompt identity is unverified"]
+
+
+@pytest.mark.parametrize("path", ["/etc/hosts", "../elsewhere/promptRegistry.js",
+                                  "tantular_office_addin/../../escape.js"])
+def test_a_prompt_path_that_is_not_repository_relative_is_refused(path):
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.validate_harness(repo_backed(path=path))
+    assert "path" in str(exc.value)
+
+
+@pytest.mark.parametrize("repository", [[], "a-string", 42, ""])
+def test_a_repository_that_is_not_a_mapping_is_refused(repository):
+    spec = repo_backed()
+    spec["prompts"]["system"]["repository"] = repository
+    with pytest.raises(hd.HarnessPlanError) as exc:
+        hd.validate_harness(spec)
+    assert "repository" in str(exc.value)
+
+
+def test_a_local_path_harness_is_untouched_by_the_new_rules():
+    """No repository block means the old single-file behaviour, so genuine
+    standalone prompt files and the synthetic fixtures keep working."""
+    assert hd.validate_harness(safe_harness()) == ["system prompt identity is unverified"]

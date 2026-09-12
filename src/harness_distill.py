@@ -26,7 +26,7 @@ import hashlib
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 try:
@@ -68,6 +68,61 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def load_harness(name: str) -> dict[str, Any]:
     return load_yaml(HARNESS_DIR / f"{name}.yaml")
+
+
+# A Git object id, complete and lowercase: 40 hex for a SHA-1 repository, 64 for
+# a SHA-256 one. Never an abbreviation -- two different commits can share a
+# short prefix, so an abbreviated pin does not name one snapshot.
+GIT_OID_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+
+
+def _validate_prompt_source(spec: dict[str, Any], prompt: dict[str, Any]) -> None:
+    """Check the SHAPE of a repository-backed prompt source, offline.
+
+    Whether a checkout really holds that commit is verify_harness_identity.py's
+    job, because only it is handed a checkout. What matters here is that a
+    partial pin is malformed rather than silently treated as a local path: the
+    machine-local path this replaces is exactly how an unreproducible prompt
+    identity got in, and a half-written repository block would reintroduce it
+    while looking deliberate.
+    """
+    name = spec.get("name", "<unnamed>")
+    repository = prompt.get("repository")
+    if repository is None:
+        return                                    # a plain local path: unchanged
+    if not isinstance(repository, dict) or not repository:
+        raise HarnessPlanError(
+            f"harness {name!r}: prompts.system.repository must be a mapping with "
+            f"url, ref and peeled_commit; got {type(repository).__name__}"
+        )
+    for key in ("url", "ref", "peeled_commit"):
+        value = repository.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise HarnessPlanError(
+                f"harness {name!r}: prompts.system.repository.{key} is required "
+                "and must be a non-empty string; a partial pin names no snapshot"
+            )
+    commit = repository["peeled_commit"]
+    if not GIT_OID_RE.match(commit):
+        raise HarnessPlanError(
+            f"harness {name!r}: prompts.system.repository.peeled_commit must be a "
+            "complete lowercase Git object id (40 hex for SHA-1, 64 for SHA-256), "
+            f"not {commit!r}. A prompt digest is SHA-256; a commit id is not."
+        )
+
+    declared = prompt.get("path")
+    if not isinstance(declared, str) or not declared.strip():
+        raise HarnessPlanError(
+            f"harness {name!r}: prompts.system.path is required for a "
+            "repository-backed source"
+        )
+    relative = PurePosixPath(declared)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise HarnessPlanError(
+            f"harness {name!r}: prompts.system.path must be relative to the "
+            f"pinned repository, not {declared!r}. An absolute or escaping path "
+            "would let the pin name one snapshot and measure another."
+        )
 
 
 def validate_harness(spec: dict[str, Any]) -> list[str]:
@@ -120,6 +175,7 @@ def validate_harness(spec: dict[str, Any]) -> list[str]:
 
     warnings: list[str] = []
     prompt = ((spec.get("prompts") or {}).get("system") or {})
+    _validate_prompt_source(spec, prompt)
     if prompt.get("verified") is not True or not prompt.get("sha256"):
         warnings.append("system prompt identity is unverified")
     return warnings

@@ -18,9 +18,19 @@ prompts:
     # unrelated JavaScript edit and would not change when a prompt moved
     # between files — it answers the wrong question.
     source: prompt_registry
-    path: ../tantular_office_addin/src/promptRegistry.js
-    sha256: null
-    verified: false
+    # Pinned to a published snapshot, not to a path on whoever's machine runs
+    # the verifier. ../tantular_office_addin was a sibling checkout that might
+    # be any revision, or absent: a digest of it was not an identity anyone
+    # else could reproduce. The tag names the snapshot and peeled_commit is
+    # what the tag must resolve to, so re-pointing the tag cannot quietly
+    # become a new prompt identity.
+    repository:
+      url: https://github.com/ghifiardi/LLM-Indonesia.git
+      ref: tantular-office-addin-harness-baseline-2026-09-11
+      peeled_commit: 3e14d25468ab0cd793ba8dc48cf5f755796c94e2
+    path: tantular_office_addin/src/promptRegistry.js
+    sha256: 1e9e96aac3a2012493a7a149c7acb7cf02dd02246b3626739c2fac2f73df638e
+    verified: true
 
 # src/generate.py has NO harness executor: it sends a prompt through an ordinary
 # chat client. It supplies none of the tools below, runs none of the verifiers,

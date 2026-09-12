@@ -270,28 +270,46 @@ pinned prompt. Attributing the real product harness needs a purpose-built runner
 returning an execution receipt: which prompt id and content hash were used,
 which tools were offered and called, which verifiers ran and what they returned.
 
-**And separately**, both harnesses declare `prompts.system.verified: false`, so
-even a prompt-only variant could not be attributed yet:
+**Prompt identity is no longer part of that gap.** It was, while the add-in was
+unpublished: a digest measured against a sibling checkout could not have been
+reproduced by anyone else, and an attributed corpus carrying an unreproducible
+digest would look like evidence without being evidence. The add-in is now
+published at a reproducible tag, so both harnesses pin the snapshot and carry
+`prompts.system.verified: true`:
 
-    HARNESS IDENTITY UNVERIFIED: harness 'tantular-office-current' prompt
-    identity is unverified; run verify_harness_identity.py against a published,
-    reproducible prompt registry before generation
+    ref            tantular-office-addin-harness-baseline-2026-09-11
+    peeled_commit  3e14d25468ab0cd793ba8dc48cf5f755796c94e2
+    path           tantular_office_addin/src/promptRegistry.js
+    sha256         1e9e96aac3a2012493a7a149c7acb7cf02dd02246b3626739c2fac2f73df638e
 
-That is not a missing feature. The add-in that owns the prompts is not published
-to a stable ref — `docs/CI.md` records that its checkout is ahead of its remote
-and its lockfile is tracked nowhere — so a prompt digest measured here could not
-be reproduced by anyone else. An attributed corpus carrying an unreproducible
-digest would look like evidence without being evidence.
+Nine production prompts, measured through the add-in's own `allPromptIds()` and
+`getPrompt()` exports against a clean checkout of that exact commit. Both
+harnesses share the prompt identity, because both use the same production
+registry; their complete harness digests still differ, because their execution,
+memory and verification policies differ. See `configs/harnesses/harness.schema.md`
+for the `repository` block, the `--source-checkout` trust model, and the one
+recorded discrepancy between this digest and the value written into the
+published tag's annotation.
 
-**Unblocking is an upstream decision, not a code change**: publish the add-in and
-its `package-lock.json`, then pin the prompts.
+**What is still missing is execution attribution, which is a different thing.**
+A verified prompt says which text the harness would send. It does not produce an
+execution receipt — which tools were offered and called, which verifiers ran and
+what they returned — because there is still no product harness executor.
+`trace_generation.supported_by_generate_py` remains `false` for both shipped
+harnesses, and pinning a prompt did not change that. Building that executor
+remains upstream work, not a code change here.
 
 ### 8.3 The sequence, once the precondition holds
 
-    # 0. Pin the prompt identity of each harness under test. Reads the add-in's
-    #    own prompt registry; refuses if node, the registry, or a hash is absent.
-    ./.venv/bin/python src/verify_harness_identity.py tantular-office-current --write
-    ./.venv/bin/python src/verify_harness_identity.py tantular-office-candidate --write
+    # 0. Re-confirm the pinned prompt identity of each harness under test.
+    #    Both are already pinned; this re-measures against a clean checkout of
+    #    the pinned commit and exits non-zero on any drift. It never fetches.
+    git clone --depth 1 --branch tantular-office-addin-harness-baseline-2026-09-11 \
+        https://github.com/ghifiardi/LLM-Indonesia.git /tmp/addin-baseline
+    ./.venv/bin/python src/verify_harness_identity.py tantular-office-current \
+        --source-checkout /tmp/addin-baseline
+    ./.venv/bin/python src/verify_harness_identity.py tantular-office-candidate \
+        --source-checkout /tmp/addin-baseline
 
     # 1. Confirm the plan the experiment declares, and read its warnings.
     #    Emits nothing and authorizes nothing.
