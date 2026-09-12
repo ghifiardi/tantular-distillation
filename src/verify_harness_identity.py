@@ -39,7 +39,7 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 try:
     import yaml
@@ -178,6 +178,126 @@ def prompt_registry_digest(path: Path) -> tuple[str, list[dict]]:
     return hashlib.sha256(canonical).hexdigest(), normalized
 
 
+# A Git object id, complete and lowercase: 40 hex for SHA-1, 64 for SHA-256.
+# An abbreviation is a display convenience, not an identity -- two commits can
+# share a short prefix, so an abbreviated pin does not name one snapshot.
+GIT_OID_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+
+
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """One read-only git command against a checkout the caller supplied.
+
+    Every call here inspects; none fetches. Acquisition and verification are
+    deliberately separate operations: a verifier that could fetch could be
+    talked into auditing a snapshot other than the one it was asked about.
+    """
+    return subprocess.run(["git", "-C", str(root), *args],
+                          capture_output=True, text=True, timeout=60)
+
+
+def _normalized_url(url: str) -> str:
+    """Only .git / trailing-slash spelling is normalised, never identity."""
+    value = url.strip().rstrip("/")
+    if value.endswith(".git"):
+        value = value[:-4]
+    return value.rstrip("/")
+
+
+def resolve_repository_source(name: str, system: dict, checkout: str | None) -> Path:
+    """Resolve a repository-backed prompt path inside a supplied checkout.
+
+    The prompts live in another repository. Naming a path on this machine made
+    the identity depend on whoever ran the verifier; pinning url + tag + the
+    exact commit that tag peels to makes it depend on the snapshot instead.
+    This confirms the checkout IS that snapshot before a single prompt is read,
+    so bytes that happen to hash correctly cannot stand in for the pinned
+    source.
+    """
+    repository = system.get("repository") or {}
+    if not checkout:
+        die(f"{name!r} declares a repository-backed prompt source, so it can only "
+            "be measured against a checkout you supply:\n"
+            "  --source-checkout <path to a clean checkout of the pinned commit>\n"
+            "Nothing is resolved from a sibling directory: a path that happens to "
+            "exist on this machine is not the pinned snapshot.")
+
+    for key in ("url", "ref", "peeled_commit"):
+        value = repository.get(key)
+        if not isinstance(value, str) or not value.strip():
+            die(f"prompts.system.repository.{key} is required for a "
+                "repository-backed prompt source; a partial pin names no snapshot.")
+    commit = repository["peeled_commit"].strip()
+    ref = repository["ref"].strip()
+    if not GIT_OID_RE.match(commit):
+        die("prompts.system.repository.peeled_commit must be a complete lowercase "
+            f"Git object id (40 hex for SHA-1, 64 for SHA-256), not {commit!r}. "
+            "A prompt digest is SHA-256; a Git object id is a different type.")
+
+    root = Path(checkout).expanduser()
+    if not root.is_dir():
+        die(f"--source-checkout {root} is not a directory.")
+    inside = _git(root, "rev-parse", "--is-inside-work-tree")
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        die(f"--source-checkout {root} is not a git worktree, so its contents "
+            "cannot be tied to the pinned commit.")
+    root = Path(_git(root, "rev-parse", "--show-toplevel").stdout.strip())
+
+    fmt = (_git(root, "rev-parse", "--show-object-format").stdout.strip() or "sha1")
+    expected = 64 if fmt == "sha256" else 40
+    if len(commit) != expected:
+        die(f"prompts.system.repository.peeled_commit has {len(commit)} hex "
+            f"characters, but this repository uses {fmt} object ids "
+            f"({expected} characters).")
+
+    origin = _git(root, "remote", "get-url", "origin")
+    if origin.returncode != 0 or not origin.stdout.strip():
+        die("the supplied checkout has no origin remote, so it cannot be shown "
+            f"to be a checkout of {repository['url']}.")
+    if _normalized_url(origin.stdout) != _normalized_url(repository["url"]):
+        die("the supplied checkout's origin is a different repository:\n"
+            f"  pinned   {repository['url']}\n"
+            f"  checkout {origin.stdout.strip()}")
+
+    head = _git(root, "rev-parse", "HEAD").stdout.strip()
+    if head != commit:
+        die("the supplied checkout is at a different commit: its HEAD is\n"
+            f"  {head}\n"
+            f"but the harness pins peeled_commit\n  {commit}\n"
+            "Check out the pinned commit; nothing is measured from another one.")
+
+    peeled = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    if peeled.returncode != 0 or not peeled.stdout.strip():
+        die(f"the supplied checkout does not contain {ref!r}, so the pinned tag "
+            "cannot be confirmed. Clone the tag itself rather than a branch.")
+    if peeled.stdout.strip() != commit:
+        die(f"{ref!r} peels to a different commit:\n"
+            f"  peels to {peeled.stdout.strip()}\n"
+            f"  pinned   {commit}\n"
+            "A tag name is not an identity. Re-pointing one must not silently "
+            "become a new prompt identity.")
+
+    dirty = _git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip()
+    if dirty:
+        die("the supplied checkout is not clean: tracked files differ from the "
+            f"pinned commit.\n{dirty[:400]}\n"
+            "The commit says what the source is; edited bytes are not it.")
+
+    declared = system.get("path")
+    if not isinstance(declared, str) or not declared.strip():
+        die(f"{name!r} declares no prompts.system.path to resolve inside the "
+            "pinned repository.")
+    relative = PurePosixPath(declared.strip())
+    if relative.is_absolute() or ".." in relative.parts:
+        die(f"prompts.system.path must stay inside the pinned checkout, but "
+            f"{declared!r} is absolute or points outside it. Reading outside "
+            "would let the pin name one snapshot and measure another.")
+    resolved = (root / relative).resolve()
+    if resolved != root.resolve() and root.resolve() not in resolved.parents:
+        die(f"prompts.system.path resolves outside the pinned checkout: "
+            f"{resolved}")
+    return resolved
+
+
 def set_scalar(lines: list[str], path: tuple[str, ...], value: str) -> list[str]:
     """Replace one scalar in place, keeping comments and layout.
 
@@ -211,6 +331,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("harness", help="name under configs/harnesses/ (no .yaml)")
+    parser.add_argument("--source-checkout", metavar="PATH",
+                        help="a clean local checkout of the commit pinned by "
+                             "prompts.system.repository. Required for a "
+                             "repository-backed source; this tool reads it and "
+                             "never fetches.")
     parser.add_argument("--write", action="store_true",
                         help="pin the measured digest and set verified: true, "
                              "ONLY on a clean measurement")
@@ -229,14 +354,22 @@ def main() -> None:
             "nothing to measure. A harness with no prompt identity cannot be "
             "verified; give it a path or leave it unverified honestly.")
 
-    prompt_path = Path(str(declared)).expanduser()
-    if not prompt_path.is_absolute():
-        prompt_path = ROOT / prompt_path
-    if not prompt_path.exists():
-        die(f"no prompt at {prompt_path}.\n"
-            f"{args.harness!r} declares prompts.system.path: {declared}\n"
-            "That path is usually a sibling checkout of the Office add-in. "
-            "Obtain it and re-run; nothing is guessed in its absence.")
+    if system.get("repository") is not None:
+        prompt_path = resolve_repository_source(
+            args.harness, system, args.source_checkout)
+    else:
+        if args.source_checkout:
+            die(f"{args.harness!r} declares no prompts.system.repository, so "
+                "--source-checkout has nothing to verify. Remove it, or pin the "
+                "harness to a repository snapshot.")
+        prompt_path = Path(str(declared)).expanduser()
+        if not prompt_path.is_absolute():
+            prompt_path = ROOT / prompt_path
+        if not prompt_path.exists():
+            die(f"no prompt at {prompt_path}.\n"
+                f"{args.harness!r} declares prompts.system.path: {declared}\n"
+                "That path is usually a sibling checkout of the Office add-in. "
+                "Obtain it and re-run; nothing is guessed in its absence.")
 
     source = str(system.get("source") or "path")
     if source == "prompt_registry":
