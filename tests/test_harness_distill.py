@@ -303,17 +303,6 @@ def test_provenance_refuses_an_unsafe_harness():
             execution_model_registry="student")
 
 
-def test_the_shipped_draft_harnesses_are_unverified_today():
-    """Documented state, not aspiration: neither draft harness has had its
-    system prompt hashed, so both must say so. Delete this when they are
-    verified against the real add-in."""
-    for name in ("tantular-office-current", "tantular-office-candidate"):
-        block = hd.harness_provenance(hd.load_harness(name),
-                                      execution_model_registry="qwen35-9b-instruct")
-        assert block["prompt_verified"] is False, name
-        assert block["prompt_sha256"] is None, name
-
-
 # --- the harness is model-COMPATIBLE, not model-bound ------------------------
 #
 # The whole point of the four-arm design is running ONE harness against a

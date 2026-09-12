@@ -201,15 +201,6 @@ def test_a_directory_prompt_path_is_digested_as_a_tree(tmp_path, monkeypatch):
     assert vhi.digest_path(src) != before
 
 
-def test_the_shipped_harnesses_remain_unverified_here():
-    """No add-in snapshot is pinned in this repository, so the real harnesses
-    stay unverified. Delete this when they are pinned against the real add-in."""
-    for name in ("tantular-office-current", "tantular-office-candidate"):
-        system = (hd.load_harness(name).get("prompts") or {}).get("system") or {}
-        assert system.get("verified") is not True, name
-        assert not system.get("sha256"), name
-
-
 # --- the EFFECTIVE prompts, not the whole source tree ------------------------
 #
 # Digesting ../tantular_office_addin/src as a tree answers "did any JavaScript
@@ -344,29 +335,6 @@ def test_an_empty_directory_is_not_a_verified_prompt_identity(tmp_path, capsys):
     with pytest.raises(SystemExit):
         vhi.digest_path(empty)
     assert "empty directory" in capsys.readouterr().err
-
-
-# The ONLY test here that needs the real add-in. The synthetic prompt-registry
-# tests above need node but not the add-in, and must keep running in CI: they
-# are what prove a prompt change moves the digest and an unrelated source change
-# does not.
-@pytest.mark.requires_addin
-@node
-def test_the_real_harnesses_measure_but_stay_unpinned():
-    """The add-in is present in this checkout and the registry reads cleanly,
-    but nothing is pinned: that tree is unpublished (docs/CI.md), so a digest of
-    it could not be reproduced by anyone else."""
-    registry_path = ROOT.parent / "tantular_office_addin" / "src" / "promptRegistry.js"
-    if not registry_path.is_file():
-        pytest.skip("the Office add-in sibling is not checked out")
-    digest, rows = vhi.prompt_registry_digest(registry_path)
-    assert vhi.SHA256_RE.match(digest)
-    assert len(rows) >= 5
-    for name in ("tantular-office-current", "tantular-office-candidate"):
-        system = (hd.load_harness(name).get("prompts") or {}).get("system") or {}
-        assert system.get("source") == "prompt_registry", name
-        assert system.get("verified") is not True, name
-        assert not system.get("sha256"), name
 
 
 # --- regressions: the registry's rows must be well-formed and unique --------
@@ -760,3 +728,61 @@ def test_the_canonical_prompt_payload_is_one_sorted_json_array(registry):
            json.dumps(r["registry_content_hash"]))
         for r in rows).encode("utf-8")
     assert hashlib.sha256(newline_framed).hexdigest() != digest
+
+
+# --- the shipped harnesses, pinned to the published baseline -----------------
+
+
+ADDIN_TAG = "tantular-office-addin-harness-baseline-2026-09-11"
+ADDIN_COMMIT = "3e14d25468ab0cd793ba8dc48cf5f755796c94e2"
+ADDIN_PROMPT_SHA256 = "1e9e96aac3a2012493a7a149c7acb7cf02dd02246b3626739c2fac2f73df638e"
+
+
+@pytest.mark.parametrize("name", ["tantular-office-current", "tantular-office-candidate"])
+def test_the_shipped_harnesses_pin_the_published_baseline(name):
+    """Replaces the three "these stay unverified" assertions.
+
+    They were correct while the add-in was unpublished: a digest of an
+    unpublished tree is not an identity anyone else could reproduce. The tree is
+    published now, so the honest assertion is the exact pin -- offline, with no
+    add-in checkout required.
+    """
+    system = (hd.load_harness(name).get("prompts") or {}).get("system") or {}
+    assert system["source"] == "prompt_registry"
+    assert system["path"] == REGISTRY_RELPATH
+    assert system["sha256"] == ADDIN_PROMPT_SHA256
+    assert system["verified"] is True
+    repository = system["repository"]
+    assert repository["url"] == ADDIN_URL
+    assert repository["ref"] == ADDIN_TAG
+    assert repository["peeled_commit"] == ADDIN_COMMIT
+    assert len(repository["peeled_commit"]) == 40
+
+
+def test_the_shipped_harnesses_do_not_pin_the_publication_probe_framing():
+    """The tag annotation records 5086061..., measured by the publication
+    probe's newline framing. It is evidence of that probe, not this
+    repository's prompt identity, and must never reach a harness."""
+    probe_framing = "5086061098575be10267c1b4a0676f75ad3e65723b497ca3d06eee6b4aa26794"
+    for name in ("tantular-office-current", "tantular-office-candidate"):
+        system = (hd.load_harness(name).get("prompts") or {}).get("system") or {}
+        assert system["sha256"] != probe_framing
+
+
+def test_both_shipped_harnesses_share_a_prompt_identity_but_not_a_digest():
+    """Same production prompts, different policy. Equal complete digests would
+    mean the policy differences were lost."""
+    current = hd.load_harness("tantular-office-current")
+    candidate = hd.load_harness("tantular-office-candidate")
+    assert (current["prompts"]["system"]["sha256"]
+            == candidate["prompts"]["system"]["sha256"] == ADDIN_PROMPT_SHA256)
+    assert hd.canonical_digest(current) != hd.canonical_digest(candidate)
+
+
+@pytest.mark.parametrize("name", ["tantular-office-current", "tantular-office-candidate"])
+def test_a_verified_prompt_does_not_make_the_harness_executable(name):
+    """Prompt identity is not execution attribution: generate.py still has no
+    harness executor."""
+    spec = hd.load_harness(name)
+    assert (spec.get("trace_generation") or {}).get("supported_by_generate_py") is False
+    assert hd.validate_harness(spec) == []

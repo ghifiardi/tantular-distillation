@@ -33,7 +33,7 @@ jobs:
 
     env:
       EXPECTED_EXCLUDED_CORPUS: "47"
-      EXPECTED_EXCLUDED_ADDIN: "37"
+      EXPECTED_EXCLUDED_ADDIN: "36"
 
     steps:
       - uses: actions/checkout@v7
