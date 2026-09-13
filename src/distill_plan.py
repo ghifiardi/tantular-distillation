@@ -752,6 +752,13 @@ def _harness_coverage(path: Path) -> dict:
 # making a claim it cannot support, and must say so rather than reading as
 # ordinary absence.
 EXECUTION_ARTIFACT_DIGESTS = ("blob_digest", "manifest_digest", "model_digest")
+# A digest alone proves nothing: it is 64 characters that could belong to any
+# artifact. The receipt must also say WHICH registry entry it is a receipt for,
+# so the audit can check that the thing which ran is the thing the registry
+# describes. Without this, a Qwen artifact's digest would satisfy a verified
+# Muse registry entry and the conjunction would pass.
+EXECUTION_ARTIFACT_BINDING = ("model_id", "registry_model", "revision")
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 # Exactly 64 lowercase hex. No "sha256:" prefix: two spellings of one value
 # would otherwise become two distinct receipt identities, and a corpus that
 # mixed them would look like a mixed pass.
@@ -808,7 +815,26 @@ def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
             malformed.append(f"trace {index}: {field}={value!r} is not 64 "
                              "lowercase hexadecimal characters")
             continue
-        valid.append(f"{field}:{value}")
+
+        binding = {}
+        problem = None
+        for key in EXECUTION_ARTIFACT_BINDING:
+            bound = block.get(key)
+            if not isinstance(bound, str) or not bound.strip():
+                problem = (f"trace {index}: execution_artifact.{key} is required "
+                           "so the receipt can be tied to a registry entry")
+                break
+            binding[key] = bound
+        if problem is None and not _COMMIT_RE.match(binding["revision"]):
+            problem = (f"trace {index}: execution_artifact.revision "
+                       f"{binding['revision']!r} is not a complete lowercase "
+                       "40-character commit")
+        if problem:
+            malformed.append(problem)
+            continue
+
+        valid.append("|".join([binding["registry_model"], binding["model_id"],
+                               binding["revision"], f"{field}:{value}"]))
 
     distinct = sorted(set(valid))
     ready = (len(rows) > 0
@@ -845,6 +871,51 @@ def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
         "accepted_digest_fields": list(EXECUTION_ARTIFACT_DIGESTS),
         "reason": reason,
     }
+
+
+def bind_execution_artifact(artifact: dict[str, Any],
+                            specs: dict[str, dict]) -> dict[str, Any]:
+    """Check the receipt the TRACES carry against the resolved registry specs.
+
+    The registry validates a receipt; it never manufactures one. Parsing stays
+    trace-only above; this only compares what the traces already said with what
+    the registry already says, and refuses on any disagreement.
+    """
+    result = dict(artifact)
+    result["bound"] = False
+    result["binding_problems"] = []
+    if not artifact["ready"]:
+        return result                        # already refused on shape
+
+    registry_model, model_id, revision, _ = artifact["distinct_receipts"][0].split("|")
+    problems: list[str] = []
+
+    spec = specs.get(registry_model)
+    if spec is None:
+        problems.append(
+            f"receipt names registry_model {registry_model!r}, which is not a "
+            f"resolved teacher of this corpus (resolved: {sorted(specs)})")
+    else:
+        if spec.get("model_id") != model_id:
+            problems.append(
+                f"receipt model_id {model_id!r} != registry "
+                f"{spec.get('model_id')!r} for {registry_model!r}")
+        pinned = str(spec.get("revision") or "")
+        if not _COMMIT_RE.match(pinned):
+            problems.append(
+                f"registry {registry_model!r} has no pinned revision "
+                f"({pinned!r}); a receipt cannot be bound to a placeholder")
+        elif pinned != revision:
+            problems.append(
+                f"receipt revision {revision!r} != registry pinned {pinned!r}")
+
+    result["binding_problems"] = problems
+    result["bound"] = not problems
+    if problems:
+        result["ready"] = False
+        result["reason"] = ("the receipt does not bind to the resolved registry "
+                            "entry: " + "; ".join(problems))
+    return result
 
 
 def audit_corpus(corpus: str | Path, today: _dt.date,
@@ -945,7 +1016,7 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
     # the CURRENT canonical checkpoint is pinned; it says nothing about which
     # artifact generated traces months ago. Keep them apart so verifying a
     # teacher can never retroactively upgrade history.
-    artifact = execution_artifact_receipts(rows)
+    artifact = bind_execution_artifact(execution_artifact_receipts(rows), specs)
     execution_artifact_ready = artifact["ready"]
     identity_verified = registry_identity_ready and execution_artifact_ready
 
