@@ -417,3 +417,255 @@ registry, schema, test or documentation file, do not set digests_verified, do
 not download weights, do not execute a model, do not authenticate, and do not
 kill any pre-existing process.
 ```
+
+---
+
+# Stage 2 — the three-PR correction sequence
+
+Stage 1 executed and reported:
+
+```text
+current = A         historical_unpinned = true
+```
+
+Stage 2 is written against that result. It is **three separate pull requests
+in a fixed order**, with a mandatory stop after the first.
+
+## What Stage 1 proved
+
+**The registry names the wrong repository.**
+`meta-models/Muse-Glimmer-30B-assistant` is the **DFlash speculative-decoding
+drafter**, not the teacher. Its own card opens with:
+
+> "This model card is for the lightweight "drafter" model for Muse Glimmer
+> 30B, based on DFlash... The main model then verifies these proposals in
+> parallel."
+
+Its `config.json` agrees — `architectures: ["MuseGlimmerAssistantModel"]`,
+`model_type: muse_glimmer_assistant`, `num_hidden_layers: 5`,
+`block_size: 16`, `target_layer_ids: [1, 13, 25, 37, 49]`. Five layers, not a
+30B model. Its missing tokenizer is not an oversight: a drafter shares its
+parent's tokenizer and legitimately ships none.
+
+**The real teacher exists and is fully verifiable.**
+
+```text
+meta-models/Muse-Glimmer-30B   a4e59da52a7bc87ae7251dd5545c0dd437c44b68
+public, ungated
+tokenizer.json  tokenizer_config.json  chat_template.jinja
+config.json  generation_config.json  processor_config.json
+```
+
+Corroborated from `cardData` alone by both derivatives, which each declare
+`base_model: meta-models/Muse-Glimmer-30B`. No derivative was downloaded.
+
+**The historical corpus cannot inherit any of this.** All 136 traces record
+`repo: "muse-glimmer:30b"` — a mutable Ollama tag. No manifest digest, no blob
+digest, no weights digest, anywhere in the corpus or the pass manifests. The
+recorded `template_sha256`
+(`114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e`, identical
+across all 136) pins the **rendered interface**, not the model bytes.
+
+## The defect that dictates the order
+
+Correcting the repository name and qualifying it in one step would introduce a
+false claim, and this was **measured**, not predicted. Simulated on a copy of
+the worktree with the teacher's `digests_verified` flipped to true:
+
+```text
+identity_ready       false -> TRUE
+trainable_as_is      false -> false
+authorizes_training  false -> false
+```
+
+`identity_ready` becoming true would be **wrong**. The current audit derives it
+from the resolved teachers' registry verification alone, so verifying today's
+parent would retroactively assert something about traces generated months ago
+by an artifact nobody pinned. The HF parent cannot prove which Ollama artifact
+ran.
+
+So registry qualification and historical execution identity must become
+**separate readiness claims before the teacher is marked verified**. That is
+why PR B precedes PR C, and why PR A must not qualify anything.
+
+## PR A — correct the registry source only
+
+**Correct a false statement. Claim no qualification.**
+
+Three source fields change:
+
+```text
+configs/models/muse-glimmer-30b.yaml
+  model_id:            meta-models/Muse-Glimmer-30B
+  tokenizer.model_id:  meta-models/Muse-Glimmer-30B
+
+configs/teachers/muse-glimmer.yaml
+  repos.bf16:          meta-models/Muse-Glimmer-30B
+```
+
+**`repos.bf16` lives in the serving config, and the two files are coupled.**
+`src/distill_plan.py:240-242` reconciles `repos.bf16` against the registry's
+`model_id` and refuses to plan when they disagree. Changing one file without
+the other breaks the planner. Change both in this PR.
+
+**Retain, unchanged:**
+
+```text
+revision:            REPLACE_WITH_PINNED_HUB_COMMIT
+tokenizer.revision:  REPLACE_WITH_PINNED_HUB_COMMIT
+digests_verified:    false
+```
+
+**Fields that are already correct and must not be touched:**
+
+- `params.total_b: 30.0` — describes the parent, always did;
+- `params.vision_b: null` — honest; do not invent a value;
+- `repos.fp8: RedHatAI/Muse-Glimmer-30B-FP8-block` — a parent derivative;
+- `repos.int4_mlx: mlx-community/Muse-Glimmer-30B-4bit` — a parent derivative;
+- `repos.int4_ollama: muse-glimmer:30b` and
+  `repos.remote: ollama/muse-glimmer-30b` — serving aliases. They may remain,
+  but **neither is immutable identity evidence** and neither may be treated as
+  one;
+- the licence block, including its unresolved evidence placeholder.
+
+`LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B` remains untouched deliberately.
+PR A corrects a false source-identity claim; it does not perform or claim a
+licence review. The verifier does not own this field, and the drafter
+repository's licence files must not be reused as evidence for the parent
+without a separate review against the parent's exact commit.
+
+### Required test
+
+One offline, unmarked test proving:
+
+1. the registry names the **parent**, not the drafter — assert
+   `model_id == "meta-models/Muse-Glimmer-30B"` **and** explicitly assert it is
+   not `...-assistant`, so the drafter can never silently return;
+2. `tokenizer.model_id` equals the parent;
+3. `repos.bf16` equals the parent;
+4. the FP8 and MLX entries remain their existing parent derivatives;
+5. the registry remains **unverified** after this correction —
+   `digests_verified is False` and both revisions still placeholders.
+
+Assertion 5 is the point of the test. It is what stops PR A from drifting into
+a qualification.
+
+### Invariants
+
+Planning and readiness verdicts must be **unchanged** by PR A. The teacher
+warning still fires, `identity_ready` stays false, `trainable_as_is` stays
+false, `authorizes_training` stays false. Marker counts unchanged. If any
+verdict moves, stop: the PR did more than correct a name.
+
+`model_ids.matches()` already refuses to conflate the two:
+
+```text
+matches('meta-models/Muse-Glimmer-30B',
+        'meta-models/Muse-Glimmer-30B-assistant') = False
+```
+
+### MANDATORY STOP
+
+**Stop after PR A is merged.** Do not begin PR B in the same execution. The
+readiness semantics change is a separate review.
+
+## PR B — separate registry and execution-artifact readiness
+
+Split the single `identity_ready` verdict into two claims plus their
+conjunction. Report, at minimum:
+
+```text
+registry_identity_ready   the current canonical teacher revision, tokenizer
+                          and template are verified
+execution_artifact_ready  the traces identify the immutable artifact that
+                          actually generated them
+identity_ready            registry_identity_ready AND execution_artifact_ready
+```
+
+`identity_ready` keeps its name and its meaning as the conjunction, so every
+existing consumer of it stays correct.
+
+For the legacy corpus, after this PR and before PR C:
+
+```text
+registry_identity_ready   false   teacher not yet qualified;
+                                  becomes true in PR C
+execution_artifact_ready  false   mutable tag only; no manifest,
+                                  blob or weights digest
+identity_ready            false
+```
+
+`execution_artifact_ready` must be derived from **what the traces record**, not
+from the registry. A mutable tag is not an artifact identity. Future traces
+need an immutable execution receipt — an Ollama manifest digest, blob digest
+or model profile identity — and this PR should say what such a receipt must
+contain, even though generating one is out of scope.
+
+**Do not regenerate historical manifests.** `train/RUN_MANIFEST.v1.json` and
+the others embed `identity_verification: {all_verified: false,
+unverified_models: [muse-glimmer-30b]}`, which was true when each was frozen and
+remains historically correct. `freeze_training_run.py` recomputes the audit at
+freeze time, so a future freeze carries the new shape on its own.
+
+Tests currently asserting the old single verdict —
+`tests/test_distill_plan.py:363-368` (unmarked) and
+`tests/test_training_manifest.py:248` (`requires_local_corpus`) — are updated
+to the new shape, not deleted.
+
+## PR C — qualify the current parent
+
+**Only after PR B is merged**, so the split prevents retroactive upgrading.
+
+1. Acquire metadata only from
+   `meta-models/Muse-Glimmer-30B@a4e59da52a7bc87ae7251dd5545c0dd437c44b68`,
+   per-file `hf_hub_download()` with `HF_HUB_DISABLE_IMPLICIT_TOKEN=1`, an
+   allowlist derived from the remote inventory, every weight format excluded,
+   and a proof no weight file arrived (sizes resolved through `blobs/`).
+2. Measure the tokenizer digest and the effective template digest **offline**.
+   The parent ships `chat_template.jinja`, a layout the verifier already
+   supports — confirm that rather than assuming it.
+3. Pin the revision and both digests **through the verifier only**:
+   `verify_model_identity.py --offline --snapshot ... --write`. Never by hand.
+4. Add an exact-pin test for the five scalars, with literal expectations, in
+   the manner of the student's
+   `test_the_shipped_qwen35_instruct_spec_pins_the_qualified_snapshot`.
+5. Confirm `execution_artifact_ready` stays **false** for the legacy corpus, and
+   therefore `identity_ready` stays **false**.
+
+The result: the current teacher is reproducibly qualified, and the historical
+corpus remains honest about what it cannot prove.
+
+## What remains out of scope throughout
+
+- `LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B` is unresolved and stays so; the
+  verifier does not touch `evidence_sha256`.
+- Processor identity remains a separate text-versus-vision decision. The parent
+  publishes `processor_config.json`; that does not make it part of
+  `digests_verified`.
+- `fp8_ready` false (136 int4 traces) and `source_ready` false (136 synthetic)
+  are untouched by all three PRs.
+- `trainable_as_is` and `authorizes_training` remain false throughout.
+  `train/TRAINING_BLOCKED.md` is never edited.
+- **No schema change is required to identify the parent's tokenizer or template
+  source** — correcting `model_id` is sufficient, and `tokenizer.model_id`
+  then needs no divergence. The schema work that PR B implies concerns
+  execution-artifact provenance, which is a different question.
+
+## Stop conditions
+
+Stop without improvising if:
+
+- PR A changes any planning or readiness verdict;
+- PR A and the serving config disagree, and the planner's reconciliation fires;
+- PR B would make `identity_ready` true for the legacy corpus by any route;
+- PR B regenerates a historical manifest;
+- PR C is reached before PR B is merged;
+- the parent stops resolving, or resolves to a commit other than
+  `a4e59da5...` without explanation;
+- any weight file is downloaded, or any model is loaded or executed;
+- a serving alias (`muse-glimmer:30b`, `ollama/muse-glimmer-30b`) is about to
+  be used as immutable identity evidence.
+
+Do not resolve a stop condition by qualifying early, by widening
+`digests_verified`, by treating a tag as an artifact identity, or by editing a
+frozen manifest.
