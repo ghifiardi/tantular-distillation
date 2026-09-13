@@ -76,6 +76,32 @@ digests_verified: false              # written ONLY by src/verify_model_identity
 | architecture signature | student | profile signature matches the loaded config (`src/train_qlora.py`, before LoRA attaches) |
 | registry/serving reconciliation | both | `serving_config` and `registry_model` point at each other, and `served_model_name`, `repos.bf16`, `tokenizer` and `license` agree with this file |
 
+### What `digests_verified` does and does not cover
+
+It is a narrow claim, and the narrowness is deliberate:
+
+- **covers** the tokenizer files present in the snapshot and the **effective
+  chat template** — the two inputs to the compatibility key that selects the
+  distillation mode;
+- **does NOT verify weights.** Qualification is metadata-only; no weight file
+  is downloaded, loaded or hashed. A checkpoint whose weights changed under an
+  unchanged tokenizer and template would still read as verified;
+- **does NOT verify vision processors.** A unified vision-language checkpoint
+  may ship `preprocessor_config.json` and `video_preprocessor_config.json`.
+  Those describe image and video preprocessing, are not part of the text
+  path the product uses, and are not digested here. Vision processor identity
+  is therefore **unqualified** even when `digests_verified: true`, and any
+  future product use of image or video input needs its own gate first;
+- **is independent of the architecture pin.** The architecture signature lives
+  in the architecture profile under `configs/architectures/`, is written by a
+  separate action, and is checked at train time. `digests_verified` says
+  nothing about it, and it says nothing about `digests_verified`.
+
+A signature identifies architecture *shape*. Two checkpoints of the same
+family — a base and an instruct release, say — can legitimately share one while
+being entirely different checkpoints. What makes a signature pinnable is the
+provenance of the config it was computed from, never the value.
+
 `digests_verified: false` does not block Mode A/B *planning* — the planner emits
 a WARNING and continues — but it does block a corpus from being called trainable:
 `provenance-audit` reports `identity_verification.all_verified: false` and
