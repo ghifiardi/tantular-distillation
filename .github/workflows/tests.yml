@@ -1,16 +1,19 @@
 # The suite this repository can run from published refs alone.
 #
-# Deliberately NOT called "full-tests". Two partitions are excluded, each for a
-# stated reason, each counted and asserted:
+# Deliberately NOT called "full-tests". ONE partition is excluded, for a stated
+# reason, counted and asserted:
 #
 #   requires_local_corpus  data/v3-candidate/traces.r0.jsonl and
 #                          data/promoted/*.jsonl are gitignored by policy.
-#   requires_addin         ../tantular_office_addin is not on the default branch
-#                          of ghifiardi/LLM-Indonesia, and its package-lock.json
-#                          is not tracked on any ref.
 #
-# Neither is a runtime skip. Locally, without those inputs, the marked tests
-# still run and still fail. See docs/CI.md.
+# The add-in partition is no longer excluded. tantular_office_addin and its
+# package-lock.json are published at an immutable CI baseline tag, so CI checks
+# that exact commit out, installs from the lockfile with `npm ci`, generates a
+# local test certificate, and SELECTS those 36 tests. Their count is asserted
+# like any other.
+#
+# The exclusion is not a runtime skip. Locally, without the corpus, the marked
+# tests still run and still fail. See docs/CI.md.
 name: tests
 
 on:
@@ -26,17 +29,115 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests-no-corpus-no-addin:
-    name: tests-no-corpus-no-addin
+  tests-no-corpus:
+    name: tests-no-corpus
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Measured, not guessed: the whole selected suite takes 20m04s locally
+    # (494 passed, 4 skipped, 47 deselected). The 28 gate tests dominate it --
+    # each runs the add-in's own Node suite end to end at ~44s apiece, about
+    # 15.5 minutes for that partition alone. 60 gives a hosted runner, which is
+    # slower than the machine that measurement came from, real headroom without
+    # letting a genuine hang sit for an hour.
+    timeout-minutes: 60
 
     env:
       EXPECTED_EXCLUDED_CORPUS: "47"
-      EXPECTED_EXCLUDED_ADDIN: "36"
+      EXPECTED_SELECTED_ADDIN: "36"
+
+      # The add-in source, pinned to an immutable tag AND the exact commit that
+      # tag must peel to. A tag name alone is not an identity: re-pointing one
+      # must not silently change what CI tested.
+      ADDIN_REPO: ghifiardi/LLM-Indonesia
+      ADDIN_TAG: tantular-office-addin-ci-baseline-2026-09-13
+      ADDIN_COMMIT: c923943ce39de3ea55c78b5634e4c927fd2076c4
+      ADDIN_LOCKFILE_SHA256: 9ad817275dd30ec984c3c3d96559b59151339580cf0d15b50b980099be0d128e
+      # Deterministic, inside the workspace. Never runner.temp, never derived
+      # from a ref name that could change.
+      ADDIN_CHECKOUT: .external/llm-indonesia
+      NODE_VERSION: "22.17.0"
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Check out the pinned add-in baseline
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.ADDIN_REPO }}
+          ref: ${{ env.ADDIN_TAG }}
+          path: ${{ env.ADDIN_CHECKOUT }}
+
+      # A tag is a pointer. Require the checked-out commit to be the pinned one,
+      # and require the tag on the remote to still peel to it. Either check
+      # failing means CI would have tested something other than what this
+      # workflow claims.
+      - name: Verify the add-in commit and tag
+        run: |
+          cd "$GITHUB_WORKSPACE/$ADDIN_CHECKOUT"
+          head=$(git rev-parse HEAD)
+          echo "checked out HEAD: $head"
+          echo "pinned commit   : $ADDIN_COMMIT"
+          if [ "$head" != "$ADDIN_COMMIT" ]; then
+            echo "::error::Add-in checkout is $head, not the pinned $ADDIN_COMMIT."
+            exit 1
+          fi
+          peeled=$(git ls-remote "https://github.com/$ADDIN_REPO.git" \
+                     "refs/tags/$ADDIN_TAG^{}" | cut -f1)
+          echo "remote tag peels: ${peeled:-<none>}"
+          if [ "$peeled" != "$ADDIN_COMMIT" ]; then
+            echo "::error::Tag $ADDIN_TAG peels to '${peeled:-<none>}'," \
+                 "not $ADDIN_COMMIT. The tag moved; refusing to run."
+            exit 1
+          fi
+
+      # 55 files and several gates resolve the add-in as a SIBLING of the
+      # repository root. Create that relationship explicitly, then prove it
+      # resolves -- a step exiting zero is not evidence the link is usable.
+      - name: Map the add-in to its sibling path, and verify
+        run: |
+          target="$GITHUB_WORKSPACE/$ADDIN_CHECKOUT/tantular_office_addin"
+          sibling="$(dirname "$GITHUB_WORKSPACE")/tantular_office_addin"
+          ln -sfn "$target" "$sibling"
+          echo "sibling: $sibling -> $(readlink "$sibling")"
+          test -f "$sibling/src/promptRegistry.js" \
+            || { echo "::error::Sibling add-in path does not resolve."; exit 1; }
+          test -f "$sibling/tools/dev-server.mjs" \
+            || { echo "::error::Sibling add-in is missing tools/dev-server.mjs."; exit 1; }
+          resolved=$(git -C "$sibling/.." rev-parse HEAD)
+          if [ "$resolved" != "$ADDIN_COMMIT" ]; then
+            echo "::error::Sibling resolves to $resolved, not $ADDIN_COMMIT."
+            exit 1
+          fi
+          echo "sibling resolves to the pinned commit"
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # npm ci, never npm install: the lockfile is the dependency identity, and
+      # it must survive the install byte-for-byte.
+      - name: Install add-in dependencies from the lockfile
+        run: |
+          cd "$GITHUB_WORKSPACE/$ADDIN_CHECKOUT/tantular_office_addin"
+          node --version
+          npm --version
+          npm ci
+          actual=$(sha256sum package-lock.json | cut -d' ' -f1)
+          echo "lockfile sha256: $actual"
+          echo "expected       : $ADDIN_LOCKFILE_SHA256"
+          if [ "$actual" != "$ADDIN_LOCKFILE_SHA256" ]; then
+            echo "::error::npm ci changed package-lock.json," \
+                 "or the pinned digest is wrong. Refusing to run."
+            exit 1
+          fi
+
+      # certs/ is gitignored and therefore absent from any clone. The HTTPS
+      # tests need one; it is generated here and never committed.
+      - name: Generate a local test certificate
+        run: |
+          cd "$GITHUB_WORKSPACE/$ADDIN_CHECKOUT/tantular_office_addin"
+          npm run cert
+          openssl x509 -in certs/localhost.crt -noout -subject -dates
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -54,25 +155,27 @@ jobs:
           .venv/bin/python -m pip install -r requirements.txt
           .venv/bin/python -c "import httpx, yaml, jinja2, pytest; print('deps OK')"
 
-      # Print what is being left out, and refuse if either partition changed
-      # size. A silently growing exclusion is how a suite stops meaning anything.
-      # The two are asserted INDEPENDENTLY; the final deselected total is read
-      # from the run below, never computed as their sum, because a test could in
-      # principle carry both markers.
-      - name: Show the excluded partitions
+      # Print what is left out AND what is deliberately selected, and refuse if
+      # either count moved. A silently growing exclusion is how a suite stops
+      # meaning anything; a silently shrinking selection is the same failure
+      # wearing the opposite sign. Both are asserted INDEPENDENTLY, and the
+      # deselected total is read from the run below, never computed.
+      - name: Show the counted partitions
         run: |
           fail=0
           for marker in requires_local_corpus requires_addin; do
             case "$marker" in
-              requires_local_corpus) expected="$EXPECTED_EXCLUDED_CORPUS" ;;
-              requires_addin)        expected="$EXPECTED_EXCLUDED_ADDIN" ;;
+              requires_local_corpus)
+                expected="$EXPECTED_EXCLUDED_CORPUS"; role="excluded" ;;
+              requires_addin)
+                expected="$EXPECTED_SELECTED_ADDIN";  role="selected" ;;
             esac
-            echo "::group::$marker (expected $expected)"
+            echo "::group::$marker ($role, expected $expected)"
             .venv/bin/python -m pytest tests/ --collect-only -q -m "$marker" \
               | tee "/tmp/$marker.txt"
             echo "::endgroup::"
             actual=$(grep -c '::' "/tmp/$marker.txt" || true)
-            echo "$marker: expected $expected, collected $actual"
+            echo "$marker ($role): expected $expected, collected $actual"
             if [ "$actual" != "$expected" ]; then
               echo "::error::The '$marker' partition changed size" \
                    "(expected $expected, collected $actual)." \
@@ -83,7 +186,6 @@ jobs:
           done
           exit "$fail"
 
-      - name: Run the suite without the corpus or the add-in
+      - name: Run the suite without the corpus
         run: |
-          .venv/bin/python -m pytest tests/ -q \
-            -m "not requires_local_corpus and not requires_addin"
+          .venv/bin/python -m pytest tests/ -q -m "not requires_local_corpus"

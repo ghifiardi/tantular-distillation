@@ -3,7 +3,7 @@
 CI runs one job, **`tests-no-corpus-no-addin`**. The name is the summary: it is
 not the full suite, and it is not named as though it were.
 
-    pytest tests/ -q -m "not requires_local_corpus and not requires_addin"
+    pytest tests/ -q -m "not requires_local_corpus"
 
 Two partitions are excluded, each for a stated reason, each counted and
 asserted in the workflow. Neither is a runtime skip.
@@ -54,20 +54,46 @@ without touching the corpus and the wiring assertion could return to CI. That is
 a trainer-ordering question with its own tradeoffs (failing early on a bad
 freeze is also worth something), so it is recorded rather than decided.
 
-## Gap 2 — the Office add-in (36 tests)
+## Gap 2, closed — the Office add-in (36 tests, now selected)
 
 `train/qlora_9b.yaml` points the `office_json_contract` and
 `edit_contract_output` gates at `../tantular_office_addin` — a SIBLING of this
 repository, living in `ghifiardi/LLM-Indonesia`. CI cannot obtain it:
 
-- `tantular_office_addin` is **not on that repository's default branch**. `main`
-  there contains only `docs` and `eval_sets`. The directory exists on several
-  feature branches, but not on the branch a checkout defaults to.
-- `tantular_office_addin/package-lock.json` **is now tracked**, at the baseline
-  tag `tantular-office-addin-harness-baseline-2026-09-11` (peeled commit
-  `3e14d25468ab0cd793ba8dc48cf5f755796c94e2`). It is still absent from that
-  repository's `main`. `npm ci` is reproducible against the tag, and a clean
-  clone of it was verified to install and pass 71 of 72 add-in test files.
+- `tantular_office_addin` is still **not on that repository's default branch**.
+  `main` there contains only `docs` and `eval_sets`. CI therefore does not use a
+  branch at all: it checks out an immutable tag at its exact commit.
+- `tantular_office_addin/package-lock.json` **is tracked** at both published
+  tags, so `npm ci` is reproducible. A clean clone of the CI baseline installs
+  from it and passes **72 of 72** add-in test files with no exclusions.
+
+### How CI obtains the add-in
+
+```text
+repository    ghifiardi/LLM-Indonesia
+tag           tantular-office-addin-ci-baseline-2026-09-13
+peeled commit c923943ce39de3ea55c78b5634e4c927fd2076c4
+checkout      $GITHUB_WORKSPACE/.external/llm-indonesia
+sibling       <workspace parent>/tantular_office_addin -> that checkout
+node          22.17.0 (pinned)
+lockfile      sha256 9ad817275dd30ec984c3c3d96559b59151339580cf0d15b50b980099be0d128e
+```
+
+Every one of those is asserted, not assumed. The workflow requires the checked
+out `HEAD` to equal the pinned commit **and** the remote tag to still peel to
+it, because a tag is a pointer and re-pointing one must not silently change
+what CI tested. It then creates the sibling mapping the tests require and
+proves it resolves — a step exiting zero is not evidence the link is usable —
+and it recomputes the lockfile digest after `npm ci` to confirm the install did
+not rewrite it. `certs/` is gitignored and absent from any clone, so the
+workflow generates a local test certificate with `npm run cert`; no certificate
+or key is committed.
+
+**This partition is expensive.** The 28 gate tests in `tests/test_run_gates.py`
+each run the add-in's own Node suite end to end, at roughly 44 seconds apiece:
+the add-in partition alone is about 15.5 minutes, measured. That is why the job
+timeout is 45 minutes. It is a real cost, accepted deliberately, because the
+alternative is not testing the gates at all.
 
 Pinning a feature branch and using `npm install` instead would produce a
 non-reproducible dependency tree pinned to a moving ref. That trades away the
@@ -90,8 +116,9 @@ Those eight were nearly missed. They already carried a pre-existing
 `pytest.mark.skipif` (`needs_addin`) that makes them SKIP when the add-in is
 absent, so a probe that looks for failures does not see them — they would have
 disappeared from CI silently and uncounted, which is exactly what counting the
-exclusions is meant to prevent. They now carry `requires_addin` as well, so CI
-deselects them explicitly and the assertion counts them.
+partitions is meant to prevent. They now carry `requires_addin` as well, so the
+assertion counts them; with the add-in checked out from the CI baseline tag the
+`skipif` predicate is satisfied and they run rather than skipping.
 
 *Known inconsistency, not fixed here:* for those eight, an absent add-in
 produces a skip locally rather than the failure the corpus markers produce. The
@@ -106,23 +133,38 @@ SELECTED when it updates these counts.
 **What loses CI cover:** `office_json_contract`, `edit_contract_output`, and the
 faithful-edit scorer path. These remain local pre-merge checks.
 
-**Half of the durable fix has landed.** The add-in and its `package-lock.json`
-are published at the baseline tag above, which is what unblocked prompt
-verification: both shipped harnesses now pin that snapshot and carry
-`prompts.system.verified: true`, asserted offline in CI with no add-in checkout.
+**The durable fix has landed, in two halves.** The add-in and its
+`package-lock.json` were published at the harness baseline tag, which unblocked
+prompt verification: both shipped harnesses pin that snapshot and carry
+`prompts.system.verified: true`, asserted offline with no add-in checkout. The
+test-hardened CI baseline tag then made the whole add-in suite runnable, and
+this workflow selects it.
 
-**This does not make the add-in partition green.** Restoring it needs two more
-things that the tag does not supply:
+`office_json_contract`, `edit_contract_output` and the faithful-edit scorer path
+now have CI cover.
 
-- `tests/devServerCancellation.test.mjs` remains open. It ran past 704 seconds
-  standalone — no pytest, no `run_gates`, no repository code — and is an
-  upstream defect. It was excluded from the baseline's own acceptance run and is
-  recorded there as a gap, not a pass.
-- the workflow has not been redesigned around a tag checkout. It still points at
-  a sibling path, and rewiring it is separate work.
+### The 704-second observation, withdrawn
 
-So `office_json_contract`, `edit_contract_output` and the faithful-edit scorer
-path remain local pre-merge checks.
+`tests/devServerCancellation.test.mjs` was excluded for weeks on a recorded
+">704 seconds standalone" measurement. A bounded, read-only diagnosis at the
+published baseline found the opposite, and the earlier conclusion is withdrawn:
+
+```text
+ten sequential whole-file runs   5.21-5.22s, 10/10 pass, 0 hangs, 0 survivors
+cancellation propagation         1.4ms (client destroy -> upstream socket close)
+assertion settled                120ms
+fixture close callback           0.0ms   (not unbounded)
+child exit on SIGTERM            1.9ms
+the tail                         ~5000ms of never-cleared Promise.race guards
+```
+
+`tools/dev-server.mjs`, the test file and `package.json` were byte-identical
+between the commit the observation was recorded against and the baseline, so
+source cannot explain the historical figure. It is **historical and
+unexplained** — not a current defect, and no longer a reason to exclude
+anything. The guard timers were cleared upstream (5.21s to 0.45s) and the
+fixture teardown given a deadline; `tools/dev-server.mjs` was not modified,
+because no production defect was measured.
 
 Evidence that the cross-repo approach itself works: the first Actions run on
 this branch checked out `ghifiardi/LLM-Indonesia` successfully without a token
@@ -156,12 +198,16 @@ today is the baseline tag: a clean clone installs from the lockfile and passes
 The workflow collects each partition into the job log every run and asserts its
 size independently:
 
-    EXPECTED_EXCLUDED_CORPUS: 47
-    EXPECTED_EXCLUDED_ADDIN:  36
+    EXPECTED_EXCLUDED_CORPUS: 47   (excluded)
+    EXPECTED_SELECTED_ADDIN:  36   (selected)
 
 Both assertions fail in **both** directions. If a number moves, investigate; do
 not update it to match. A changed count means a new dependency was introduced or
 an existing test stopped exercising one, and both are worth knowing.
+
+`EXPECTED_SELECTED_ADDIN` asserts a partition that now RUNS. A silently
+shrinking selection is the same failure as a silently growing exclusion, wearing
+the opposite sign, so it is asserted in both directions like its counterpart.
 
 The **final deselected total is read from the run**, never computed as 47 + 36.
 A test could in principle carry both markers, in which case the union is smaller
