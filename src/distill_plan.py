@@ -745,54 +745,89 @@ def _harness_coverage(path: Path) -> dict:
 # template_sha256 is deliberately not accepted either. It pins the rendered
 # interface — what the model was fed — not the model. Both matter; they are not
 # the same claim.
-EXECUTION_ARTIFACT_DIGESTS = ("manifest_digest", "blob_digest", "model_digest")
-_ARTIFACT_DIGEST_RE = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$")
+#
+# ABSENT AND MALFORMED ARE DIFFERENT, and conflating them is a fail-open bug
+# this repository has already fixed once, for harness provenance. A corpus with
+# no receipts is honestly incomplete; a corpus whose receipts are unreadable is
+# making a claim it cannot support, and must say so rather than reading as
+# ordinary absence.
+EXECUTION_ARTIFACT_DIGESTS = ("blob_digest", "manifest_digest", "model_digest")
+# Exactly 64 lowercase hex. No "sha256:" prefix: two spellings of one value
+# would otherwise become two distinct receipt identities, and a corpus that
+# mixed them would look like a mixed pass.
+_ARTIFACT_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
     """What the traces themselves say about the artifact that generated them.
 
-    Ready only when EVERY trace carries a well-formed receipt and they all name
-    the same artifact. A corpus half of whose traces name their artifact cannot
-    say what produced the other half, and two distinct artifacts in one corpus
-    is a mixed pass, not a verified one.
+    Ready only when EVERY trace carries exactly one well-formed receipt and
+    they all name the same artifact. A corpus half of whose traces name their
+    artifact cannot say what produced the other half; two distinct artifacts in
+    one corpus is a mixed pass, not a verified one; and a single malformed
+    receipt anywhere disqualifies the corpus rather than being skipped.
     """
-    receipts: list[str | None] = []
+    valid: list[str] = []
     malformed: list[str] = []
-    for row in rows:
-        prov = (row.get("provenance") or {})
-        block = prov.get("execution_artifact")
-        if not isinstance(block, dict):
-            receipts.append(None)
-            continue
-        found = None
-        for field in EXECUTION_ARTIFACT_DIGESTS:
-            value = block.get(field)
-            if value is None:
-                continue
-            if not isinstance(value, str) or not _ARTIFACT_DIGEST_RE.match(value):
-                malformed.append(f"{field}={value!r}")
-                continue
-            found = f"{field}:{value}"
-            break
-        receipts.append(found)
+    missing = 0
 
-    present = [r for r in receipts if r]
-    distinct = sorted(set(present))
-    ready = bool(rows) and len(present) == len(rows) and len(distinct) == 1 \
-        and not malformed
+    for index, row in enumerate(rows):
+        provenance = row.get("provenance")
+        if not isinstance(provenance, dict) or "execution_artifact" not in provenance:
+            missing += 1                      # absent: incomplete, not a lie
+            continue
+
+        block = provenance["execution_artifact"]
+        if not isinstance(block, dict):
+            malformed.append(
+                f"trace {index}: execution_artifact is "
+                f"{type(block).__name__}, not a mapping")
+            continue
+        if not block:
+            malformed.append(f"trace {index}: execution_artifact is empty")
+            continue
+
+        present = [f for f in EXECUTION_ARTIFACT_DIGESTS if f in block]
+        if not present:
+            malformed.append(
+                f"trace {index}: execution_artifact carries no supported digest "
+                f"(have {sorted(block)}, want one of "
+                f"{list(EXECUTION_ARTIFACT_DIGESTS)})")
+            continue
+        if len(present) > 1:
+            # Two digest fields are two claims about one artifact. Even when
+            # both parse, nothing here can say which is authoritative.
+            malformed.append(
+                f"trace {index}: execution_artifact declares {len(present)} "
+                f"digest fields {present}; exactly one is allowed")
+            continue
+
+        field = present[0]
+        value = block[field]
+        if not isinstance(value, str) or not _ARTIFACT_DIGEST_RE.match(value):
+            malformed.append(f"trace {index}: {field}={value!r} is not 64 "
+                             "lowercase hexadecimal characters")
+            continue
+        valid.append(f"{field}:{value}")
+
+    distinct = sorted(set(valid))
+    ready = (len(rows) > 0
+             and len(valid) == len(rows)
+             and not malformed
+             and len(distinct) == 1)
 
     if not rows:
         reason = "no traces"
     elif malformed:
-        reason = (f"{len(malformed)} malformed execution-artifact digest(s); "
-                  "a receipt must be a full lowercase sha256")
-    elif not present:
+        reason = (f"{len(malformed)} malformed execution-artifact receipt(s); "
+                  "a present receipt that cannot be read is a claim this corpus "
+                  "cannot support")
+    elif missing == len(rows):
         reason = ("no execution-artifact receipt recorded at generation time; "
                   "the traces name only mutable serving aliases, which cannot "
                   "identify the bytes that ran")
-    elif len(present) < len(rows):
-        reason = (f"only {len(present)}/{len(rows)} traces carry a receipt; the "
+    elif missing:
+        reason = (f"only {len(valid)}/{len(rows)} traces carry a receipt; the "
                   "rest cannot say what produced them")
     elif len(distinct) > 1:
         reason = f"{len(distinct)} distinct execution artifacts in one corpus"
@@ -802,8 +837,11 @@ def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
     return {
         "ready": ready,
         "traces": len(rows),
-        "traces_with_receipt": len(present),
+        "valid_receipts": len(valid),
+        "missing_receipts": missing,
+        "malformed_receipts": len(malformed),
         "distinct_receipts": distinct,
+        "malformed_examples": malformed[:5],
         "accepted_digest_fields": list(EXECUTION_ARTIFACT_DIGESTS),
         "reason": reason,
     }

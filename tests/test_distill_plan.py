@@ -306,15 +306,27 @@ def trace(**over) -> dict:
         "source_class": "real",
         "provenance": {"teacher": "muse-glimmer", "repo": "muse-glimmer:30b",
                        "quantization": "fp8", "host": "rented-48gb",
-                       "license": "apache-2.0",
-                       # A well-formed trace names the artifact that produced
-                       # it. repo is a mutable tag and cannot: this is what a
-                       # future generator must record for a corpus to be
-                       # identity-complete. Tests about a MISSING receipt build
-                       # their own rows.
-                       "execution_artifact": {"manifest_digest": "9" * 64}},
+                       "license": "apache-2.0"},
     }
     row.update(over)
+    return row
+
+
+RECEIPT_DIGEST = "9a" * 32
+
+
+def trace_with_receipt(digest: str = RECEIPT_DIGEST, **over) -> dict:
+    """A trace that names the immutable artifact which produced it.
+
+    Deliberately NOT the default. Recording an execution-artifact receipt is a
+    new, mandatory provenance requirement, and burying it in the generic
+    fixture would let a future test pass because its shared fixture quietly had
+    stronger provenance than the scenario it claims to describe. Every positive
+    control that needs identity to be complete opts in here, visibly.
+    """
+    row = trace(**over)
+    row["provenance"] = dict(row["provenance"],
+                             execution_artifact={"manifest_digest": digest})
     return row
 
 
@@ -358,7 +370,8 @@ def test_unverified_identity_alone_blocks_trainable_as_is(tmp_path):
     That alone must be disqualifying: the compatibility key those digests carry
     is what chose the distillation mode, and it was never checked against real
     files."""
-    path = corpus(tmp_path, trace())
+    # opts in to a receipt so the ONLY thing left unverified is the registry
+    path = corpus(tmp_path, trace_with_receipt())
     report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
 
     assert report["fp8_gate"]["status"] == "MET"
@@ -388,7 +401,9 @@ def test_the_same_corpus_is_trainable_once_identity_is_verified(tmp_path, monkey
     monkeypatch.setattr(dp, "_resolve_teacher_specs",
                         lambda teachers, overrides: ({"muse-glimmer-30b": verified}, []))
 
-    report = dp.audit_corpus(corpus(tmp_path, trace()), TODAY)
+    # opts in explicitly: this control needs identity COMPLETE, which means the
+    # traces must name their artifact as well as the registry being verified
+    report = dp.audit_corpus(corpus(tmp_path, trace_with_receipt()), TODAY)
     assert report["identity_verification"] == {
         "all_verified": True,
         "registry_identity_ready": True,
@@ -406,13 +421,13 @@ def test_verified_identity_does_not_rescue_any_other_failure(tmp_path, monkeypat
                         lambda teachers, overrides: ({"muse-glimmer-30b": verified}, []))
 
     quantized = dp.audit_corpus(
-        corpus(tmp_path / "a", trace(**prov(quantization="int4_ollama",
+        corpus(tmp_path / "a", trace_with_receipt(**prov(quantization="int4_ollama",
                                             host="ai19-ollama"))), TODAY)
     assert quantized["identity_verification"]["all_verified"] is True
     assert quantized["trainable_as_is"] is False
 
     synthetic = dp.audit_corpus(
-        corpus(tmp_path / "b", trace(source_class="synthetic")), TODAY)
+        corpus(tmp_path / "b", trace_with_receipt(source_class="synthetic")), TODAY)
     assert synthetic["identity_verification"]["all_verified"] is True
     assert synthetic["trainable_as_is"] is False
 
@@ -744,8 +759,8 @@ def test_incomplete_required_attribution_blocks_trainable_as_is(tmp_path, monkey
     verified["digests_verified"] = True
     monkeypatch.setattr(dp, "_resolve_teacher_specs",
                         lambda teachers, overrides: ({"muse-glimmer-30b": verified}, []))
-    path = declaring_pass(tmp_path, [trace(**{"harness_provenance": harness_block()}),
-                                     trace()])
+    path = declaring_pass(tmp_path, [trace_with_receipt(**{"harness_provenance": harness_block()}),
+                                     trace_with_receipt()])
     report = dp.audit_corpus(path, TODAY)
     assert report["fp8_gate"]["status"] == "MET"
     assert report["identity_verification"]["all_verified"] is True
@@ -838,13 +853,8 @@ def test_a_verified_registry_cannot_retroactively_upgrade_the_legacy_corpus(
     monkeypatch.setattr(dp, "_resolve_teacher_specs",
                         lambda names, overrides: ({"muse-glimmer-30b": spec}, []))
 
-    # rows shaped like the legacy corpus: a mutable tag and nothing else
-    def unreceipted():
-        row = trace()
-        row["provenance"] = {k: v for k, v in row["provenance"].items()
-                             if k != "execution_artifact"}
-        return row
-    path = declaring_pass(tmp_path, [unreceipted(), unreceipted()])
+    # plain trace(): a mutable tag and nothing else, like the legacy corpus
+    path = declaring_pass(tmp_path, [trace(), trace()])
     report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
     r = report["readiness"]
 
@@ -857,63 +867,187 @@ def test_a_verified_registry_cannot_retroactively_upgrade_the_legacy_corpus(
     assert report["authorizes_training"] is False
 
 
-def test_a_mutable_serving_alias_is_not_an_execution_artifact_receipt(tmp_path):
+def rows_with(artifact, n=1):
+    """n traces whose provenance carries exactly this execution_artifact value.
+    The sentinel `_ABSENT` omits the key entirely."""
+    out = []
+    for _ in range(n):
+        prov = {"repo": "muse-glimmer:30b", "host": "ai19-ollama",
+                "runtime": "ollama", "template_sha256": "a" * 64}
+        if artifact is not _ABSENT:
+            prov["execution_artifact"] = artifact
+        out.append({"provenance": prov})
+    return out
+
+
+_ABSENT = object()
+# hex LETTERS on purpose: "9"*64 is unchanged by .upper(), so a digest of
+# digits alone cannot test the lowercase rule.
+GOOD = "9a" * 32
+OTHER = "8b" * 32
+
+
+@pytest.mark.parametrize("label, artifact, ready, valid, missing, malformed", [
+    # absent is MISSING -- honestly incomplete, not a false claim
+    ("absent",             _ABSENT,                                False, 0, 1, 0),
+    # every present-but-unreadable shape is MALFORMED, never absence
+    ("null",               None,                                   False, 0, 0, 1),
+    ("empty mapping",      {},                                     False, 0, 0, 1),
+    ("scalar",             "sha256-ish",                           False, 0, 0, 1),
+    ("list",               [],                                     False, 0, 0, 1),
+    ("list with content",  [{"manifest_digest": GOOD}],            False, 0, 0, 1),
+    ("unknown key only",   {"artifact": GOOD},                     False, 0, 0, 1),
+    ("template only",      {"template_sha256": GOOD},              False, 0, 0, 1),
+    # the fail-open case: a valid first field must not mask a malformed second
+    ("valid then malformed", {"manifest_digest": GOOD,
+                              "blob_digest": "nope"},              False, 0, 0, 1),
+    ("malformed then valid", {"blob_digest": "nope",
+                              "manifest_digest": GOOD},            False, 0, 0, 1),
+    # two well-formed digests are two claims; nothing can say which is authoritative
+    ("two valid fields",   {"manifest_digest": GOOD,
+                            "blob_digest": GOOD},                  False, 0, 0, 1),
+    ("three valid fields", {"manifest_digest": GOOD, "blob_digest": GOOD,
+                            "model_digest": GOOD},                 False, 0, 0, 1),
+    # digest shape
+    ("uppercase",          {"manifest_digest": GOOD.upper()},      False, 0, 0, 1),
+    ("sha256: prefix",     {"manifest_digest": "sha256:" + GOOD},  False, 0, 0, 1),
+    ("short",              {"manifest_digest": GOOD[:63]},         False, 0, 0, 1),
+    ("long",               {"manifest_digest": GOOD + "0"},        False, 0, 0, 1),
+    ("non-hex",            {"manifest_digest": "z" * 64},          False, 0, 0, 1),
+    ("integer",            {"manifest_digest": 1234},              False, 0, 0, 1),
+    ("null digest",        {"manifest_digest": None},              False, 0, 0, 1),
+    # the only accepted shapes
+    ("valid manifest",     {"manifest_digest": GOOD},              True,  1, 0, 0),
+    ("valid blob",         {"blob_digest": GOOD},                  True,  1, 0, 0),
+    ("valid model",        {"model_digest": GOOD},                 True,  1, 0, 0),
+    ("valid plus extras",  {"manifest_digest": GOOD, "note": "x"}, True,  1, 0, 0),
+])
+def test_the_execution_artifact_state_table(label, artifact, ready, valid,
+                                            missing, malformed):
+    """Absent and malformed are different states, and a present-but-unreadable
+    receipt must never read as ordinary absence -- the fail-open bug this
+    repository already fixed once for harness provenance."""
+    result = dp.execution_artifact_receipts(rows_with(artifact))
+    assert result["ready"] is ready, label
+    assert result["valid_receipts"] == valid, label
+    assert result["missing_receipts"] == missing, label
+    assert result["malformed_receipts"] == malformed, label
+
+
+def test_a_mutable_serving_alias_is_not_an_execution_artifact_receipt():
     """repo/host/runtime are aliases. An Ollama tag can be re-pointed at other
-    bytes, so it cannot say what produced a trace."""
-    rows = [{"provenance": {"repo": "muse-glimmer:30b", "host": "ai19-ollama",
-                            "runtime": "ollama",
-                            "template_sha256": "a" * 64}}]
-    result = dp.execution_artifact_receipts(rows)
+    bytes, so it cannot say what produced a trace -- and its absence is
+    MISSING, not malformed."""
+    result = dp.execution_artifact_receipts(rows_with(_ABSENT))
     assert result["ready"] is False
-    assert result["traces_with_receipt"] == 0
+    assert result["missing_receipts"] == 1
+    assert result["malformed_receipts"] == 0
     assert "mutable serving aliases" in result["reason"]
 
 
-def test_template_sha256_is_not_accepted_as_an_artifact_receipt(tmp_path):
+def test_template_sha256_is_not_accepted_as_an_artifact_receipt():
     """It pins the rendered interface -- what the model was fed -- not the
-    model. Both matter; they are not the same claim."""
-    rows = [{"provenance": {"template_sha256": "b" * 64}}]
-    assert dp.execution_artifact_receipts(rows)["ready"] is False
+    model. Both matter; they are not the same claim. Note the alias rows all
+    carry template_sha256 and are still missing a receipt."""
+    assert dp.execution_artifact_receipts(rows_with(_ABSENT))["valid_receipts"] == 0
+    assert dp.execution_artifact_receipts(
+        rows_with({"template_sha256": GOOD}))["malformed_receipts"] == 1
 
 
 def test_a_complete_uniform_receipt_is_ready():
-    digest = "c" * 64
-    rows = [{"provenance": {"execution_artifact": {"manifest_digest": digest}}},
-            {"provenance": {"execution_artifact": {"manifest_digest": digest}}}]
-    result = dp.execution_artifact_receipts(rows)
+    result = dp.execution_artifact_receipts(rows_with({"manifest_digest": GOOD}, n=3))
     assert result["ready"] is True
-    assert result["traces_with_receipt"] == 2
-    assert result["distinct_receipts"] == [f"manifest_digest:{digest}"]
+    assert (result["valid_receipts"], result["missing_receipts"],
+            result["malformed_receipts"]) == (3, 0, 0)
+    assert result["distinct_receipts"] == [f"manifest_digest:{GOOD}"]
 
 
 def test_a_partially_receipted_corpus_is_not_ready():
     """Half a corpus naming its artifact cannot say what produced the rest."""
-    rows = [{"provenance": {"execution_artifact": {"blob_digest": "d" * 64}}},
-            {"provenance": {"repo": "muse-glimmer:30b"}}]
-    result = dp.execution_artifact_receipts(rows)
+    result = dp.execution_artifact_receipts(
+        rows_with({"manifest_digest": GOOD}) + rows_with(_ABSENT))
     assert result["ready"] is False
-    assert result["traces_with_receipt"] == 1
+    assert (result["valid_receipts"], result["missing_receipts"]) == (1, 1)
     assert "1/2" in result["reason"]
 
 
+def test_one_malformed_receipt_disqualifies_an_otherwise_complete_corpus():
+    """Not skipped, not outvoted by its neighbours."""
+    result = dp.execution_artifact_receipts(
+        rows_with({"manifest_digest": GOOD}, n=9) + rows_with({"manifest_digest": "nope"}))
+    assert result["ready"] is False
+    assert result["malformed_receipts"] == 1
+    assert "malformed" in result["reason"]
+
+
 def test_two_distinct_artifacts_in_one_corpus_are_not_ready():
-    rows = [{"provenance": {"execution_artifact": {"model_digest": "e" * 64}}},
-            {"provenance": {"execution_artifact": {"model_digest": "f" * 64}}}]
-    result = dp.execution_artifact_receipts(rows)
+    result = dp.execution_artifact_receipts(
+        rows_with({"manifest_digest": GOOD}) + rows_with({"manifest_digest": OTHER}))
     assert result["ready"] is False
     assert "2 distinct execution artifacts" in result["reason"]
 
 
-@pytest.mark.parametrize("bad", ["sha256:short", "A" * 64, "g" * 64, "", 12345,
-                                 "c" * 63])
-def test_a_malformed_receipt_is_refused_not_ignored(bad):
-    """A malformed digest must fail loudly. Silently treating it as absent
-    would let a typo look like an honest 'not recorded'."""
-    rows = [{"provenance": {"execution_artifact": {"manifest_digest": bad}}}]
-    result = dp.execution_artifact_receipts(rows)
+def test_the_same_digest_under_different_fields_is_still_two_artifacts():
+    """manifest_digest:X and blob_digest:X are different claims about where the
+    identity came from, so they are not interchangeable."""
+    result = dp.execution_artifact_receipts(
+        rows_with({"manifest_digest": GOOD}) + rows_with({"blob_digest": GOOD}))
     assert result["ready"] is False
-    assert "malformed" in result["reason"]
+    assert len(result["distinct_receipts"]) == 2
+
+
+@pytest.mark.requires_local_corpus
+def test_the_legacy_corpus_is_missing_receipts_not_malformed():
+    """The distinction matters: 136 traces that never recorded an artifact are
+    honestly incomplete. Reading them as malformed would accuse the generator
+    of writing something unreadable, and reading malformed as missing would let
+    a broken receipt pass as an honest gap."""
+    report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
+    artifact = report["execution_artifact"]
+    assert artifact["traces"] == 136
+    assert artifact["valid_receipts"] == 0
+    assert artifact["missing_receipts"] == 136
+    assert artifact["malformed_receipts"] == 0
+    assert artifact["ready"] is False
+    assert "mutable serving aliases" in artifact["reason"]
+
+
+@pytest.mark.parametrize("artifact", [
+    _ABSENT, None, {}, "scalar", [], {"unknown": 1},
+    {"manifest_digest": GOOD}, {"manifest_digest": GOOD, "blob_digest": "bad"},
+    {"manifest_digest": GOOD.upper()},
+])
+def test_the_three_counts_partition_the_corpus(artifact):
+    """valid + missing + malformed == traces, always.
+
+    This is what makes `malformed_receipts == 0` safe to state in the ready
+    rule even though it is redundant today: each trace lands in exactly one
+    bucket, so a malformed trace can never also be counted valid. A refactor
+    that let one trace contribute twice would break this partition first, and
+    the redundant clause would then start doing real work.
+    """
+    result = dp.execution_artifact_receipts(rows_with(artifact, n=4))
+    assert (result["valid_receipts"] + result["missing_receipts"]
+            + result["malformed_receipts"]) == result["traces"] == 4
+
+
+def test_ready_is_exactly_the_documented_four_part_rule():
+    """ready == traces > 0 and valid == traces and malformed == 0
+       and exactly one distinct receipt."""
+    for artifact, n in [(_ABSENT, 2), ({"manifest_digest": GOOD}, 2),
+                        ({"manifest_digest": "bad"}, 2), (None, 1), ({}, 3)]:
+        r = dp.execution_artifact_receipts(rows_with(artifact, n=n))
+        assert r["ready"] == (r["traces"] > 0
+                              and r["valid_receipts"] == r["traces"]
+                              and r["malformed_receipts"] == 0
+                              and len(r["distinct_receipts"]) == 1)
+    mixed = (rows_with({"manifest_digest": GOOD})
+             + rows_with({"manifest_digest": OTHER}))
+    r = dp.execution_artifact_receipts(mixed)
+    assert r["ready"] is False and len(r["distinct_receipts"]) == 2
 
 
 def test_an_empty_corpus_is_not_ready():
-    assert dp.execution_artifact_receipts([])["ready"] is False
+    result = dp.execution_artifact_receipts([])
+    assert result["ready"] is False
+    assert result["reason"] == "no traces"
