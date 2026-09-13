@@ -301,3 +301,73 @@ def test_the_shipped_qwen35_instruct_spec_pins_the_qualified_snapshot():
     assert vmi.SHA256_RE.match(template["sha256"])
     # A Git object id is a different type from a SHA-256 prompt digest.
     assert len(spec["revision"]) == 40
+
+
+# --- the teacher's SOURCE, pinned exactly (not its digests) -----------------
+#
+# This entry named meta-models/Muse-Glimmer-30B-assistant for months. That repo
+# is the DFlash speculative-decoding drafter, not this teacher: five layers,
+# MuseGlimmerAssistantModel, block_size 16, target_layer_ids into a deeper
+# parent, and no tokenizer or chat template at all -- because a drafter shares
+# its parent's. The teacher is the parent, meta-models/Muse-Glimmer-30B.
+#
+# The mistake was survivable precisely because nothing asserted the source, so
+# assert it: the positive value AND the negative, so the drafter cannot return
+# through an equality check written loosely against a similar-looking name.
+#
+# This says nothing about verification. The revisions are still placeholders and
+# digests_verified is still false; measuring the parent is a later, separate
+# change. Test 5 below is what keeps this file honest about that.
+
+MUSE_GLIMMER_PARENT = "meta-models/Muse-Glimmer-30B"
+MUSE_GLIMMER_DRAFTER = "meta-models/Muse-Glimmer-30B-assistant"
+
+
+def test_the_muse_glimmer_registry_names_the_parent_not_the_drafter():
+    spec = yaml.safe_load(
+        (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text())
+
+    # 1. the registry names the parent, and explicitly not the drafter
+    assert spec["model_id"] == MUSE_GLIMMER_PARENT
+    assert spec["model_id"] != MUSE_GLIMMER_DRAFTER
+
+    # 2. the tokenizer source is the parent
+    assert spec["tokenizer"]["model_id"] == MUSE_GLIMMER_PARENT
+    assert spec["tokenizer"]["model_id"] != MUSE_GLIMMER_DRAFTER
+
+    # 5. and none of this claims verification
+    assert spec["digests_verified"] is False
+    assert spec["revision"] == "REPLACE_WITH_PINNED_HUB_COMMIT"
+    assert spec["tokenizer"]["revision"] == "REPLACE_WITH_PINNED_HUB_COMMIT"
+    assert not vmi.SHA256_RE.match(str(spec["tokenizer"]["sha256"]))
+    assert not vmi.SHA256_RE.match(str(spec["chat_template"]["sha256"]))
+
+
+def test_the_muse_glimmer_serving_repos_agree_with_the_corrected_source():
+    """repos.bf16 lives in the serving config, and distill_plan reconciles it
+    against the registry model_id -- so a half-applied correction breaks the
+    planner rather than silently disagreeing. The quantized entries are
+    derivatives OF the parent and are unaffected."""
+    serving = yaml.safe_load(
+        (ROOT / "configs" / "teachers" / "muse-glimmer.yaml").read_text())
+    repos = serving["repos"]
+
+    # 3. the BF16 weights source is the parent
+    assert repos["bf16"] == MUSE_GLIMMER_PARENT
+    assert repos["bf16"] != MUSE_GLIMMER_DRAFTER
+
+    # 4. the derivatives are unchanged, and are derivatives of the parent
+    assert repos["fp8"] == "RedHatAI/Muse-Glimmer-30B-FP8-block"
+    assert repos["int4_mlx"] == "mlx-community/Muse-Glimmer-30B-4bit"
+
+    # Serving aliases may remain, but they are not identity evidence: an Ollama
+    # tag is mutable, and the legacy corpus records only this tag.
+    assert repos["int4_ollama"] == "muse-glimmer:30b"
+    assert repos["remote"] == "ollama/muse-glimmer-30b"
+
+    # the two files must keep pointing at each other
+    assert serving["registry_model"] == "muse-glimmer-30b"
+    spec = yaml.safe_load(
+        (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text())
+    assert spec["serving_config"] == "muse-glimmer"
+    assert repos["bf16"] == spec["model_id"]
