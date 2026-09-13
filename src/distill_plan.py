@@ -41,6 +41,7 @@ import argparse
 import datetime as _dt
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -731,6 +732,83 @@ def _harness_coverage(path: Path) -> dict:
     return block
 
 
+# An execution-artifact receipt: the immutable identity of the thing that
+# ACTUALLY RAN, recorded by the generator at generation time.
+#
+# A serving alias is not one. The legacy corpus records repo: "muse-glimmer:30b"
+# and nothing else — an Ollama tag that can be re-pointed at different bytes at
+# any moment, so it cannot say which weights produced those traces. Nor is the
+# registry one: verifying today's checkpoint says nothing about what ran months
+# ago. That is the whole reason this is a separate readiness component, and it
+# is why this function reads ONLY the traces.
+#
+# template_sha256 is deliberately not accepted either. It pins the rendered
+# interface — what the model was fed — not the model. Both matter; they are not
+# the same claim.
+EXECUTION_ARTIFACT_DIGESTS = ("manifest_digest", "blob_digest", "model_digest")
+_ARTIFACT_DIGEST_RE = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$")
+
+
+def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
+    """What the traces themselves say about the artifact that generated them.
+
+    Ready only when EVERY trace carries a well-formed receipt and they all name
+    the same artifact. A corpus half of whose traces name their artifact cannot
+    say what produced the other half, and two distinct artifacts in one corpus
+    is a mixed pass, not a verified one.
+    """
+    receipts: list[str | None] = []
+    malformed: list[str] = []
+    for row in rows:
+        prov = (row.get("provenance") or {})
+        block = prov.get("execution_artifact")
+        if not isinstance(block, dict):
+            receipts.append(None)
+            continue
+        found = None
+        for field in EXECUTION_ARTIFACT_DIGESTS:
+            value = block.get(field)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not _ARTIFACT_DIGEST_RE.match(value):
+                malformed.append(f"{field}={value!r}")
+                continue
+            found = f"{field}:{value}"
+            break
+        receipts.append(found)
+
+    present = [r for r in receipts if r]
+    distinct = sorted(set(present))
+    ready = bool(rows) and len(present) == len(rows) and len(distinct) == 1 \
+        and not malformed
+
+    if not rows:
+        reason = "no traces"
+    elif malformed:
+        reason = (f"{len(malformed)} malformed execution-artifact digest(s); "
+                  "a receipt must be a full lowercase sha256")
+    elif not present:
+        reason = ("no execution-artifact receipt recorded at generation time; "
+                  "the traces name only mutable serving aliases, which cannot "
+                  "identify the bytes that ran")
+    elif len(present) < len(rows):
+        reason = (f"only {len(present)}/{len(rows)} traces carry a receipt; the "
+                  "rest cannot say what produced them")
+    elif len(distinct) > 1:
+        reason = f"{len(distinct)} distinct execution artifacts in one corpus"
+    else:
+        reason = "every trace names the same immutable execution artifact"
+
+    return {
+        "ready": ready,
+        "traces": len(rows),
+        "traces_with_receipt": len(present),
+        "distinct_receipts": distinct,
+        "accepted_digest_fields": list(EXECUTION_ARTIFACT_DIGESTS),
+        "reason": reason,
+    }
+
+
 def audit_corpus(corpus: str | Path, today: _dt.date,
                  teacher_overrides: list | None = None) -> dict:
     """The mechanical limits of a promoted corpus, as a dict.
@@ -822,7 +900,16 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
     # checked against real files, so "trainable as is" would be a claim about a
     # checkpoint nobody confirmed. See src/verify_model_identity.py.
     unverified = [s["registry_model"] for s in freshness if not s["digests_verified"]]
-    identity_verified = bool(freshness) and not unverified
+    registry_identity_ready = bool(freshness) and not unverified
+
+    # Identity is two claims, not one, and conflating them let a corpus inherit
+    # a verification it had no right to. Qualifying today's registry entry says
+    # the CURRENT canonical checkpoint is pinned; it says nothing about which
+    # artifact generated traces months ago. Keep them apart so verifying a
+    # teacher can never retroactively upgrade history.
+    artifact = execution_artifact_receipts(rows)
+    execution_artifact_ready = artifact["ready"]
+    identity_verified = registry_identity_ready and execution_artifact_ready
 
     # Each requirement, named and reported separately. A single boolean says a
     # corpus is not trainable; it does not say WHY, and "still false" is not
@@ -832,6 +919,8 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
     readiness = {
         "fp8_ready": fp8_met,
         "source_ready": synthetic == 0,
+        "registry_identity_ready": registry_identity_ready,
+        "execution_artifact_ready": execution_artifact_ready,
         "identity_ready": identity_verified,
         "license_ready": bool(freshness)
                          and all(s["status"] == "FRESH" for s in freshness)
@@ -879,8 +968,11 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
         "readiness": readiness,
         "identity_verification": {
             "all_verified": identity_verified,
+            "registry_identity_ready": registry_identity_ready,
+            "execution_artifact_ready": execution_artifact_ready,
             "unverified_models": unverified,
         },
+        "execution_artifact": artifact,
         "limits": limits,
         "trainable_as_is": trainable_as_is,
         "authorizes_training": False,

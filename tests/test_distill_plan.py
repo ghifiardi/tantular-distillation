@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -305,7 +306,13 @@ def trace(**over) -> dict:
         "source_class": "real",
         "provenance": {"teacher": "muse-glimmer", "repo": "muse-glimmer:30b",
                        "quantization": "fp8", "host": "rented-48gb",
-                       "license": "apache-2.0"},
+                       "license": "apache-2.0",
+                       # A well-formed trace names the artifact that produced
+                       # it. repo is a mutable tag and cannot: this is what a
+                       # future generator must record for a corpus to be
+                       # identity-complete. Tests about a MISSING receipt build
+                       # their own rows.
+                       "execution_artifact": {"manifest_digest": "9" * 64}},
     }
     row.update(over)
     return row
@@ -360,7 +367,10 @@ def test_unverified_identity_alone_blocks_trainable_as_is(tmp_path):
     assert report["license_freshness"]["unresolved_corpus_teachers"] == []
 
     assert report["identity_verification"] == {
-        "all_verified": False, "unverified_models": ["muse-glimmer-30b"]}
+        "all_verified": False,
+        "registry_identity_ready": False,   # the only thing left to fix
+        "execution_artifact_ready": True,   # these traces name their artifact
+        "unverified_models": ["muse-glimmer-30b"]}
     assert report["trainable_as_is"] is False
     # The warning stays, and is the only thing left to fix.
     assert report["limits"] == [
@@ -380,7 +390,10 @@ def test_the_same_corpus_is_trainable_once_identity_is_verified(tmp_path, monkey
 
     report = dp.audit_corpus(corpus(tmp_path, trace()), TODAY)
     assert report["identity_verification"] == {
-        "all_verified": True, "unverified_models": []}
+        "all_verified": True,
+        "registry_identity_ready": True,
+        "execution_artifact_ready": True,
+        "unverified_models": []}
     assert report["limits"] == []
     assert report["trainable_as_is"] is True
 
@@ -755,11 +768,13 @@ def test_the_legacy_corpus_is_blocked_by_exactly_its_historical_reasons():
     report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
 
     assert report["readiness"] == {
-        "fp8_ready": False,        # int4_ollama traces
-        "source_ready": False,     # 136/136 synthetic
-        "identity_ready": False,   # digests_verified is not true
-        "license_ready": True,     # apache-2.0, reviewed and in date
-        "harness_ready": True,     # no declaration, no attribution: coherent
+        "fp8_ready": False,               # int4_ollama traces
+        "source_ready": False,            # 136/136 synthetic
+        "registry_identity_ready": False, # digests_verified is not true
+        "execution_artifact_ready": False,# only a mutable Ollama tag recorded
+        "identity_ready": False,          # the conjunction of the two above
+        "license_ready": True,            # apache-2.0, reviewed and in date
+        "harness_ready": True,            # no declaration, no attribution: coherent
     }
     assert report["trainable_as_is"] is False
 
@@ -786,3 +801,119 @@ def test_a_harness_disagreement_shows_up_as_a_named_blocker(tmp_path):
     assert report["readiness"]["harness_ready"] is False
     assert report["readiness"]["fp8_ready"] is True
     assert report["trainable_as_is"] is False
+
+
+# --- identity is two claims, not one ----------------------------------------
+#
+# Conflating them let a corpus inherit a verification it had no right to.
+# Qualifying the CURRENT registry entry says today's canonical checkpoint is
+# pinned; it says nothing about which artifact generated traces months ago. The
+# legacy corpus records only repo: "muse-glimmer:30b" -- an Ollama tag that can
+# be re-pointed -- so nothing in it identifies the bytes that ran.
+
+def test_identity_ready_is_exactly_the_conjunction_of_its_two_components(tmp_path):
+    """Derived, not computed alongside, so the parts and the verdict cannot
+    drift apart. Synthetic corpus: this property holds regardless of inputs and
+    should run wherever CI runs."""
+    path = declaring_pass(tmp_path, [trace(), trace()])
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    r = report["readiness"]
+    assert r["identity_ready"] == (
+        r["registry_identity_ready"] and r["execution_artifact_ready"])
+    assert report["trainable_as_is"] == all(r.values())
+
+
+def test_a_verified_registry_cannot_retroactively_upgrade_the_legacy_corpus(
+        tmp_path, monkeypatch):
+    """The defect this split exists to prevent, made reachable on purpose.
+
+    With the teacher's digests_verified true, registry_identity_ready becomes
+    true -- and identity_ready must STILL be false, because the traces name no
+    artifact. Before the split, this flipped identity_ready to true and marked a
+    corpus generated by an unpinned tag as identity-verified.
+    """
+    spec = dict(yaml.safe_load(
+        (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text()))
+    spec["digests_verified"] = True
+    monkeypatch.setattr(dp, "_resolve_teacher_specs",
+                        lambda names, overrides: ({"muse-glimmer-30b": spec}, []))
+
+    # rows shaped like the legacy corpus: a mutable tag and nothing else
+    def unreceipted():
+        row = trace()
+        row["provenance"] = {k: v for k, v in row["provenance"].items()
+                             if k != "execution_artifact"}
+        return row
+    path = declaring_pass(tmp_path, [unreceipted(), unreceipted()])
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    r = report["readiness"]
+
+    # the premise really did flip -- otherwise this test proves nothing
+    assert r["registry_identity_ready"] is True
+    # ...and the verdict still refuses
+    assert r["execution_artifact_ready"] is False
+    assert r["identity_ready"] is False
+    assert report["trainable_as_is"] is False
+    assert report["authorizes_training"] is False
+
+
+def test_a_mutable_serving_alias_is_not_an_execution_artifact_receipt(tmp_path):
+    """repo/host/runtime are aliases. An Ollama tag can be re-pointed at other
+    bytes, so it cannot say what produced a trace."""
+    rows = [{"provenance": {"repo": "muse-glimmer:30b", "host": "ai19-ollama",
+                            "runtime": "ollama",
+                            "template_sha256": "a" * 64}}]
+    result = dp.execution_artifact_receipts(rows)
+    assert result["ready"] is False
+    assert result["traces_with_receipt"] == 0
+    assert "mutable serving aliases" in result["reason"]
+
+
+def test_template_sha256_is_not_accepted_as_an_artifact_receipt(tmp_path):
+    """It pins the rendered interface -- what the model was fed -- not the
+    model. Both matter; they are not the same claim."""
+    rows = [{"provenance": {"template_sha256": "b" * 64}}]
+    assert dp.execution_artifact_receipts(rows)["ready"] is False
+
+
+def test_a_complete_uniform_receipt_is_ready():
+    digest = "c" * 64
+    rows = [{"provenance": {"execution_artifact": {"manifest_digest": digest}}},
+            {"provenance": {"execution_artifact": {"manifest_digest": digest}}}]
+    result = dp.execution_artifact_receipts(rows)
+    assert result["ready"] is True
+    assert result["traces_with_receipt"] == 2
+    assert result["distinct_receipts"] == [f"manifest_digest:{digest}"]
+
+
+def test_a_partially_receipted_corpus_is_not_ready():
+    """Half a corpus naming its artifact cannot say what produced the rest."""
+    rows = [{"provenance": {"execution_artifact": {"blob_digest": "d" * 64}}},
+            {"provenance": {"repo": "muse-glimmer:30b"}}]
+    result = dp.execution_artifact_receipts(rows)
+    assert result["ready"] is False
+    assert result["traces_with_receipt"] == 1
+    assert "1/2" in result["reason"]
+
+
+def test_two_distinct_artifacts_in_one_corpus_are_not_ready():
+    rows = [{"provenance": {"execution_artifact": {"model_digest": "e" * 64}}},
+            {"provenance": {"execution_artifact": {"model_digest": "f" * 64}}}]
+    result = dp.execution_artifact_receipts(rows)
+    assert result["ready"] is False
+    assert "2 distinct execution artifacts" in result["reason"]
+
+
+@pytest.mark.parametrize("bad", ["sha256:short", "A" * 64, "g" * 64, "", 12345,
+                                 "c" * 63])
+def test_a_malformed_receipt_is_refused_not_ignored(bad):
+    """A malformed digest must fail loudly. Silently treating it as absent
+    would let a typo look like an honest 'not recorded'."""
+    rows = [{"provenance": {"execution_artifact": {"manifest_digest": bad}}}]
+    result = dp.execution_artifact_receipts(rows)
+    assert result["ready"] is False
+    assert "malformed" in result["reason"]
+
+
+def test_an_empty_corpus_is_not_ready():
+    assert dp.execution_artifact_receipts([])["ready"] is False
