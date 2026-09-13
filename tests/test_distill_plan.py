@@ -1005,8 +1005,10 @@ def test_a_complete_uniform_receipt_is_ready():
     assert result["ready"] is True
     assert (result["valid_receipts"], result["missing_receipts"],
             result["malformed_receipts"]) == (3, 0, 0)
-    assert result["distinct_receipts"] == [
-        f"{MUSE_REGISTRY}|{MUSE_MODEL_ID}|{RECEIPT_REVISION}|manifest_digest:{GOOD}"]
+    assert result["distinct_receipts"] == [{
+        "registry_model": MUSE_REGISTRY, "model_id": MUSE_MODEL_ID,
+        "revision": RECEIPT_REVISION, "digest_field": "manifest_digest",
+        "digest": GOOD}]
 
 
 def test_a_partially_receipted_corpus_is_not_ready():
@@ -1182,6 +1184,86 @@ def test_a_receipt_naming_an_unresolved_teacher_refuses(tmp_path):
     ea = report["execution_artifact"]
     assert ea["ready"] is False
     assert any("not a resolved teacher" in p for p in ea["binding_problems"])
+
+
+# --- the identity is structured, so delimiters are inert --------------------
+
+@pytest.mark.parametrize("hostile", [
+    "a|b", "|", "a|b|c|d|e|f", "muse|glimmer|30b",
+    '{"json":"like"}', "with spaces", "quote\"inside", "tab\there",
+    "newline\nhere", "unicode-\u00e9\u00e8", "\\backslash",
+])
+def test_delimiters_in_binding_values_cannot_shift_field_boundaries(hostile):
+    """These values come from the traces. A delimited identity string would
+    split into the wrong number of fields and crash the binder or silently
+    move a value into the wrong slot; escaping would only relocate the bug."""
+    result = dp.execution_artifact_receipts(
+        rows_with(receipt(registry_model=hostile), n=2))
+    assert result["ready"] is True
+    assert result["malformed_receipts"] == 0
+    identity = result["distinct_receipts"][0]
+    assert isinstance(identity, dict)
+    assert identity["registry_model"] == hostile        # verbatim, unsplit
+    assert identity["model_id"] == MUSE_MODEL_ID        # boundary intact
+    assert identity["revision"] == RECEIPT_REVISION
+    assert identity["digest"] == RECEIPT_DIGEST
+
+
+def test_a_hostile_binding_value_refuses_at_the_binder_without_crashing(tmp_path):
+    """It must be REFUSED, not merely survive parsing: no registry entry is
+    named 'a|b'."""
+    report = audit_with(tmp_path, receipt(registry_model="a|b"))
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False
+    assert any("not a resolved teacher" in p for p in ea["binding_problems"])
+
+
+# --- one corpus, one canonical teacher --------------------------------------
+
+def test_a_corpus_mixing_teacher_identities_cannot_be_bound(tmp_path):
+    """Per-trace binding, enforced at the corpus level.
+
+    Two traces, two different declared teachers resolving to two different
+    registry models, both carrying the SAME otherwise-valid receipt. Parsing is
+    ready -- one distinct receipt, nothing malformed -- so the refusal comes
+    specifically from the corpus mixing teacher identities, not from the
+    digests differing. Without this check the Qwen-attributed trace would never
+    be compared with its own registry entry.
+    """
+    rows = []
+    for teacher in ("muse-glimmer", "qwen"):
+        row = trace()
+        row["provenance"] = dict(row["provenance"], teacher=teacher,
+                                 execution_artifact=receipt())
+        rows.append(row)
+    path = declaring_pass(tmp_path, rows)
+
+    # the receipts themselves are fine: one distinct identity, none malformed
+    parsed = dp.execution_artifact_receipts(rows)
+    assert parsed["ready"] is True
+    assert len(parsed["distinct_receipts"]) == 1
+    assert parsed["malformed_receipts"] == 0
+
+    two_teachers = {MUSE_REGISTRY: bound_spec(),
+                    "qwen35-9b-instruct": bound_spec(
+                        model_id="Qwen/Qwen3.5-9B")}
+    import unittest.mock as _mock
+    with _mock.patch.object(dp, "_resolve_teacher_specs",
+                            lambda teachers, overrides: (two_teachers, [])):
+        report = dp.audit_corpus(path, TODAY)
+
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False
+    assert ea["bound"] is False
+    assert any("mixes teacher identities" in p for p in ea["binding_problems"])
+    assert report["readiness"]["execution_artifact_ready"] is False
+    assert report["readiness"]["identity_ready"] is False
+
+
+def test_a_single_teacher_corpus_with_a_matching_receipt_still_binds(tmp_path):
+    """The control for the rule above: one canonical teacher binds normally."""
+    report = audit_with(tmp_path, receipt())
+    assert report["execution_artifact"]["bound"] is True
 
 
 def test_an_empty_corpus_is_not_ready():

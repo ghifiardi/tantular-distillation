@@ -765,6 +765,13 @@ _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _ARTIFACT_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
+def canonical_receipt_key(receipt: dict[str, str]) -> str:
+    """A stable key for deduplicating receipts. Internal only: never parsed
+    back, and never the thing the binder compares."""
+    return json.dumps(receipt, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"))
+
+
 def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
     """What the traces themselves say about the artifact that generated them.
 
@@ -833,10 +840,21 @@ def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
             malformed.append(problem)
             continue
 
-        valid.append("|".join([binding["registry_model"], binding["model_id"],
-                               binding["revision"], f"{field}:{value}"]))
+        # Structured, never a delimited string. These values come from the
+        # traces, so a registry_model containing the delimiter would otherwise
+        # split into the wrong number of fields and crash the binder or shift
+        # the field boundaries. Escaping would only move the problem.
+        valid.append({
+            "registry_model": binding["registry_model"],
+            "model_id": binding["model_id"],
+            "revision": binding["revision"],
+            "digest_field": field,
+            "digest": value,
+        })
 
-    distinct = sorted(set(valid))
+    # Canonical JSON is a dedupe/sort KEY only; the receipts stay structured.
+    by_key = {canonical_receipt_key(r): r for r in valid}
+    distinct = [by_key[k] for k in sorted(by_key)]
     ready = (len(rows) > 0
              and len(valid) == len(rows)
              and not malformed
@@ -887,8 +905,19 @@ def bind_execution_artifact(artifact: dict[str, Any],
     if not artifact["ready"]:
         return result                        # already refused on shape
 
-    registry_model, model_id, revision, _ = artifact["distinct_receipts"][0].split("|")
+    receipt = artifact["distinct_receipts"][0]      # a dict, not a parsed string
+    registry_model = receipt["registry_model"]
     problems: list[str] = []
+
+    # SINGLE-TEACHER POLICY. One corpus, one execution artifact -- so one
+    # canonical teacher. Otherwise a receipt naming teacher A would be checked
+    # only against A's spec while traces attributed to teacher B rode along
+    # unexamined, which is corpus-level binding pretending to be per-trace.
+    if len(specs) > 1:
+        problems.append(
+            f"corpus mixes teacher identities {sorted(specs)}; a single "
+            "execution artifact cannot have produced traces attributed to more "
+            "than one registry model")
 
     spec = specs.get(registry_model)
     if spec is None:
@@ -896,18 +925,19 @@ def bind_execution_artifact(artifact: dict[str, Any],
             f"receipt names registry_model {registry_model!r}, which is not a "
             f"resolved teacher of this corpus (resolved: {sorted(specs)})")
     else:
-        if spec.get("model_id") != model_id:
+        if spec.get("model_id") != receipt["model_id"]:
             problems.append(
-                f"receipt model_id {model_id!r} != registry "
+                f"receipt model_id {receipt['model_id']!r} != registry "
                 f"{spec.get('model_id')!r} for {registry_model!r}")
         pinned = str(spec.get("revision") or "")
         if not _COMMIT_RE.match(pinned):
             problems.append(
                 f"registry {registry_model!r} has no pinned revision "
                 f"({pinned!r}); a receipt cannot be bound to a placeholder")
-        elif pinned != revision:
+        elif pinned != receipt["revision"]:
             problems.append(
-                f"receipt revision {revision!r} != registry pinned {pinned!r}")
+                f"receipt revision {receipt['revision']!r} != registry pinned "
+                f"{pinned!r}")
 
     result["binding_problems"] = problems
     result["bound"] = not problems
