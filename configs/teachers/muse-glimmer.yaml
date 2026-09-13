@@ -23,7 +23,10 @@ license: apache-2.0
 
 repos:
   fp8: RedHatAI/Muse-Glimmer-30B-FP8-block
-  bf16: meta-models/Muse-Glimmer-30B-assistant
+  # The PARENT, not the -assistant repo: that one is the DFlash drafter, a
+  # five-layer speculative-decoding companion, not this teacher's weights.
+  # distill_plan reconciles this against the registry model_id.
+  bf16: meta-models/Muse-Glimmer-30B
   int4_mlx: mlx-community/Muse-Glimmer-30B-4bit   # Metal only, validation scale
   # ai19's own Ollama tag, reached directly over the SSH tunnel.
   int4_ollama: muse-glimmer:30b
