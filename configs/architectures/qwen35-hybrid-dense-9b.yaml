@@ -13,7 +13,17 @@ expected:
   # three linear_attention then one full_attention, repeated 8x
   layer_pattern: [linear_attention, linear_attention, linear_attention, full_attention]
   layer_pattern_repeat: 8
-signature: ARCH_SIGNATURE_QWEN35_9B   # placeholder; fill from real config.json
+# Recomputed independently from the pinned instruct snapshot -- NOT copied from
+# anywhere. Source: Qwen/Qwen3.5-9B at commit
+# c202236235762e1c871ad0ccb60c8ee5ba337b9a, config.json sha256
+# d0883072e01861ed0b2d47be3c16c36a8e81c224c7ffaa310c6558fb3f932b05.
+#
+# This value also equals the one measured from Qwen3.5-9B-Base, because that
+# release ships a byte-identical config.json. The signature identifies
+# architecture SHAPE, not checkpoint identity: sharing it means the two
+# releases have the same architecture, not that they are the same checkpoint.
+# What makes it pinnable is the provenance above, never the digits.
+signature: 52a3c9e2c895c0dc3d81abbb24e6463256cf3869f6e7343974f773a3f002096d
 
 # 8 of 32 layers are full-attention; 24 are linear-attention; MLP on all 32.
 # Names are load-bearing: transformers exposes split in_proj_*, vLLM fuses the

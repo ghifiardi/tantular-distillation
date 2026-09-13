@@ -109,13 +109,28 @@ def test_a_config_without_a_profile_is_refused():
         tq.load_architecture_profile({"base_model": "Qwen/Qwen3.5-9B"})
 
 
-def test_the_9b_profile_signature_is_still_a_placeholder():
-    """Documented state, not an aspiration: no Qwen3.5-9B *instruct* snapshot is
-    available locally, so no real signature has been measured. The trainer
-    therefore aborts before LoRA attaches — which is the fail-closed outcome,
-    not an oversight. Delete this test when the signature is pinned from the
-    product checkpoint's own config.json.
+# Measured from Qwen/Qwen3.5-9B at commit
+# c202236235762e1c871ad0ccb60c8ee5ba337b9a, whose config.json is
+# d0883072e01861ed0b2d47be3c16c36a8e81c224c7ffaa310c6558fb3f932b05.
+INSTRUCT_9B_SIGNATURE = \
+    "52a3c9e2c895c0dc3d81abbb24e6463256cf3869f6e7343974f773a3f002096d"
+
+
+def test_the_9b_profile_pins_the_measured_instruct_signature():
+    """Replaces "the signature is still a placeholder".
+
+    That was true while no instruct snapshot existed locally, and the trainer
+    aborting before LoRA attached was the fail-closed outcome. The snapshot has
+    now been acquired metadata-only and the signature recomputed from its own
+    config.json, so the honest assertion is the exact pin.
+
+    This value also equals the one measured from Qwen3.5-9B-Base, which ships a
+    byte-identical config.json. That is shared architecture SHAPE, not shared
+    checkpoint identity — the signature deliberately says nothing about
+    weights, instruction tuning or chat-template behaviour. What makes it
+    pinnable is the provenance recorded above, never the digits.
     """
     loaded = yaml.safe_load(
         (ROOT / "configs" / "architectures" / "qwen35-hybrid-dense-9b.yaml").read_text())
-    assert not tq.SIGNATURE_RE.match(str(loaded["signature"]))
+    assert tq.SIGNATURE_RE.match(str(loaded["signature"])), "must be a real digest"
+    assert loaded["signature"] == INSTRUCT_9B_SIGNATURE
