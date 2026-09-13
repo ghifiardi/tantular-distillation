@@ -252,3 +252,52 @@ def test_key_order_in_tokenizer_config_is_not_a_difference(registry):
     (snapshot / "tokenizer_config.json").write_text(
         json.dumps(dict(reversed(list(config.items()))), indent=2), encoding="utf-8")
     assert vmi.tokenizer_digest(snapshot)[0] == before
+
+
+# --- the shipped spec, pinned exactly --------------------------------------
+#
+# Everything above proves the MEASUREMENT is sound: the digest covers the right
+# files, ignores key order, moves when a prompt changes, refuses a missing
+# snapshot. None of it pins what is actually checked in. A revision or digest
+# could be edited to another syntactically valid value and the whole suite
+# would stay green, because no test reads configs/models/qwen35-9b-instruct.yaml
+# and says what it must contain.
+#
+# The architecture profile already has that assertion. This is its counterpart
+# for model identity. The expectations below are LITERALS on purpose: reading
+# them from the qualification document would make the test agree with whatever
+# the document said, which checks nothing.
+#
+# Measured from Qwen/Qwen3.5-9B at commit
+# c202236235762e1c871ad0ccb60c8ee5ba337b9a, metadata-only, offline. See
+# docs/QWEN35_9B_IDENTITY_QUALIFICATION.md for the acquisition and the proof no
+# weights were downloaded.
+
+def test_the_shipped_qwen35_instruct_spec_pins_the_qualified_snapshot():
+    spec = yaml.safe_load(
+        (ROOT / "configs" / "models" / "qwen35-9b-instruct.yaml").read_text())
+
+    assert spec["model_id"] == "Qwen/Qwen3.5-9B"
+    assert spec["revision"] == "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+
+    tokenizer = spec["tokenizer"]
+    assert tokenizer["model_id"] == "Qwen/Qwen3.5-9B"
+    assert tokenizer["revision"] == "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+    assert tokenizer["sha256"] == (
+        "6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af")
+
+    template = spec["chat_template"]
+    assert template["source"] == "model"
+    assert template["sha256"] == (
+        "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715")
+
+    assert spec["architecture_profile"] == "qwen35-hybrid-dense-9b"
+    assert spec["digests_verified"] is True
+
+    # The tokenizer sha256 is the compatibility key that selects the
+    # distillation mode, so it must be a real digest, never a placeholder that
+    # merely looks filled in.
+    assert vmi.SHA256_RE.match(tokenizer["sha256"])
+    assert vmi.SHA256_RE.match(template["sha256"])
+    # A Git object id is a different type from a SHA-256 prompt digest.
+    assert len(spec["revision"]) == 40
