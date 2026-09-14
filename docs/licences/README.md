@@ -48,6 +48,29 @@ the verifier treats a binding mismatch as fatal.
 Any edit — a source added, a rationale reworded, a different reviewer — moves the
 digest and invalidates the registry entry until it is reviewed again.
 
+## `--write` never replaces a valid digest
+
+Four states, decided before anything is written:
+
+| registry `evidence_sha256` | state | behaviour |
+|---|---|---|
+| equals this record's digest | `MATCHED` | no-op |
+| placeholder or empty | `UNRECORDED` | `--write` fills it |
+| a **different** valid digest | `SUPERSEDED` | refuses, in both modes |
+| missing, non-string, or not exactly one field | `UNREADABLE` | refuses |
+
+`SUPERSEDED` is the state the tool exists for. A valid digest on file that no
+longer matches the record means the reviewed document changed *after* it was
+pinned. That mismatch is the only signal that the decision on file is no longer
+the decision that was reviewed, so re-pinning it automatically would make a
+tamper-evidence tool erase the evidence of tampering.
+
+Re-review is still possible, and deliberately manual: re-review the record,
+clear `license.evidence_sha256` in the same commit, then run `--write`. The
+clearing is visible in the diff, which is the point.
+
+A refused run writes nothing. The registry file is byte-identical afterwards.
+
 ## Writing one
 
 1. Copy `TEMPLATE.md` to `docs/licences/<registry-name>.md`.
@@ -62,6 +85,8 @@ digest and invalidates the registry entry until it is reviewed again.
    and the verifier refuses a machine byline.
 6. Commit the record, align the registry's `output_training_permitted` with it,
    then run the verifier with `--write`.
+7. If the record ever changes afterwards, the verifier refuses until someone
+   clears the recorded digest as part of re-reviewing it.
 
 No record has been written yet. All three shipped registry entries still carry
 placeholders and are correctly refused by the licence gate.

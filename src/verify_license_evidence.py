@@ -29,6 +29,20 @@ SHAPE and that they are bound to a model_id and revision, but it cannot confirm
 that they are the hashes of real documents. That confirmation happens once, by a
 person, at review time — which is the step the whole record exists to capture.
 
+WHAT --write WILL NOT DO. It never replaces a digest that is already valid. Four
+states, decided before anything is written:
+
+  MATCHED      the registry records this exact record -> no-op
+  UNRECORDED   a placeholder or empty value           -> --write fills it
+  SUPERSEDED   a DIFFERENT valid digest is on file    -> REFUSE, both modes
+  UNREADABLE   no single readable field to act on     -> REFUSE
+
+SUPERSEDED is the state this tool exists for. A valid digest on file that no
+longer matches the record means the reviewed document changed after it was
+pinned. Re-pinning it automatically would make a tamper-evidence tool erase the
+evidence of tampering. Clearing the field is a person's deliberate act, visible
+in the same commit as the re-review.
+
 NO NETWORK, NO CREDENTIAL, NO MODEL. Reads two local files and writes at most one.
 """
 from __future__ import annotations
@@ -51,6 +65,8 @@ SOURCE_KEYS = ("path", "sha256")
 DETERMINATION_KEYS = ("output_training_permitted", "rationale")
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_EVIDENCE_LINE_RE = re.compile(r"^(\s*evidence_sha256:[ \t]*)(\S+)(.*)$",
+                               re.MULTILINE)
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 # A reviewer is a person who can be asked what they meant. This catches the
@@ -285,17 +301,52 @@ def bind_to_spec(record: dict, spec: dict, name: str) -> None:
             + "\n  - ".join(problems))
 
 
+MATCHED = "MATCHED"            # the registry already records this record
+UNRECORDED = "UNRECORDED"      # no evidence yet: a placeholder, or empty
+SUPERSEDED = "SUPERSEDED"      # a DIFFERENT valid digest is already on file
+UNREADABLE = "UNREADABLE"      # nowhere safe to read or write the field
+
+
+def evidence_lines(model_path: Path) -> int:
+    return len(_EVIDENCE_LINE_RE.findall(
+        model_path.read_text(encoding="utf-8")))
+
+
+def classify_registry_evidence(spec: dict, model_path: Path, digest: str) -> str:
+    """What the registry currently says, relative to this record.
+
+    The dangerous state is SUPERSEDED: a valid digest is already recorded and
+    the record now hashes to something else. That means the reviewed document
+    changed after it was pinned. Silently re-pinning it would make this tool the
+    opposite of tamper-evidence — it would erase the only signal that the
+    decision on file is no longer the decision that was reviewed. So it refuses,
+    in report-only mode as well as under --write, and a person clears the field
+    as a deliberate, visible part of the re-review.
+    """
+    license_block = spec.get("license")
+    if not isinstance(license_block, dict) or "evidence_sha256" not in license_block:
+        return UNREADABLE
+    current = license_block["evidence_sha256"]
+    if not isinstance(current, str):
+        return UNREADABLE
+    if evidence_lines(model_path) != 1:
+        return UNREADABLE
+    if _SHA256_RE.fullmatch(current):
+        return MATCHED if current == digest else SUPERSEDED
+    return UNRECORDED
+
+
 def write_evidence(model_path: Path, digest: str) -> None:
     """Replace the evidence digest in place, leaving the file otherwise byte
     identical. A YAML round-trip would drop the comments that explain the
     entry, and those comments are half of why the registry is readable."""
     text = model_path.read_text(encoding="utf-8")
-    pattern = re.compile(r"^(\s*evidence_sha256:[ \t]*)(\S+)(.*)$", re.MULTILINE)
-    found = pattern.findall(text)
+    found = _EVIDENCE_LINE_RE.findall(text)
     if len(found) != 1:
         die(f"expected exactly one evidence_sha256 line in {model_path.name}, "
             f"found {len(found)}")
-    text = pattern.sub(lambda m: f"{m.group(1)}{digest}{m.group(3)}", text, count=1)
+    text = _EVIDENCE_LINE_RE.sub(
+        lambda m: f"{m.group(1)}{digest}{m.group(3)}", text, count=1)
     model_path.write_text(text, encoding="utf-8")
 
 
@@ -336,15 +387,33 @@ def main(argv: list[str] | None = None) -> int:
         print(f"source            {source['sha256']}  {source['path']}")
     print(f"record_sha256     {record['record_sha256']}")
 
-    current = (spec.get("license") or {}).get("evidence_sha256")
+    state = classify_registry_evidence(spec, model_path, record["record_sha256"])
+    print(f"registry_state    {state}")
+
+    if state == UNREADABLE:
+        die(f"{model_path.name} has no single readable license.evidence_sha256 "
+            "field. Nothing here can be verified or filled until it does.")
+
+    if state == SUPERSEDED:
+        current = spec["license"]["evidence_sha256"]
+        die(f"{model_path.name} already records a different valid digest.\n"
+            f"  recorded  {current}\n"
+            f"  record    {record['record_sha256']}\n"
+            "The reviewed document changed after it was pinned. Overwriting the "
+            "recorded digest would erase the only evidence that the decision on "
+            "file is no longer the decision that was reviewed. Re-review the "
+            "record, clear license.evidence_sha256 in the same commit, and write "
+            "the new digest deliberately.")
+
+    if state == MATCHED:
+        print("registry          already records this record; nothing to do")
+        return 0
+
     if args.write:
         write_evidence(model_path, record["record_sha256"])
         print(f"WROTE             license.evidence_sha256 in {model_path.name}")
-    elif current == record["record_sha256"]:
-        print("registry          already records this digest")
     else:
-        print(f"registry          records {current!r}; re-run with --write to "
-              "update it")
+        print("registry          records no evidence yet; re-run with --write")
     return 0
 
 

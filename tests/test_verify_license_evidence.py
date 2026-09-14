@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 import verify_license_evidence as vle                          # noqa: E402
 
+_EVIDENCE_SUB = vle._EVIDENCE_LINE_RE
+
 MODEL_ID = "example-org/Example-Teacher-7B"
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 SRC_A = "a" * 64
@@ -398,26 +400,128 @@ def test_a_report_only_run_writes_nothing(repo):
     assert model.read_text() == before
 
 
-def test_write_refuses_a_registry_with_no_single_evidence_line(repo, capsys):
+# --- the four states, and the one that must refuse --------------------------
+#
+# This replaces a test that pinned the OPPOSITE behaviour: it edited a record,
+# re-ran --write, and asserted the registry digest had moved. That treated
+# silent re-pinning as success. A valid digest already on file that no longer
+# matches the record is the single signal that a reviewed document changed after
+# it was pinned; a tool that overwrites it erases the evidence it exists to
+# preserve.
+
+def pinned(repo) -> tuple[Path, str]:
+    """A record written and pinned: the registry now holds a valid digest."""
     write_record(repo)
+    assert run("example-teacher-7b", "--write") == 0
     model = repo / "configs" / "models" / "example-teacher-7b.yaml"
-    model.write_text("".join(line for line in model.read_text().splitlines(True)
-                             if "evidence_sha256" not in line))
-    refuses("example-teacher-7b", "--write")
-    assert "exactly one evidence_sha256" in capsys.readouterr().err
+    return model, model.read_text()
 
 
-def test_rewriting_after_an_edit_moves_the_registry_digest(repo):
-    """The whole point: editing the record invalidates the recorded digest."""
+def test_state_is_unrecorded_then_matched(repo, capsys):
     write_record(repo)
-    run("example-teacher-7b", "--write")
-    model = repo / "configs" / "models" / "example-teacher-7b.yaml"
-    first = yaml.safe_load(model.read_text())["license"]["evidence_sha256"]
+    assert run("example-teacher-7b") == 0
+    assert f"registry_state    {vle.UNRECORDED}" in capsys.readouterr().out
+    assert run("example-teacher-7b", "--write") == 0
+    capsys.readouterr()
+    assert run("example-teacher-7b") == 0
+    assert f"registry_state    {vle.MATCHED}" in capsys.readouterr().out
+
+
+def test_re_writing_an_unchanged_record_is_a_no_op(repo):
+    model, after_first = pinned(repo)
+    assert run("example-teacher-7b", "--write") == 0
+    assert model.read_text() == after_first, "a matched write must change nothing"
+
+
+def test_a_changed_record_cannot_overwrite_an_existing_valid_digest(repo, capsys):
+    """The correction this test file exists to enforce."""
+    model, pinned_text = pinned(repo)
+    capsys.readouterr()
 
     write_record(repo, body=BODY + "\nReconsidered after a second reading.\n")
-    run("example-teacher-7b", "--write")
-    second = yaml.safe_load(model.read_text())["license"]["evidence_sha256"]
-    assert first != second
+    refuses("example-teacher-7b", "--write")
+
+    err = capsys.readouterr().err
+    assert vle.SUPERSEDED in err or "different valid digest" in err
+    assert model.read_text() == pinned_text, \
+        "the registry must be byte-identical after a refusal"
+
+
+def test_a_changed_record_refuses_in_report_only_mode_too(repo, capsys):
+    """Drift is an integrity failure, not a suggestion to re-run with --write."""
+    model, pinned_text = pinned(repo)
+    capsys.readouterr()
+    write_record(repo, determination={"output_training_permitted": False,
+                                      "rationale": RATIONALE + " Revised."})
+    refuses("example-teacher-7b")
+    assert model.read_text() == pinned_text
+
+
+@pytest.mark.parametrize("edit", [
+    {"reviewed_by": "C. Other <c@example.com>"},
+    {"reviewed_at": "2026-03-01"},
+    {"sources": [{"path": "LICENSE", "sha256": "d" * 64}]},
+])
+def test_any_edit_to_a_pinned_record_refuses_rather_than_re_pinning(repo, edit, capsys):
+    model, pinned_text = pinned(repo)
+    capsys.readouterr()
+    write_record(repo, **edit)
+    refuses("example-teacher-7b", "--write")
+    assert model.read_text() == pinned_text
+    assert "changed after it was pinned" in capsys.readouterr().err
+
+
+def test_the_refusal_names_both_digests(repo, capsys):
+    """A reader must be able to tell which digest is which without re-running."""
+    model, _ = pinned(repo)
+    recorded = yaml.safe_load(model.read_text())["license"]["evidence_sha256"]
+    capsys.readouterr()
+    path = write_record(repo, body=BODY + "\nRevised.\n")
+    refuses("example-teacher-7b", "--write")
+    err = capsys.readouterr().err
+    assert recorded in err
+    assert hashlib.sha256(path.read_bytes()).hexdigest() in err
+
+
+def test_clearing_the_field_is_the_deliberate_way_forward(repo):
+    """Re-review is possible, but a person must clear the digest to do it."""
+    model, _ = pinned(repo)
+    write_record(repo, body=BODY + "\nRevised after re-review.\n")
+    refuses("example-teacher-7b", "--write")
+
+    text = model.read_text()
+    model.write_text(_EVIDENCE_SUB.sub(
+        lambda m: f"{m.group(1)}LICENSE_EVIDENCE_DIGEST_EXAMPLE{m.group(3)}", text))
+    assert run("example-teacher-7b", "--write") == 0
+    digest = yaml.safe_load(model.read_text())["license"]["evidence_sha256"]
+    assert digest == hashlib.sha256(
+        (repo / "docs" / "licences" / "example-teacher-7b.md").read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("mutate,marker", [
+    (lambda t: "".join(l for l in t.splitlines(True) if "evidence_sha256" not in l),
+     "no single readable"),
+    (lambda t: t + "  evidence_sha256: " + "f" * 64 + "\n", "no single readable"),
+])
+def test_an_unreadable_evidence_field_refuses(repo, mutate, marker, capsys):
+    write_record(repo)
+    model = repo / "configs" / "models" / "example-teacher-7b.yaml"
+    model.write_text(mutate(model.read_text()))
+    before = model.read_text()
+    refuses("example-teacher-7b", "--write")
+    assert marker in capsys.readouterr().err
+    assert model.read_text() == before
+
+
+def test_a_non_string_evidence_field_refuses(repo, capsys):
+    write_record(repo)
+    model = repo / "configs" / "models" / "example-teacher-7b.yaml"
+    model.write_text(model.read_text().replace(
+        "evidence_sha256: LICENSE_EVIDENCE_DIGEST_EXAMPLE",
+        "evidence_sha256: [not, a, digest]"))
+    before = model.read_text()
+    refuses("example-teacher-7b", "--write")
+    assert model.read_text() == before
 
 
 # --- the shipped repository stays unresolved --------------------------------
