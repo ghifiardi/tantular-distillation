@@ -29,6 +29,13 @@ import distill_plan as dp                                  # noqa: E402
 
 TODAY = _dt.date(2026, 9, 3)
 
+# Compatibility keys are sha256 digests, so the fixtures must BE digests. These
+# were readable labels, which is exactly the defect this change removes from the
+# registry: a value that is not a digest cannot be the key that decides whether
+# two vocabularies match.
+TOK_SHARED = "c0ffee" + "0" * 58
+TOK_OTHER = "dec0de" + "0" * 58
+
 
 # --- fixtures: the smallest specs that satisfy validate_model ---------------
 
@@ -50,7 +57,7 @@ def teacher(**over) -> dict:
         "role": "teacher",
         "revision": "a" * 40,
         "params": {"total_b": 30.0},
-        "tokenizer": {"sha256": "TOK_SHARED"},
+        "tokenizer": {"sha256": TOK_SHARED},
         "capabilities": {"tools": True, "logprobs": True},
         "license": license_block(),
     }
@@ -64,7 +71,7 @@ def student(**over) -> dict:
         "role": "student",
         "revision": "b" * 40,
         "params": {"total_b": 9.0},
-        "tokenizer": {"sha256": "TOK_SHARED"},
+        "tokenizer": {"sha256": TOK_SHARED},
         "capabilities": {"tools": True, "logprobs": True},
         "license": license_block(),
         "architecture_profile": "arch",
@@ -142,6 +149,148 @@ def test_missing_evidence_digest_fails_the_gate():
         dp.license_gate(spec, "t", TODAY)
 
 
+# --- digest SHAPE validation, per field -------------------------------------
+#
+# The registry shipped three placeholders that all validated as real values,
+# because one truthiness check stood in for three different field types. These
+# tests pin the shapes apart. They are deliberately about SHAPE only: nothing
+# here decides whether a licence permits anything.
+
+@pytest.mark.parametrize("bad,why", [
+    ("", "empty"),
+    ("   ", "whitespace only"),
+    (None, "absent"),
+    ("LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B", "the shipped placeholder"),
+    (("ab" * 32).upper(), "uppercase hex"),
+    ("ab" * 31, "62 chars, too short"),
+    ("ab" * 33, "66 chars, too long"),
+    ("a" * 40, "a 40-char commit is not a digest"),
+    ("g" * 64, "64 chars but not hex"),
+    ("sha256:" + "a" * 64, "prefixed"),
+    ("a" * 64 + "\n", "trailing newline"),
+    (12345, "not a string"),
+])
+def test_an_evidence_digest_that_is_not_a_sha256_is_not_evidence(bad, why):
+    spec = teacher(license=license_block(evidence_sha256=bad))
+    st = dp.license_status(spec, TODAY)
+    assert st["evidence_present"] is False, why
+    assert st["status"] == "FRESH_NO_EVIDENCE", why
+    with pytest.raises(SystemExit):
+        dp.license_gate(spec, "t", TODAY)
+
+
+def test_a_real_sha256_passes_shape_validation():
+    """Shape only. That a digest is well formed says nothing about what it
+    hashes, or about what the licence underneath it permits."""
+    st = dp.license_status(teacher(license=license_block(
+        evidence_sha256="a3f1" + "0" * 60)), TODAY)
+    assert st["evidence_present"] is True
+    assert st["status"] == "FRESH" and st["problems"] == []
+
+
+def test_a_placeholder_and_an_empty_digest_report_different_problems():
+    """Both refuse, but they are different mistakes. "empty" sent a reader
+    looking for a missing field when a placeholder was sitting in plain sight."""
+    empty = dp.license_status(teacher(license=license_block(evidence_sha256="")),
+                              TODAY)["problems"]
+    placeholder = dp.license_status(
+        teacher(license=license_block(
+            evidence_sha256="LICENSE_EVIDENCE_DIGEST_QWEN35_9B")), TODAY)["problems"]
+    assert empty == ["evidence_sha256 empty"]
+    assert "not a 64-character sha256 digest" in placeholder[0]
+    assert "LICENSE_EVIDENCE_DIGEST_QWEN35_9B" in placeholder[0]
+
+
+@pytest.mark.parametrize("revision", [
+    "a4e59da52a7bc87ae7251dd5545c0dd437c44b68",   # Muse, pinned
+    "c202236235762e1c871ad0ccb60c8ee5ba337b9a",   # Qwen 9B, pinned
+])
+def test_a_forty_character_commit_is_still_a_valid_pin(revision):
+    """The trap this PR exists to avoid: tightening ONE shared predicate to 64
+    hex would reject both correctly pinned revisions and report them as
+    unpinned. A commit is 40 characters and a digest is 64."""
+    assert dp._is_commit(revision) is True
+    assert dp._is_sha256(revision) is False
+    errs = dp._mode_c_preflight(teacher(revision=revision), "t", student(), ARCH_OK)
+    assert not any("revision" in e for e in errs), errs
+
+
+def test_sha256_validation_is_never_applied_to_a_revision():
+    """A 64-character value in `revision` is wrong even though it is a valid
+    digest shape — it is not a commit."""
+    errs = dp._mode_c_preflight(teacher(revision="a" * 64), "t", student(), ARCH_OK)
+    assert any("revision is not pinned" in e for e in errs), errs
+    assert dp._is_commit("a" * 64) is False
+
+
+@pytest.mark.parametrize("revision,detail", [
+    ("", False),                                  # absent: no parenthetical
+    ("REPLACE_WITH_PINNED_HUB_COMMIT", True),     # the shipped 122B placeholder
+    ("a4e59da5", True),                           # abbreviated, not full
+    ("A4E59DA52A7BC87AE7251DD5545C0DD437C44B68", True),   # uppercase
+])
+def test_a_revision_that_is_not_a_commit_is_not_pinned(revision, detail):
+    errs = dp._mode_c_preflight(teacher(revision=revision), "t", student(), ARCH_OK)
+    msg = [e for e in errs if "revision is not pinned" in e]
+    assert msg, errs
+    assert ("not a 40-character commit" in msg[0]) is detail
+
+
+def test_a_placeholder_tokenizer_digest_is_not_a_compatibility_key():
+    """TOKENIZER_DIGEST_QWEN35_122B decided nothing about vocabulary overlap.
+    A compatibility key that was never a digest cannot make Mode C safe."""
+    spec = teacher(tokenizer={"sha256": "TOKENIZER_DIGEST_QWEN35_122B"})
+    assert dp.compatibility_key(spec) is None
+    errs = dp._mode_c_preflight(spec, "t", student(), ARCH_OK)
+    assert any("not a 64-character sha256 digest" in e for e in errs), errs
+    assert any("teacher" in e for e in errs), errs
+
+
+def test_a_malformed_tokenizer_digest_is_reported_as_malformed_not_missing():
+    """Absent and present-but-wrong are different failures. Reporting a
+    placeholder as "missing" sends someone looking for a field that is there."""
+    missing = dp._mode_c_preflight(teacher(tokenizer={}), "t", student(), ARCH_OK)
+    assert any("missing on one side" in e for e in missing), missing
+    malformed = dp._mode_c_preflight(
+        teacher(tokenizer={"sha256": "nope"}), "t", student(), ARCH_OK)
+    assert not any("missing on one side" in e for e in malformed), malformed
+
+
+def test_the_shipped_122b_placeholders_no_longer_validate():
+    """The real file, not a fixture. qwen35-122b-a10b carries
+    REPLACE_WITH_PINNED_HUB_COMMIT and TOKENIZER_DIGEST_QWEN35_122B, and both
+    passed the old check. Neither is a value."""
+    spec = dp._load("models", "qwen35-122b-a10b")
+    assert dp._is_commit(spec.get("revision")) is False
+    assert dp.compatibility_key(spec) is None
+    assert dp.license_status(spec, TODAY)["evidence_present"] is False
+
+
+def test_every_shipped_registry_entry_now_lacks_licence_evidence():
+    """All three, not just the one that prompted this. None of them has ever
+    recorded a real evidence digest; the placeholders only looked like one.
+
+    This test is expected to CHANGE when a reviewed licence record exists — at
+    that point the entry it covers moves to FRESH. It is pinning today's
+    truthful state, not asserting that evidence must never arrive.
+    """
+    for name in ("muse-glimmer-30b", "qwen35-9b-instruct", "qwen35-122b-a10b"):
+        st = dp.license_status(dp._load("models", name), TODAY)
+        assert st["evidence_present"] is False, name
+        assert st["status"] == "FRESH_NO_EVIDENCE", name
+        assert any("evidence_sha256" in p for p in st["problems"]), name
+
+
+def test_the_identity_pins_that_are_real_are_preserved():
+    """The other half of the same change: rejecting placeholders must not
+    reject the two revisions and tokenizer digests that were properly
+    qualified in Milestones 6 and 7."""
+    for name in ("muse-glimmer-30b", "qwen35-9b-instruct"):
+        spec = dp._load("models", name)
+        assert dp._is_commit(spec["revision"]) is True, name
+        assert dp.compatibility_key(spec) is not None, name
+
+
 # --- compatibility key and mode selection -----------------------------------
 
 def test_matching_compatibility_key_selects_mode_c_under_auto():
@@ -152,7 +301,7 @@ def test_matching_compatibility_key_selects_mode_c_under_auto():
 
 
 def test_mismatched_key_falls_back_to_preference_then_sequence():
-    cross = teacher(tokenizer={"sha256": "TOK_OTHER"})
+    cross = teacher(tokenizer={"sha256": TOK_OTHER})
     assert dp.tokenizers_compatible(cross, student()) is False
 
     mode, notes = dp.choose_mode("auto", PLAN_WITH_PAIRS, cross, "t",
@@ -168,7 +317,7 @@ def test_mismatched_key_falls_back_to_preference_then_sequence():
 def test_explicit_mode_c_on_a_mismatch_is_refused_never_downgraded():
     """The silent downgrade is the failure mode: an operator who asked for
     token-level KL must not be handed sequence distillation instead."""
-    cross = teacher(tokenizer={"sha256": "TOK_OTHER"})
+    cross = teacher(tokenizer={"sha256": TOK_OTHER})
     with pytest.raises(SystemExit):
         dp.choose_mode(dp.MODE_C, PLAN_WITH_PAIRS, cross, "t", student(), ARCH_OK)
 
@@ -335,6 +484,12 @@ def bound_spec(**over) -> dict:
         (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text()))
     spec["revision"] = RECEIPT_REVISION
     spec["digests_verified"] = True
+    # The shipped entry carries a licence evidence PLACEHOLDER. These tests are
+    # about identity and the fp8 gate, not licence review, so give them a
+    # well-formed digest rather than letting an unrelated licence blocker decide
+    # their verdict. The real registry keeps its placeholder, and the real-corpus
+    # test asserts the blocker it produces.
+    spec["license"] = {**(spec.get("license") or {}), "evidence_sha256": "e" * 64}
     spec.update(over)
     return spec
 
@@ -553,7 +708,7 @@ def test_a_shapeless_config_refuses_rather_than_digesting_nulls():
 def registered(**over) -> dict:
     spec = student(serving_config="office-student-9b")
     spec["model_id"] = "Qwen/Qwen3.5-9B"
-    spec["tokenizer"] = {"model_id": "Qwen/Qwen3.5-9B", "sha256": "TOK"}
+    spec["tokenizer"] = {"model_id": "Qwen/Qwen3.5-9B", "sha256": TOK_SHARED}
     spec.update(over)
     return spec
 
@@ -655,14 +810,34 @@ def repo_state() -> dict:
     return state
 
 
-def test_dry_run_writes_nothing_and_calls_nothing():
+def test_the_cli_refuses_the_shipped_plan_and_still_writes_nothing():
+    """Two properties, and the second is the safety one.
+
+    Since licence evidence is validated by shape, every shipped teacher carries
+    a placeholder, so the only plan in configs/distillation/ REFUSES at the
+    licence gate. That is the intended state: the registry declares
+    output_training_permitted: true, and nothing substantiates it.
+
+    A refusal must still be inert. The planner writes no file and starts no
+    process whether it emits a plan or rejects one, so the no-write assertion
+    holds on both paths and is the reason this test survives the change.
+
+    When a reviewed licence record exists and evidence_sha256 is written, this
+    becomes returncode 0 with "DRY RUN" in stdout again. The dry-run OUTPUT
+    itself is covered without the licence gate by
+    test_dry_run_prints_no_training_command and
+    test_dry_run_names_the_serving_configs_not_the_registry_names, which call
+    dry_run_sequence directly, so no coverage is lost in the meantime.
+    """
     before = repo_state()
     proc = subprocess.run(
         [str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "src" / "distill_plan.py"),
          "plan", "office-v2-sequence", "--today", "2026-09-03", "--dry-run"],
         capture_output=True, text=True, cwd=ROOT)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "DRY RUN" in proc.stdout
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    combined = proc.stdout + proc.stderr
+    assert "licence gate FAILED (FRESH_NO_EVIDENCE)" in combined
+    assert "evidence_sha256 is not a 64-character sha256 digest" in combined
     assert repo_state() == before
 
 
@@ -827,10 +1002,20 @@ def test_the_legacy_corpus_is_blocked_by_exactly_its_historical_reasons():
         "registry_identity_ready": True,
         "execution_artifact_ready": False,# only a mutable Ollama tag recorded
         "identity_ready": False,          # the conjunction of the two above
-        "license_ready": True,            # apache-2.0, reviewed and in date
+        # apache-2.0 and in date, but the recorded evidence digest is the
+        # placeholder LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B. The declaration
+        # output_training_permitted: true is an assertion nobody has
+        # substantiated, so the gate refuses it until a real digest exists.
+        "license_ready": False,
         "harness_ready": True,            # no declaration, no attribution: coherent
     }
     assert report["trainable_as_is"] is False
+
+    # The verdict was already false. What must change is that the licence now
+    # appears as its OWN named reason rather than silently passing — the whole
+    # point of the readiness block.
+    assert any("evidence_sha256" in limit for limit in report["limits"]), \
+        report["limits"]
 
     assert report["harness"] == {"required": False, "attributed": False,
                                  "coverage": 0.0}
