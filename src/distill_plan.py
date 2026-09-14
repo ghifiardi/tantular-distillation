@@ -95,8 +95,38 @@ def validate_model(spec: dict, name: str) -> dict:
     return spec
 
 
-def _digest_present(value: object) -> bool:
-    return isinstance(value, str) and value.strip() != ""
+# Three different fields in this file are called "a digest", and they are three
+# different shapes. One shared truthiness check treated them as one value type,
+# so every placeholder in the registry validated as real:
+#
+#   LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B  counted as licence evidence
+#   TOKENIZER_DIGEST_QWEN35_122B              counted as a compatibility key
+#   REPLACE_WITH_PINNED_HUB_COMMIT            counted as a pinned revision
+#
+# A placeholder is a claim that a value will exist, not a value. Validate each
+# field for ITS OWN shape. Deliberately not one tightened predicate: a commit is
+# 40 characters and a digest is 64, so a single rule has to be wrong somewhere —
+# tightening the shared helper to 64 would have rejected both correctly pinned
+# revisions and reported them as unpinned.
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _is_sha256(value: object) -> bool:
+    """Exactly 64 lowercase hex. Not a prefix, not uppercase, not 'sha256:...'."""
+    return isinstance(value, str) and _SHA256_RE.fullmatch(value) is not None
+
+
+def _is_commit(value: object) -> bool:
+    """Exactly 40 lowercase hex: a full git commit, never an abbreviation."""
+    return isinstance(value, str) and _COMMIT_RE.fullmatch(value) is not None
+
+
+def _absent(value: object) -> bool:
+    """Nothing recorded, as distinct from something recorded badly. The two need
+    different messages: "empty" sent someone looking for a missing field when the
+    real problem was a placeholder sitting in plain sight."""
+    return value is None or (isinstance(value, str) and value.strip() == "")
 
 
 # --- gates ------------------------------------------------------------------
@@ -112,7 +142,8 @@ def license_status(spec: dict, today: _dt.date) -> dict:
     permitted = lic.get("output_training_permitted") is True
     reviewed = lic.get("reviewed_at")
     max_age = lic.get("recheck_max_age_days")
-    evidence = _digest_present(lic.get("evidence_sha256"))
+    raw_evidence = lic.get("evidence_sha256")
+    evidence = _is_sha256(raw_evidence)
     age = None
     status = "FRESH"
     reason = None
@@ -146,7 +177,10 @@ def license_status(spec: dict, today: _dt.date) -> dict:
                     reason = f"{age} days old, limit {max_age}"
                     problems.append(reason)
         if not evidence:
-            problems.append("evidence_sha256 empty")
+            problems.append(
+                "evidence_sha256 empty" if _absent(raw_evidence) else
+                f"evidence_sha256 is not a 64-character sha256 digest: "
+                f"{raw_evidence!r}")
             if status == "FRESH":
                 status = "FRESH_NO_EVIDENCE"
     return {
@@ -176,7 +210,7 @@ def license_gate(teacher: dict, name: str, today: _dt.date) -> None:
 def compatibility_key(spec: dict) -> str | None:
     tok = spec.get("tokenizer") or {}
     sha = tok.get("sha256")
-    return sha if _digest_present(sha) else None
+    return sha if _is_sha256(sha) else None
 
 
 def tokenizers_compatible(teacher: dict, student: dict) -> bool:
@@ -277,15 +311,25 @@ def _mode_c_preflight(teacher: dict, tname: str, student: dict, arch: dict | Non
     """Non-tokenizer reasons Mode C cannot run. Returned as a list so 'auto' can
     fall back and an explicit request can report all of them at once."""
     errs: list[str] = []
-    if compatibility_key(teacher) is None or compatibility_key(student) is None:
+    malformed = [side for side, spec in (("teacher", teacher), ("student", student))
+                 if not _absent((spec.get("tokenizer") or {}).get("sha256"))
+                 and compatibility_key(spec) is None]
+    if malformed:
+        errs.append("a tokenizer.sha256 is not a 64-character sha256 digest "
+                    f"({', '.join(malformed)}): a placeholder cannot be a "
+                    "compatibility key")
+    elif compatibility_key(teacher) is None or compatibility_key(student) is None:
         errs.append("a tokenizer.sha256 is missing on one side")
     elif not tokenizers_compatible(teacher, student):
         errs.append("tokenizer compatibility keys differ (cross-family): "
                     "token-level KL needs a shared vocabulary")
     if (teacher.get("capabilities") or {}).get("logprobs") is not True:
         errs.append(f"teacher {tname!r} does not expose logprobs")
-    if not _digest_present(teacher.get("revision")):
-        errs.append(f"teacher {tname!r} revision is not pinned")
+    revision = teacher.get("revision")
+    if not _is_commit(revision):
+        detail = ("" if _absent(revision) else
+                  f" (not a 40-character commit: {revision!r})")
+        errs.append(f"teacher {tname!r} revision is not pinned{detail}")
     if arch is None:
         errs.append("student has no architecture_profile for Mode C")
     else:
@@ -758,11 +802,11 @@ EXECUTION_ARTIFACT_DIGESTS = ("blob_digest", "manifest_digest", "model_digest")
 # describes. Without this, a Qwen artifact's digest would satisfy a verified
 # Muse registry entry and the conjunction would pass.
 EXECUTION_ARTIFACT_BINDING = ("model_id", "registry_model", "revision")
-_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 # Exactly 64 lowercase hex. No "sha256:" prefix: two spellings of one value
 # would otherwise become two distinct receipt identities, and a corpus that
-# mixed them would look like a mixed pass.
-_ARTIFACT_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+# mixed them would look like a mixed pass. Same shapes as the identity fields
+# above, defined once so the two cannot drift apart.
+_ARTIFACT_DIGEST_RE = _SHA256_RE
 
 
 def canonical_receipt_key(receipt: dict[str, str]) -> str:
@@ -1019,7 +1063,12 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
             "claim about real Office documents.")
     for st in freshness:
         if st["status"] != "FRESH":
-            suffix = f" ({st['reason']})" if st.get("reason") else ""
+            # FRESH_NO_EVIDENCE sets no `reason`, so this read as a bare status
+            # with nothing to act on. Fall back to the problems list: "the
+            # evidence digest is a placeholder" is the actionable sentence, and
+            # a named blocker that does not name itself is barely a blocker.
+            detail = st.get("reason") or "; ".join(st.get("problems") or [])
+            suffix = f" ({detail})" if detail else ""
             limits.append(f"Teacher licence {st['registry_model']!r}: {st['status']}{suffix}.")
         if not st["digests_verified"]:
             limits.append(

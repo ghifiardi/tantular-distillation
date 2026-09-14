@@ -108,8 +108,24 @@ license:
   output_training_permitted: true      # GATE: false => planner refuses
   reviewed_at: 2026-09-03              # GATE: staler than recheck_max_age_days => refuse
   recheck_max_age_days: 180
-  evidence_sha256: <digest of the saved licence text/decision>
+  evidence_sha256: <64 lowercase hex: digest of the reviewed decision record>
 ```
+
+Each of these fields is validated for **its own shape**, not merely for being
+non-empty: `evidence_sha256` and `tokenizer.sha256` are exactly 64 lowercase hex
+characters, and `revision` is exactly 40. They were once checked by a single
+truthiness test, and every placeholder the registry shipped — a licence digest,
+a tokenizer digest and a pinned revision — passed it. A placeholder is a claim
+that a value will exist, not a value. One shared rule cannot express this: a
+commit is 40 characters and a digest is 64, so tightening the shared check to 64
+would have rejected the two correctly pinned revisions instead.
+
+No shipped registry entry currently records real licence evidence, so all three
+report `FRESH_NO_EVIDENCE` and the planner refuses. `output_training_permitted:
+true` is a **declaration awaiting substantiation**, not a finding: neither
+Apache 2.0 (silent on model outputs) nor the parent's `USAGE_POLICY.md` (which
+prohibits particular uses, none of them training) states it. Only a human
+reviewer may decide it, from the exact pinned sources.
 
 This exists because Apache 2.0 held across Qwen 3.5 and 3.6 and **stopped
 holding at the 3.8 flagship**, and because the repo's own `nemotron` teacher
@@ -231,6 +247,17 @@ What is missing is the evidence format that would let a corpus say, verifiably,
 which artifact produced which trace — and until that exists, a corpus mixing
 canonical teachers is refused rather than silently attributed to whichever
 teacher happened to be checked.
+
+**Historical manifests are not regenerated when validation tightens.** The
+freezes in `train/RUN_MANIFEST.v1.json`, `train/RUN_MANIFEST.tinker-sft-v1.
+preview.json` and `train/archive/` record `license_freshness` with
+`status: FRESH` and `evidence_present: true`. That was the planner's honest
+conclusion under the earlier permissive validator, which accepted any non-empty
+string; it is not a claim that reviewed licence evidence ever existed. They
+store the verdict, never the digest, so nothing in them can be re-derived.
+Rewriting them would destroy the record of what was believed at freeze time and
+replace it with a verdict no one reached — the same reasoning that keeps the
+identity audit's history intact. Leave them; read them with their date.
 
 **Legacy traces remain accepted as historical data.** The 136-trace corpus
 records only the mutable Ollama tag `muse-glimmer:30b`, so it is
