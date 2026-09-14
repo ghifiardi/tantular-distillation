@@ -54,7 +54,8 @@ Create `tests/test_distill_plan.py` covering, using tmp files / fixtures only:
 - `license_status` / `license_gate`: permitted+fresh passes; `output_training_
   permitted: false` refuses; `reviewed_at` older than `recheck_max_age_days`
   refuses (STALE); missing `reviewed_at`/`recheck_max_age_days` refuses (UNKNOWN);
-  empty `evidence_sha256` yields `FRESH_NO_EVIDENCE` and a gate failure.
+  an `evidence_sha256` that is not exactly 64 lowercase hex — absent, empty or
+  a placeholder — yields `FRESH_NO_EVIDENCE` and a gate failure.
 - `tokenizers_compatible` / mode selection: equal tokenizer sha256 -> Mode C for
   `auto`; differing -> `auto` falls back to preference (pairs present) then
   sequence; **explicit `on_policy_kd` on a mismatch REFUSES** (SystemExit).

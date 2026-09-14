@@ -55,7 +55,10 @@ license:
   output_training_permitted: true    # GATE: false -> refuse (teacher)
   reviewed_at: 2026-09-03            # GATE: age > recheck_max_age_days -> refuse
   recheck_max_age_days: 180
-  evidence_sha256: <digest of saved licence text/decision>
+  evidence_sha256: <64 lowercase hex>  # digest of the REVIEWED decision
+                                       # record, not of a raw LICENSE file:
+                                       # no upstream document states whether
+                                       # output training is permitted
 
 digests_verified: false              # written ONLY by src/verify_model_identity.py,
                                      # and only when both digests match a real local
@@ -68,9 +71,9 @@ digests_verified: false              # written ONLY by src/verify_model_identity
 |---|---|---|
 | licence.output_training_permitted | teacher | is exactly `true` |
 | licence.reviewed_at freshness | teacher | `today - reviewed_at <= recheck_max_age_days` |
-| licence.evidence_sha256 present | teacher | non-empty |
-| revision pinned | teacher (real run / Mode C) | non-null |
-| tokenizer.sha256 present | both (Mode C) | non-empty on both sides |
+| licence.evidence_sha256 | teacher | exactly 64 lowercase hex (a placeholder is not a value) |
+| revision pinned | teacher (real run / Mode C) | exactly 40 lowercase hex — never 64 |
+| tokenizer.sha256 | both (Mode C) | exactly 64 lowercase hex on both sides |
 | compatibility key match | teacher vs student (Mode C) | `teacher == student` digest |
 | capabilities.logprobs | teacher (Mode C) | `true` |
 | architecture signature | student | profile signature matches the loaded config (`src/train_qlora.py`, before LoRA attaches) |
