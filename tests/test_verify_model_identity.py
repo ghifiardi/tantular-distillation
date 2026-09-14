@@ -408,12 +408,3 @@ def test_the_shipped_muse_glimmer_spec_pins_the_qualified_parent():
     assert len(spec["revision"]) == 40           # a Git object id
     assert vmi.SHA256_RE.match(spec["tokenizer"]["sha256"])
     assert vmi.SHA256_RE.match(spec["chat_template"]["sha256"])
-
-
-def test_the_muse_glimmer_licence_evidence_is_still_unresolved():
-    """Qualification measured the tokenizer and template. It did not perform a
-    licence review, and the verifier does not own that field."""
-    spec = yaml.safe_load(
-        (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text())
-    assert spec["license"]["evidence_sha256"] == \
-        "LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B"

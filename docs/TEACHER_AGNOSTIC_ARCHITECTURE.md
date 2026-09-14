@@ -234,10 +234,16 @@ teacher happened to be checked.
 
 **Legacy traces remain accepted as historical data.** The 136-trace corpus
 records only the mutable Ollama tag `muse-glimmer:30b`, so it is
-execution-artifact-ready `false` and will stay so: no later qualification can
+execution-artifact-ready `false`: qualifying a registry entry cannot
 retroactively establish what generated it. It is still a real corpus, still
 audited, and still usable as history. It simply cannot support an identity
 claim it never recorded the evidence for.
+
+That verdict follows from the evidence recorded here, not from a claim about
+all possible evidence. It remains false unless contemporaneous immutable
+artifact evidence is discovered and independently verified — an archived
+manifest, machine image, registry log or recorded blob digest. Absence of
+evidence in this repository is not proof that none exists anywhere.
 
 ## 6. Replay anchors — sweep, do not fix
 

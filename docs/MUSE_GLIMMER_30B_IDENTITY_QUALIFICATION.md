@@ -100,11 +100,11 @@ actually present rather than asserting a fixed file list.
 
 ## What this does NOT establish
 
-**The legacy corpus is not identity-ready, and never can be.**
+**The legacy corpus is not identity-ready.**
 
 ```text
 registry_identity_ready   true    <- this qualification
-execution_artifact_ready  false   <- unchanged, and unchangeable
+execution_artifact_ready  false   <- unchanged by it
 identity_ready            false   <- the conjunction
 trainable_as_is           false
 authorizes_training       false
@@ -113,8 +113,15 @@ authorizes_training       false
 All 136 legacy traces record `repo: "muse-glimmer:30b"` — a mutable Ollama
 tag, with no manifest, blob or weights digest anywhere in the corpus or its
 pass manifests. Qualifying today's checkpoint says nothing about which artifact
-generated traces months ago, and no later work can establish it retroactively.
-The audit reports `136 traces, 0 valid receipts, 136 missing, 0 malformed`.
+generated traces months ago. The audit reports `136 traces, 0 valid receipts,
+136 missing, 0 malformed`.
+
+The legacy corpus cannot become execution-artifact-ready from the evidence
+currently recorded in this repository. It remains false unless contemporaneous
+immutable artifact evidence is discovered and independently verified — an
+archived Ollama manifest, a machine image, a registry log or a recorded blob
+digest would each be candidates. Absence of evidence here is not proof that no
+such evidence exists anywhere.
 
 That separation is deliberate and was built before this qualification precisely
 so this qualification could not launder it. See
@@ -124,12 +131,17 @@ so this qualification could not launder it. See
 weights changed under an unchanged tokenizer and template would still read as
 verified.
 
-**The licence evidence is still unresolved.**
+**The licence evidence is still unresolved, as of this record.**
 `LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B` remains a placeholder. This measured
 a tokenizer and a template; it did not perform a licence review, and the
 verifier does not own that field. The drafter repository's licence files must
 not be reused as evidence for the parent without a separate review against the
 parent's exact commit.
+
+This is a statement of current state, not an invariant. Resolving that digest
+through a real review is expected future work, and no test pins the placeholder
+— a test asserting it would make a legitimate licence review look like a
+regression.
 
 **Processor identity is not part of the contract.** The parent publishes
 `processor_config.json`; it is not digested, for the same reason the student's
