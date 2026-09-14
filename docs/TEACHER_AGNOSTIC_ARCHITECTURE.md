@@ -127,6 +127,15 @@ Apache 2.0 (silent on model outputs) nor the parent's `USAGE_POLICY.md` (which
 prohibits particular uses, none of them training) states it. Only a human
 reviewer may decide it, from the exact pinned sources.
 
+That decision is written down in `docs/licences/<registry-name>.md` — YAML front
+matter binding the reviewed checkpoint, the source documents and their hashes, a
+named human reviewer and an explicit determination, followed by the reasoning in
+prose. `evidence_sha256` is the SHA-256 of that whole committed file, so editing
+the reasoning invalidates the registry entry just as surely as editing the
+verdict. `src/verify_license_evidence.py` validates the record, binds it to the
+registry entry and computes the digest; it decides no licence question and
+contains no rule that could. See `docs/licences/README.md`.
+
 This exists because Apache 2.0 held across Qwen 3.5 and 3.6 and **stopped
 holding at the 3.8 flagship**, and because the repo's own `nemotron` teacher
 ships under NVIDIA OML with an unresolved synthetic-data question. A licence
