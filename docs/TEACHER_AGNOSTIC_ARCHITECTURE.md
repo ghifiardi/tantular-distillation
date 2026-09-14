@@ -201,6 +201,44 @@ A richer schema does **not** change what the current corpus is evidence *of*: it
 remains `source_class: synthetic` under a signed int4 waiver, supporting no claim
 about real Office documents.
 
+### Corpus composition: one canonical teacher, one execution artifact
+
+Model identity is two claims, and a corpus must satisfy both. The registry side
+says the current canonical checkpoint is pinned — revision, tokenizer and
+template.
+The execution side says the traces themselves identify the immutable artifact
+that produced them, through a receipt bound to the registry entry it claims to
+be a receipt for. Verifying today's checkpoint proves nothing about which bytes
+generated a trace months ago, so neither claim substitutes for the other.
+
+An **execution-identity-ready corpus currently has exactly one resolved
+canonical teacher and one immutable execution artifact.**
+
+- Several provenance aliases may resolve to that one canonical teacher; the
+  constraint is on the resolved registry model, not on the strings recorded in
+  the traces.
+- Several canonical teachers require **separate corpus passes**, one per
+  teacher, each with its own receipt.
+- Multi-teacher corpora are therefore **unsupported** until an explicitly
+  versioned receipt and aggregation policy is designed: a receipt today
+  identifies one artifact, and nothing states how several would be aggregated,
+  which of them a mixed pass is evidence of, or how a gate would attribute a
+  result across them.
+
+**This is a provenance constraint, not a claim that multi-teacher distillation
+is invalid.** Training against several teachers is a reasonable thing to want.
+What is missing is the evidence format that would let a corpus say, verifiably,
+which artifact produced which trace — and until that exists, a corpus mixing
+canonical teachers is refused rather than silently attributed to whichever
+teacher happened to be checked.
+
+**Legacy traces remain accepted as historical data.** The 136-trace corpus
+records only the mutable Ollama tag `muse-glimmer:30b`, so it is
+execution-artifact-ready `false` and will stay so: no later qualification can
+retroactively establish what generated it. It is still a real corpus, still
+audited, and still usable as history. It simply cannot support an identity
+claim it never recorded the evidence for.
+
 ## 6. Replay anchors — sweep, do not fix
 
 Replay is the best-evidenced recommendation. But the first draft's fixed

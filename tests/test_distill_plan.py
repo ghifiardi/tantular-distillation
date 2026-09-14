@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -311,6 +312,47 @@ def trace(**over) -> dict:
     return row
 
 
+RECEIPT_DIGEST = "9a" * 32
+RECEIPT_REVISION = "e8" * 20            # a complete 40-char lowercase commit
+MUSE_REGISTRY = "muse-glimmer-30b"
+MUSE_MODEL_ID = "meta-models/Muse-Glimmer-30B"
+
+
+def receipt(digest: str = RECEIPT_DIGEST, registry_model: str = MUSE_REGISTRY,
+            model_id: str = MUSE_MODEL_ID, revision: str = RECEIPT_REVISION,
+            field: str = "manifest_digest") -> dict:
+    """A complete execution-artifact receipt: a digest BOUND to the registry
+    entry it claims to be a receipt for. A digest alone is 64 characters that
+    could belong to any artifact."""
+    return {"registry_model": registry_model, "model_id": model_id,
+            "revision": revision, field: digest}
+
+
+def bound_spec(**over) -> dict:
+    """The registry entry that the default receipt binds to: same model_id,
+    same pinned revision, digests verified."""
+    spec = dict(yaml.safe_load(
+        (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text()))
+    spec["revision"] = RECEIPT_REVISION
+    spec["digests_verified"] = True
+    spec.update(over)
+    return spec
+
+
+def trace_with_receipt(digest: str = RECEIPT_DIGEST, **over) -> dict:
+    """A trace that names the immutable artifact which produced it.
+
+    Deliberately NOT the default. Recording an execution-artifact receipt is a
+    new, mandatory provenance requirement, and burying it in the generic
+    fixture would let a future test pass because its shared fixture quietly had
+    stronger provenance than the scenario it claims to describe. Every positive
+    control that needs identity to be complete opts in here, visibly.
+    """
+    row = trace(**over)
+    row["provenance"] = dict(row["provenance"], execution_artifact=receipt(digest))
+    return row
+
+
 def prov(**over) -> dict:
     p = dict(trace()["provenance"])
     p.update(over)
@@ -345,13 +387,24 @@ def test_synthetic_corpus_supports_no_real_office_claim(tmp_path):
     assert any("synthetic" in limit for limit in report["limits"])
 
 
-def test_unverified_identity_alone_blocks_trainable_as_is(tmp_path):
+def test_unverified_identity_alone_blocks_trainable_as_is(tmp_path, monkeypatch):
     """FP8, real sources, a resolved teacher and a fresh licence — everything
     passes EXCEPT the tokenizer/template digests, which are still placeholders.
     That alone must be disqualifying: the compatibility key those digests carry
     is what chose the distillation mode, and it was never checked against real
-    files."""
-    path = corpus(tmp_path, trace())
+    files.
+
+    To isolate that one component the registry must be PINNED but UNVERIFIED:
+    a receipt cannot bind to a placeholder revision, so leaving the revision
+    unpinned would fail execution_artifact_ready too and the test would no
+    longer be about the digests.
+    """
+    monkeypatch.setattr(
+        dp, "_resolve_teacher_specs",
+        lambda teachers, overrides: (
+            {MUSE_REGISTRY: bound_spec(digests_verified=False)}, []))
+    # opts in to a receipt so the ONLY thing left unverified is the registry
+    path = corpus(tmp_path, trace_with_receipt())
     report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
 
     assert report["fp8_gate"]["status"] == "MET"
@@ -360,7 +413,10 @@ def test_unverified_identity_alone_blocks_trainable_as_is(tmp_path):
     assert report["license_freshness"]["unresolved_corpus_teachers"] == []
 
     assert report["identity_verification"] == {
-        "all_verified": False, "unverified_models": ["muse-glimmer-30b"]}
+        "all_verified": False,
+        "registry_identity_ready": False,   # the only thing left to fix
+        "execution_artifact_ready": True,   # these traces name their artifact
+        "unverified_models": ["muse-glimmer-30b"]}
     assert report["trainable_as_is"] is False
     # The warning stays, and is the only thing left to fix.
     assert report["limits"] == [
@@ -373,33 +429,40 @@ def test_the_same_corpus_is_trainable_once_identity_is_verified(tmp_path, monkey
     """The positive control. Without it, `trainable_as_is: false` could be a
     constant rather than a verdict. The registry file is NOT edited: no
     placeholder digest is invented to make a test pass."""
-    verified = dict(dp._load("models", "muse-glimmer-30b"))
-    verified["digests_verified"] = True
+    # bound_spec pins a revision as well as verifying digests: a receipt cannot
+    # bind to a placeholder, so verifying digests alone is not enough here
+    verified = bound_spec()
     monkeypatch.setattr(dp, "_resolve_teacher_specs",
                         lambda teachers, overrides: ({"muse-glimmer-30b": verified}, []))
 
-    report = dp.audit_corpus(corpus(tmp_path, trace()), TODAY)
+    # opts in explicitly: this control needs identity COMPLETE, which means the
+    # traces must name their artifact as well as the registry being verified
+    report = dp.audit_corpus(corpus(tmp_path, trace_with_receipt()), TODAY)
     assert report["identity_verification"] == {
-        "all_verified": True, "unverified_models": []}
+        "all_verified": True,
+        "registry_identity_ready": True,
+        "execution_artifact_ready": True,
+        "unverified_models": []}
     assert report["limits"] == []
     assert report["trainable_as_is"] is True
 
 
 def test_verified_identity_does_not_rescue_any_other_failure(tmp_path, monkeypatch):
     """Identity is one requirement among several, not an override."""
-    verified = dict(dp._load("models", "muse-glimmer-30b"))
-    verified["digests_verified"] = True
+    # bound_spec pins a revision as well as verifying digests: a receipt cannot
+    # bind to a placeholder, so verifying digests alone is not enough here
+    verified = bound_spec()
     monkeypatch.setattr(dp, "_resolve_teacher_specs",
                         lambda teachers, overrides: ({"muse-glimmer-30b": verified}, []))
 
     quantized = dp.audit_corpus(
-        corpus(tmp_path / "a", trace(**prov(quantization="int4_ollama",
+        corpus(tmp_path / "a", trace_with_receipt(**prov(quantization="int4_ollama",
                                             host="ai19-ollama"))), TODAY)
     assert quantized["identity_verification"]["all_verified"] is True
     assert quantized["trainable_as_is"] is False
 
     synthetic = dp.audit_corpus(
-        corpus(tmp_path / "b", trace(source_class="synthetic")), TODAY)
+        corpus(tmp_path / "b", trace_with_receipt(source_class="synthetic")), TODAY)
     assert synthetic["identity_verification"]["all_verified"] is True
     assert synthetic["trainable_as_is"] is False
 
@@ -727,12 +790,13 @@ def test_incomplete_required_attribution_blocks_trainable_as_is(tmp_path, monkey
     """Everything else clean — fp8, real sources, verified identity — and it is
     still not trainable, because a corpus whose attribution is incoherent is a
     corpus nobody can characterise."""
-    verified = dict(dp._load("models", "muse-glimmer-30b"))
-    verified["digests_verified"] = True
+    # bound_spec pins a revision as well as verifying digests: a receipt cannot
+    # bind to a placeholder, so verifying digests alone is not enough here
+    verified = bound_spec()
     monkeypatch.setattr(dp, "_resolve_teacher_specs",
                         lambda teachers, overrides: ({"muse-glimmer-30b": verified}, []))
-    path = declaring_pass(tmp_path, [trace(**{"harness_provenance": harness_block()}),
-                                     trace()])
+    path = declaring_pass(tmp_path, [trace_with_receipt(**{"harness_provenance": harness_block()}),
+                                     trace_with_receipt()])
     report = dp.audit_corpus(path, TODAY)
     assert report["fp8_gate"]["status"] == "MET"
     assert report["identity_verification"]["all_verified"] is True
@@ -755,11 +819,13 @@ def test_the_legacy_corpus_is_blocked_by_exactly_its_historical_reasons():
     report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
 
     assert report["readiness"] == {
-        "fp8_ready": False,        # int4_ollama traces
-        "source_ready": False,     # 136/136 synthetic
-        "identity_ready": False,   # digests_verified is not true
-        "license_ready": True,     # apache-2.0, reviewed and in date
-        "harness_ready": True,     # no declaration, no attribution: coherent
+        "fp8_ready": False,               # int4_ollama traces
+        "source_ready": False,            # 136/136 synthetic
+        "registry_identity_ready": False, # digests_verified is not true
+        "execution_artifact_ready": False,# only a mutable Ollama tag recorded
+        "identity_ready": False,          # the conjunction of the two above
+        "license_ready": True,            # apache-2.0, reviewed and in date
+        "harness_ready": True,            # no declaration, no attribution: coherent
     }
     assert report["trainable_as_is"] is False
 
@@ -786,3 +852,421 @@ def test_a_harness_disagreement_shows_up_as_a_named_blocker(tmp_path):
     assert report["readiness"]["harness_ready"] is False
     assert report["readiness"]["fp8_ready"] is True
     assert report["trainable_as_is"] is False
+
+
+# --- identity is two claims, not one ----------------------------------------
+#
+# Conflating them let a corpus inherit a verification it had no right to.
+# Qualifying the CURRENT registry entry says today's canonical checkpoint is
+# pinned; it says nothing about which artifact generated traces months ago. The
+# legacy corpus records only repo: "muse-glimmer:30b" -- an Ollama tag that can
+# be re-pointed -- so nothing in it identifies the bytes that ran.
+
+def test_identity_ready_is_exactly_the_conjunction_of_its_two_components(tmp_path):
+    """Derived, not computed alongside, so the parts and the verdict cannot
+    drift apart. Synthetic corpus: this property holds regardless of inputs and
+    should run wherever CI runs."""
+    path = declaring_pass(tmp_path, [trace(), trace()])
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    r = report["readiness"]
+    assert r["identity_ready"] == (
+        r["registry_identity_ready"] and r["execution_artifact_ready"])
+    assert report["trainable_as_is"] == all(r.values())
+
+
+def test_a_verified_registry_cannot_retroactively_upgrade_the_legacy_corpus(
+        tmp_path, monkeypatch):
+    """The defect this split exists to prevent, made reachable on purpose.
+
+    With the teacher's digests_verified true, registry_identity_ready becomes
+    true -- and identity_ready must STILL be false, because the traces name no
+    artifact. Before the split, this flipped identity_ready to true and marked a
+    corpus generated by an unpinned tag as identity-verified.
+    """
+    spec = dict(yaml.safe_load(
+        (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text()))
+    spec["digests_verified"] = True
+    monkeypatch.setattr(dp, "_resolve_teacher_specs",
+                        lambda names, overrides: ({"muse-glimmer-30b": spec}, []))
+
+    # plain trace(): a mutable tag and nothing else, like the legacy corpus
+    path = declaring_pass(tmp_path, [trace(), trace()])
+    report = dp.audit_corpus(path, TODAY, teacher_overrides=["muse-glimmer-30b"])
+    r = report["readiness"]
+
+    # the premise really did flip -- otherwise this test proves nothing
+    assert r["registry_identity_ready"] is True
+    # ...and the verdict still refuses
+    assert r["execution_artifact_ready"] is False
+    assert r["identity_ready"] is False
+    assert report["trainable_as_is"] is False
+    assert report["authorizes_training"] is False
+
+
+def rows_with(artifact, n=1):
+    """n traces whose provenance carries exactly this execution_artifact value.
+    The sentinel `_ABSENT` omits the key entirely."""
+    out = []
+    for _ in range(n):
+        prov = {"repo": "muse-glimmer:30b", "host": "ai19-ollama",
+                "runtime": "ollama", "template_sha256": "a" * 64}
+        if artifact is not _ABSENT:
+            prov["execution_artifact"] = artifact
+        out.append({"provenance": prov})
+    return out
+
+
+_ABSENT = object()
+# hex LETTERS on purpose: "9"*64 is unchanged by .upper(), so a digest of
+# digits alone cannot test the lowercase rule.
+GOOD = "9a" * 32
+OTHER = "8b" * 32
+
+
+@pytest.mark.parametrize("label, artifact, ready, valid, missing, malformed", [
+    # absent is MISSING -- honestly incomplete, not a false claim
+    ("absent",             _ABSENT,                                False, 0, 1, 0),
+    # every present-but-unreadable shape is MALFORMED, never absence
+    ("null",               None,                                   False, 0, 0, 1),
+    ("empty mapping",      {},                                     False, 0, 0, 1),
+    ("scalar",             "sha256-ish",                           False, 0, 0, 1),
+    ("list",               [],                                     False, 0, 0, 1),
+    ("list with content",  [{"manifest_digest": GOOD}],            False, 0, 0, 1),
+    ("unknown key only",   {"artifact": GOOD},                     False, 0, 0, 1),
+    ("template only",      {"template_sha256": GOOD},              False, 0, 0, 1),
+    # the fail-open case: a valid first field must not mask a malformed second
+    ("valid then malformed", receipt() | {"blob_digest": "nope"},  False, 0, 0, 1),
+    ("malformed then valid", {"blob_digest": "nope"} | receipt(),  False, 0, 0, 1),
+    # two well-formed digests are two claims; nothing can say which is authoritative
+    ("two valid fields",   receipt() | {"blob_digest": GOOD},      False, 0, 0, 1),
+    ("three valid fields", receipt() | {"blob_digest": GOOD,
+                                        "model_digest": GOOD},     False, 0, 0, 1),
+    # digest shape
+    ("uppercase",          receipt(digest=GOOD.upper()),           False, 0, 0, 1),
+    ("sha256: prefix",     receipt(digest="sha256:" + GOOD),       False, 0, 0, 1),
+    ("short",              receipt(digest=GOOD[:63]),              False, 0, 0, 1),
+    ("long",               receipt(digest=GOOD + "0"),             False, 0, 0, 1),
+    ("non-hex",            receipt(digest="z" * 64),               False, 0, 0, 1),
+    ("integer",            receipt(digest=1234),                   False, 0, 0, 1),
+    ("null digest",        receipt(digest=None),                   False, 0, 0, 1),
+    # a digest with no binding is 64 characters belonging to nothing
+    ("digest, no binding", {"manifest_digest": GOOD},              False, 0, 0, 1),
+    ("no registry_model",  {k: v for k, v in receipt().items()
+                            if k != "registry_model"},             False, 0, 0, 1),
+    ("no model_id",        {k: v for k, v in receipt().items()
+                            if k != "model_id"},                   False, 0, 0, 1),
+    ("no revision",        {k: v for k, v in receipt().items()
+                            if k != "revision"},                   False, 0, 0, 1),
+    ("placeholder revision", receipt(revision="REPLACE_WITH_PINNED_HUB_COMMIT"),
+                                                                   False, 0, 0, 1),
+    ("short revision",     receipt(revision="e8" * 10),            False, 0, 0, 1),
+    ("uppercase revision", receipt(revision=("e8" * 20).upper()),  False, 0, 0, 1),
+    ("empty registry_model", receipt(registry_model=""),           False, 0, 0, 1),
+    # the only accepted shapes: a digest BOUND to a registry entry
+    ("bound manifest",     receipt(),                              True,  1, 0, 0),
+    ("bound blob",         receipt(field="blob_digest"),           True,  1, 0, 0),
+    ("bound model",        receipt(field="model_digest"),          True,  1, 0, 0),
+    ("bound plus extras",  receipt() | {"note": "x"},              True,  1, 0, 0),
+])
+def test_the_execution_artifact_state_table(label, artifact, ready, valid,
+                                            missing, malformed):
+    """Absent and malformed are different states, and a present-but-unreadable
+    receipt must never read as ordinary absence -- the fail-open bug this
+    repository already fixed once for harness provenance."""
+    result = dp.execution_artifact_receipts(rows_with(artifact))
+    assert result["ready"] is ready, label
+    assert result["valid_receipts"] == valid, label
+    assert result["missing_receipts"] == missing, label
+    assert result["malformed_receipts"] == malformed, label
+
+
+def test_a_mutable_serving_alias_is_not_an_execution_artifact_receipt():
+    """repo/host/runtime are aliases. An Ollama tag can be re-pointed at other
+    bytes, so it cannot say what produced a trace -- and its absence is
+    MISSING, not malformed."""
+    result = dp.execution_artifact_receipts(rows_with(_ABSENT))
+    assert result["ready"] is False
+    assert result["missing_receipts"] == 1
+    assert result["malformed_receipts"] == 0
+    assert "mutable serving aliases" in result["reason"]
+
+
+def test_template_sha256_is_not_accepted_as_an_artifact_receipt():
+    """It pins the rendered interface -- what the model was fed -- not the
+    model. Both matter; they are not the same claim. Note the alias rows all
+    carry template_sha256 and are still missing a receipt."""
+    assert dp.execution_artifact_receipts(rows_with(_ABSENT))["valid_receipts"] == 0
+    assert dp.execution_artifact_receipts(
+        rows_with({"template_sha256": GOOD}))["malformed_receipts"] == 1
+
+
+def test_a_complete_uniform_receipt_is_ready():
+    result = dp.execution_artifact_receipts(rows_with(receipt(), n=3))
+    assert result["ready"] is True
+    assert (result["valid_receipts"], result["missing_receipts"],
+            result["malformed_receipts"]) == (3, 0, 0)
+    assert result["distinct_receipts"] == [{
+        "registry_model": MUSE_REGISTRY, "model_id": MUSE_MODEL_ID,
+        "revision": RECEIPT_REVISION, "digest_field": "manifest_digest",
+        "digest": GOOD}]
+
+
+def test_a_partially_receipted_corpus_is_not_ready():
+    """Half a corpus naming its artifact cannot say what produced the rest."""
+    result = dp.execution_artifact_receipts(
+        rows_with(receipt()) + rows_with(_ABSENT))
+    assert result["ready"] is False
+    assert (result["valid_receipts"], result["missing_receipts"]) == (1, 1)
+    assert "1/2" in result["reason"]
+
+
+def test_one_malformed_receipt_disqualifies_an_otherwise_complete_corpus():
+    """Not skipped, not outvoted by its neighbours."""
+    result = dp.execution_artifact_receipts(
+        rows_with(receipt(), n=9) + rows_with(receipt(digest="nope")))
+    assert result["ready"] is False
+    assert result["malformed_receipts"] == 1
+    assert "malformed" in result["reason"]
+
+
+def test_two_distinct_artifacts_in_one_corpus_are_not_ready():
+    result = dp.execution_artifact_receipts(
+        rows_with(receipt()) + rows_with(receipt(digest=OTHER)))
+    assert result["ready"] is False
+    assert "2 distinct execution artifacts" in result["reason"]
+
+
+def test_the_same_digest_under_different_fields_is_still_two_artifacts():
+    """manifest_digest:X and blob_digest:X are different claims about where the
+    identity came from, so they are not interchangeable."""
+    result = dp.execution_artifact_receipts(
+        rows_with(receipt()) + rows_with(receipt(field="blob_digest")))
+    assert result["ready"] is False
+    assert len(result["distinct_receipts"]) == 2
+
+
+@pytest.mark.requires_local_corpus
+def test_the_legacy_corpus_is_missing_receipts_not_malformed():
+    """The distinction matters: 136 traces that never recorded an artifact are
+    honestly incomplete. Reading them as malformed would accuse the generator
+    of writing something unreadable, and reading malformed as missing would let
+    a broken receipt pass as an honest gap."""
+    report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
+    artifact = report["execution_artifact"]
+    assert artifact["traces"] == 136
+    assert artifact["valid_receipts"] == 0
+    assert artifact["missing_receipts"] == 136
+    assert artifact["malformed_receipts"] == 0
+    assert artifact["ready"] is False
+    assert "mutable serving aliases" in artifact["reason"]
+
+
+@pytest.mark.parametrize("artifact", [
+    _ABSENT, None, {}, "scalar", [], {"unknown": 1},
+    receipt(), receipt() | {"blob_digest": "bad"}, receipt(digest=GOOD.upper()),
+])
+def test_the_three_counts_partition_the_corpus(artifact):
+    """valid + missing + malformed == traces, always.
+
+    This is what makes `malformed_receipts == 0` safe to state in the ready
+    rule even though it is redundant today: each trace lands in exactly one
+    bucket, so a malformed trace can never also be counted valid. A refactor
+    that let one trace contribute twice would break this partition first, and
+    the redundant clause would then start doing real work.
+    """
+    result = dp.execution_artifact_receipts(rows_with(artifact, n=4))
+    assert (result["valid_receipts"] + result["missing_receipts"]
+            + result["malformed_receipts"]) == result["traces"] == 4
+
+
+def test_ready_is_exactly_the_documented_four_part_rule():
+    """ready == traces > 0 and valid == traces and malformed == 0
+       and exactly one distinct receipt."""
+    for artifact, n in [(_ABSENT, 2), (receipt(), 2),
+                        (receipt(digest="bad"), 2), (None, 1), ({}, 3)]:
+        r = dp.execution_artifact_receipts(rows_with(artifact, n=n))
+        assert r["ready"] == (r["traces"] > 0
+                              and r["valid_receipts"] == r["traces"]
+                              and r["malformed_receipts"] == 0
+                              and len(r["distinct_receipts"]) == 1)
+    mixed = rows_with(receipt()) + rows_with(receipt(digest=OTHER))
+    r = dp.execution_artifact_receipts(mixed)
+    assert r["ready"] is False and len(r["distinct_receipts"]) == 2
+
+
+# --- the receipt must BIND to the resolved registry entry -------------------
+#
+# A digest alone is 64 characters that could belong to any artifact. Without
+# these comparisons, a Qwen artifact's receipt would satisfy a verified Muse
+# registry entry: the corpus would be "identity verified" about a checkpoint
+# that never produced it. The registry VALIDATES a receipt; it never
+# manufactures one, so every value compared here came from the traces.
+
+def audit_with(tmp_path, artifact, spec=None, n=2):
+    rows = []
+    for _ in range(n):
+        row = trace()
+        row["provenance"] = dict(row["provenance"], execution_artifact=artifact)
+        rows.append(row)
+    path = declaring_pass(tmp_path, rows)
+    specs = {MUSE_REGISTRY: spec if spec is not None else bound_spec()}
+    import unittest.mock as _mock
+    with _mock.patch.object(dp, "_resolve_teacher_specs",
+                            lambda teachers, overrides: (specs, [])):
+        return dp.audit_corpus(path, TODAY, teacher_overrides=[MUSE_REGISTRY])
+
+
+def test_a_receipt_bound_to_the_resolved_registry_entry_is_ready(tmp_path):
+    """The positive control, with the binding made explicit: the receipt names
+    the same registry entry, model_id and pinned revision the registry does."""
+    report = audit_with(tmp_path, receipt())
+    assert report["execution_artifact"]["bound"] is True
+    assert report["execution_artifact"]["binding_problems"] == []
+    assert report["readiness"]["execution_artifact_ready"] is True
+    assert report["readiness"]["registry_identity_ready"] is True
+    assert report["readiness"]["identity_ready"] is True
+
+
+@pytest.mark.parametrize("label, artifact", [
+    ("wrong registry model", receipt(registry_model="qwen35-9b-instruct")),
+    ("wrong model id",       receipt(model_id="Qwen/Qwen3.5-9B")),
+    ("wrong revision",       receipt(revision="a4" * 20)),
+])
+def test_a_valid_digest_bound_to_the_wrong_entry_refuses(tmp_path, label, artifact):
+    """Each of these is a well-formed receipt. What disqualifies it is that it
+    describes a different checkpoint from the one the registry resolved."""
+    report = audit_with(tmp_path, artifact)
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False, label
+    assert ea["bound"] is False, label
+    assert ea["binding_problems"], label
+    assert report["readiness"]["identity_ready"] is False, label
+    # the registry side is fine -- only the binding failed
+    assert report["readiness"]["registry_identity_ready"] is True, label
+
+
+def test_a_receipt_cannot_bind_to_a_registry_with_a_placeholder_revision(tmp_path):
+    """Today's real state. A placeholder is not a revision, so nothing can be
+    bound to it -- which is why PR C must pin the parent before any corpus can
+    claim a bound receipt."""
+    spec = bound_spec(revision="REPLACE_WITH_PINNED_HUB_COMMIT")
+    report = audit_with(tmp_path, receipt(), spec=spec)
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False
+    assert any("placeholder" in p for p in ea["binding_problems"])
+    assert report["readiness"]["identity_ready"] is False
+
+
+def test_two_traces_swapping_receipts_between_teachers_refuse(tmp_path):
+    """A corpus whose traces name different artifacts cannot say what produced
+    it, whichever registry entries those artifacts belong to."""
+    rows = []
+    for artifact in (receipt(), receipt(registry_model="qwen35-9b-instruct",
+                                        model_id="Qwen/Qwen3.5-9B")):
+        row = trace()
+        row["provenance"] = dict(row["provenance"], execution_artifact=artifact)
+        rows.append(row)
+    path = declaring_pass(tmp_path, rows)
+    import unittest.mock as _mock
+    with _mock.patch.object(dp, "_resolve_teacher_specs",
+                            lambda teachers, overrides: ({MUSE_REGISTRY: bound_spec()}, [])):
+        report = dp.audit_corpus(path, TODAY, teacher_overrides=[MUSE_REGISTRY])
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False
+    assert len(ea["distinct_receipts"]) == 2
+    assert report["readiness"]["identity_ready"] is False
+
+
+def test_a_receipt_naming_an_unresolved_teacher_refuses(tmp_path):
+    """The receipt must name a teacher this corpus actually resolved, not any
+    entry that happens to exist in the registry."""
+    report = audit_with(tmp_path, receipt(registry_model="not-a-teacher"))
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False
+    assert any("not a resolved teacher" in p for p in ea["binding_problems"])
+
+
+# --- the identity is structured, so delimiters are inert --------------------
+
+@pytest.mark.parametrize("hostile", [
+    "a|b", "|", "a|b|c|d|e|f", "muse|glimmer|30b",
+    '{"json":"like"}', "with spaces", "quote\"inside", "tab\there",
+    "newline\nhere", "unicode-\u00e9\u00e8", "\\backslash",
+])
+def test_delimiters_in_binding_values_cannot_shift_field_boundaries(hostile):
+    """These values come from the traces. A delimited identity string would
+    split into the wrong number of fields and crash the binder or silently
+    move a value into the wrong slot; escaping would only relocate the bug."""
+    result = dp.execution_artifact_receipts(
+        rows_with(receipt(registry_model=hostile), n=2))
+    assert result["ready"] is True
+    assert result["malformed_receipts"] == 0
+    identity = result["distinct_receipts"][0]
+    assert isinstance(identity, dict)
+    assert identity["registry_model"] == hostile        # verbatim, unsplit
+    assert identity["model_id"] == MUSE_MODEL_ID        # boundary intact
+    assert identity["revision"] == RECEIPT_REVISION
+    assert identity["digest"] == RECEIPT_DIGEST
+
+
+def test_a_hostile_binding_value_refuses_at_the_binder_without_crashing(tmp_path):
+    """It must be REFUSED, not merely survive parsing: no registry entry is
+    named 'a|b'."""
+    report = audit_with(tmp_path, receipt(registry_model="a|b"))
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False
+    assert any("not a resolved teacher" in p for p in ea["binding_problems"])
+
+
+# --- one corpus, one canonical teacher --------------------------------------
+
+def test_a_corpus_mixing_teacher_identities_cannot_be_bound(tmp_path):
+    """Per-trace binding, enforced at the corpus level.
+
+    Two traces, two different declared teachers resolving to two different
+    registry models, both carrying the SAME otherwise-valid receipt. Parsing is
+    ready -- one distinct receipt, nothing malformed -- so the refusal comes
+    specifically from the corpus mixing teacher identities, not from the
+    digests differing. Without this check the Qwen-attributed trace would never
+    be compared with its own registry entry.
+    """
+    rows = []
+    for teacher in ("muse-glimmer", "qwen"):
+        row = trace()
+        row["provenance"] = dict(row["provenance"], teacher=teacher,
+                                 execution_artifact=receipt())
+        rows.append(row)
+    path = declaring_pass(tmp_path, rows)
+
+    # the receipts themselves are fine: one distinct identity, none malformed
+    parsed = dp.execution_artifact_receipts(rows)
+    assert parsed["ready"] is True
+    assert len(parsed["distinct_receipts"]) == 1
+    assert parsed["malformed_receipts"] == 0
+
+    two_teachers = {MUSE_REGISTRY: bound_spec(),
+                    "qwen35-9b-instruct": bound_spec(
+                        model_id="Qwen/Qwen3.5-9B")}
+    import unittest.mock as _mock
+    with _mock.patch.object(dp, "_resolve_teacher_specs",
+                            lambda teachers, overrides: (two_teachers, [])):
+        report = dp.audit_corpus(path, TODAY)
+
+    ea = report["execution_artifact"]
+    assert ea["ready"] is False
+    assert ea["bound"] is False
+    assert any("mixes teacher identities" in p for p in ea["binding_problems"])
+    assert report["readiness"]["execution_artifact_ready"] is False
+    assert report["readiness"]["identity_ready"] is False
+
+
+def test_a_single_teacher_corpus_with_a_matching_receipt_still_binds(tmp_path):
+    """The control for the rule above: one canonical teacher binds normally."""
+    report = audit_with(tmp_path, receipt())
+    assert report["execution_artifact"]["bound"] is True
+
+
+def test_an_empty_corpus_is_not_ready():
+    result = dp.execution_artifact_receipts([])
+    assert result["ready"] is False
+    assert result["reason"] == "no traces"

@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 60
 
     env:
-      EXPECTED_EXCLUDED_CORPUS: "47"
+      EXPECTED_EXCLUDED_CORPUS: "48"
       EXPECTED_SELECTED_ADDIN: "36"
 
       # The add-in source, pinned to an immutable tag AND the exact commit that

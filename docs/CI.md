@@ -18,7 +18,7 @@ Deselection happens only in `.github/workflows/tests.yml`, as an explicit `-m`
 expression a reader can see. It is a workflow policy, not a property of the
 tests.
 
-## Gap 1 — the corpus (47 tests)
+## Gap 1 — the corpus (48 tests)
 
 `.gitignore` excludes `*.jsonl` (except `prompts/*.jsonl`), `data/raw/` and
 `data/promoted/`: *"Corpora and weights never belong in git — HF hosts those."*
@@ -198,7 +198,7 @@ today is the baseline tag: a clean clone installs from the lockfile and passes
 The workflow collects each partition into the job log every run and asserts its
 size independently:
 
-    EXPECTED_EXCLUDED_CORPUS: 47   (excluded)
+    EXPECTED_EXCLUDED_CORPUS: 48   (excluded)
     EXPECTED_SELECTED_ADDIN:  36   (selected)
 
 Both assertions fail in **both** directions. If a number moves, investigate; do
@@ -209,25 +209,37 @@ an existing test stopped exercising one, and both are worth knowing.
 shrinking selection is the same failure as a silently growing exclusion, wearing
 the opposite sign, so it is asserted in both directions like its counterpart.
 
-The **final deselected total is read from the run**, never computed as 47 + 36.
+The **final deselected total is read from the run**, never computed as 48 + 36.
 A test could in principle carry both markers, in which case the union is smaller
-than the sum. Today the union collects 83, which happens to equal the sum — that is a
+than the sum. Today the union collects 84, which happens to equal the sum — that is a
 measurement, not an assumption, and it is re-measured whenever either number
 moves. It has already moved: 13/28 on `main` before the distillation branch
 landed, 37/36 after it, 44/37 with harness attribution, 46/37 once the
 readiness block was pinned by tests that read the real corpus, 47/37 once the
-legacy corpus was pinned as absent-not-malformed, and 47/36 when prompt
+legacy corpus was pinned as absent-not-malformed, 47/36 when prompt
 verification removed the last add-in-dependent test in
-`tests/test_verify_harness_identity.py`.
+`tests/test_verify_harness_identity.py`, and 48/36 when splitting registry
+identity from execution-artifact identity added one test that pins the real
+corpus's receipt counts (136 traces, 0 valid, 136 missing, 0 malformed) —
+a fact only the real corpus can state.
 
-That last move is the only one in this milestone, and it is a removal, not a
-reclassification. `test_the_real_harnesses_measure_but_stay_unpinned` asserted
-that the shipped harnesses stay unpinned *because* the add-in was unpublished,
-and it needed a real add-in checkout to say so. The add-in is published now, so
-that assertion is false and its replacement — the exact pin, in
-`test_the_shipped_harnesses_pin_the_published_baseline` — is a config assertion
-that runs offline in CI and needs no checkout. The partition shrank because a
-dependency genuinely went away.
+The two most recent moves are different kinds of event, and neither is a
+reclassification.
+
+**47/36 was a removal.** `test_the_real_harnesses_measure_but_stay_unpinned`
+asserted that the shipped harnesses stay unpinned *because* the add-in was
+unpublished, and it needed a real add-in checkout to say so. The add-in is
+published now, so that assertion is false and its replacement — the exact pin,
+in `test_the_shipped_harnesses_pin_the_published_baseline` — is a config
+assertion that runs offline and needs no checkout. The add-in partition shrank
+because a dependency genuinely went away.
+
+**48/36 was an addition.** Splitting registry identity from execution-artifact
+identity added `test_the_legacy_corpus_is_missing_receipts_not_malformed`,
+which pins what the 136 real traces actually contain: 0 valid receipts, 136
+missing, 0 malformed. Only the real corpus can state its own counts, so the
+test carries `requires_local_corpus` deliberately. The corpus partition grew
+because a new fact about the corpus is now asserted.
 
 ### A test that only LOOKED add-in dependent
 

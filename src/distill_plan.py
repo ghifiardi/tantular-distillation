@@ -41,6 +41,7 @@ import argparse
 import datetime as _dt
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -731,6 +732,222 @@ def _harness_coverage(path: Path) -> dict:
     return block
 
 
+# An execution-artifact receipt: the immutable identity of the thing that
+# ACTUALLY RAN, recorded by the generator at generation time.
+#
+# A serving alias is not one. The legacy corpus records repo: "muse-glimmer:30b"
+# and nothing else — an Ollama tag that can be re-pointed at different bytes at
+# any moment, so it cannot say which weights produced those traces. Nor is the
+# registry one: verifying today's checkpoint says nothing about what ran months
+# ago. That is the whole reason this is a separate readiness component, and it
+# is why this function reads ONLY the traces.
+#
+# template_sha256 is deliberately not accepted either. It pins the rendered
+# interface — what the model was fed — not the model. Both matter; they are not
+# the same claim.
+#
+# ABSENT AND MALFORMED ARE DIFFERENT, and conflating them is a fail-open bug
+# this repository has already fixed once, for harness provenance. A corpus with
+# no receipts is honestly incomplete; a corpus whose receipts are unreadable is
+# making a claim it cannot support, and must say so rather than reading as
+# ordinary absence.
+EXECUTION_ARTIFACT_DIGESTS = ("blob_digest", "manifest_digest", "model_digest")
+# A digest alone proves nothing: it is 64 characters that could belong to any
+# artifact. The receipt must also say WHICH registry entry it is a receipt for,
+# so the audit can check that the thing which ran is the thing the registry
+# describes. Without this, a Qwen artifact's digest would satisfy a verified
+# Muse registry entry and the conjunction would pass.
+EXECUTION_ARTIFACT_BINDING = ("model_id", "registry_model", "revision")
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+# Exactly 64 lowercase hex. No "sha256:" prefix: two spellings of one value
+# would otherwise become two distinct receipt identities, and a corpus that
+# mixed them would look like a mixed pass.
+_ARTIFACT_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def canonical_receipt_key(receipt: dict[str, str]) -> str:
+    """A stable key for deduplicating receipts. Internal only: never parsed
+    back, and never the thing the binder compares."""
+    return json.dumps(receipt, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"))
+
+
+def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
+    """What the traces themselves say about the artifact that generated them.
+
+    Ready only when EVERY trace carries exactly one well-formed receipt and
+    they all name the same artifact. A corpus half of whose traces name their
+    artifact cannot say what produced the other half; two distinct artifacts in
+    one corpus is a mixed pass, not a verified one; and a single malformed
+    receipt anywhere disqualifies the corpus rather than being skipped.
+    """
+    valid: list[dict[str, str]] = []
+    malformed: list[str] = []
+    missing = 0
+
+    for index, row in enumerate(rows):
+        provenance = row.get("provenance")
+        if not isinstance(provenance, dict) or "execution_artifact" not in provenance:
+            missing += 1                      # absent: incomplete, not a lie
+            continue
+
+        block = provenance["execution_artifact"]
+        if not isinstance(block, dict):
+            malformed.append(
+                f"trace {index}: execution_artifact is "
+                f"{type(block).__name__}, not a mapping")
+            continue
+        if not block:
+            malformed.append(f"trace {index}: execution_artifact is empty")
+            continue
+
+        present = [f for f in EXECUTION_ARTIFACT_DIGESTS if f in block]
+        if not present:
+            malformed.append(
+                f"trace {index}: execution_artifact carries no supported digest "
+                f"(have {sorted(block)}, want one of "
+                f"{list(EXECUTION_ARTIFACT_DIGESTS)})")
+            continue
+        if len(present) > 1:
+            # Two digest fields are two claims about one artifact. Even when
+            # both parse, nothing here can say which is authoritative.
+            malformed.append(
+                f"trace {index}: execution_artifact declares {len(present)} "
+                f"digest fields {present}; exactly one is allowed")
+            continue
+
+        field = present[0]
+        value = block[field]
+        if not isinstance(value, str) or not _ARTIFACT_DIGEST_RE.match(value):
+            malformed.append(f"trace {index}: {field}={value!r} is not 64 "
+                             "lowercase hexadecimal characters")
+            continue
+
+        binding = {}
+        problem = None
+        for key in EXECUTION_ARTIFACT_BINDING:
+            bound = block.get(key)
+            if not isinstance(bound, str) or not bound.strip():
+                problem = (f"trace {index}: execution_artifact.{key} is required "
+                           "so the receipt can be tied to a registry entry")
+                break
+            binding[key] = bound
+        if problem is None and not _COMMIT_RE.match(binding["revision"]):
+            problem = (f"trace {index}: execution_artifact.revision "
+                       f"{binding['revision']!r} is not a complete lowercase "
+                       "40-character commit")
+        if problem:
+            malformed.append(problem)
+            continue
+
+        # Structured, never a delimited string. These values come from the
+        # traces, so a registry_model containing the delimiter would otherwise
+        # split into the wrong number of fields and crash the binder or shift
+        # the field boundaries. Escaping would only move the problem.
+        valid.append({
+            "registry_model": binding["registry_model"],
+            "model_id": binding["model_id"],
+            "revision": binding["revision"],
+            "digest_field": field,
+            "digest": value,
+        })
+
+    # Canonical JSON is a dedupe/sort KEY only; the receipts stay structured.
+    by_key = {canonical_receipt_key(r): r for r in valid}
+    distinct = [by_key[k] for k in sorted(by_key)]
+    ready = (len(rows) > 0
+             and len(valid) == len(rows)
+             and not malformed
+             and len(distinct) == 1)
+
+    if not rows:
+        reason = "no traces"
+    elif malformed:
+        reason = (f"{len(malformed)} malformed execution-artifact receipt(s); "
+                  "a present receipt that cannot be read is a claim this corpus "
+                  "cannot support")
+    elif missing == len(rows):
+        reason = ("no execution-artifact receipt recorded at generation time; "
+                  "the traces name only mutable serving aliases, which cannot "
+                  "identify the bytes that ran")
+    elif missing:
+        reason = (f"only {len(valid)}/{len(rows)} traces carry a receipt; the "
+                  "rest cannot say what produced them")
+    elif len(distinct) > 1:
+        reason = f"{len(distinct)} distinct execution artifacts in one corpus"
+    else:
+        reason = "every trace names the same immutable execution artifact"
+
+    return {
+        "ready": ready,
+        "traces": len(rows),
+        "valid_receipts": len(valid),
+        "missing_receipts": missing,
+        "malformed_receipts": len(malformed),
+        "distinct_receipts": distinct,
+        "malformed_examples": malformed[:5],
+        "accepted_digest_fields": list(EXECUTION_ARTIFACT_DIGESTS),
+        "reason": reason,
+    }
+
+
+def bind_execution_artifact(artifact: dict[str, Any],
+                            specs: dict[str, dict]) -> dict[str, Any]:
+    """Check the receipt the TRACES carry against the resolved registry specs.
+
+    The registry validates a receipt; it never manufactures one. Parsing stays
+    trace-only above; this only compares what the traces already said with what
+    the registry already says, and refuses on any disagreement.
+    """
+    result = dict(artifact)
+    result["bound"] = False
+    result["binding_problems"] = []
+    if not artifact["ready"]:
+        return result                        # already refused on shape
+
+    receipt = artifact["distinct_receipts"][0]      # a dict, not a parsed string
+    registry_model = receipt["registry_model"]
+    problems: list[str] = []
+
+    # SINGLE-TEACHER POLICY. One corpus, one execution artifact -- so one
+    # canonical teacher. Otherwise a receipt naming teacher A would be checked
+    # only against A's spec while traces attributed to teacher B rode along
+    # unexamined, which is corpus-level binding pretending to be per-trace.
+    if len(specs) > 1:
+        problems.append(
+            f"corpus mixes teacher identities {sorted(specs)}; a single "
+            "execution artifact cannot have produced traces attributed to more "
+            "than one registry model")
+
+    spec = specs.get(registry_model)
+    if spec is None:
+        problems.append(
+            f"receipt names registry_model {registry_model!r}, which is not a "
+            f"resolved teacher of this corpus (resolved: {sorted(specs)})")
+    else:
+        if spec.get("model_id") != receipt["model_id"]:
+            problems.append(
+                f"receipt model_id {receipt['model_id']!r} != registry "
+                f"{spec.get('model_id')!r} for {registry_model!r}")
+        pinned = str(spec.get("revision") or "")
+        if not _COMMIT_RE.match(pinned):
+            problems.append(
+                f"registry {registry_model!r} has no pinned revision "
+                f"({pinned!r}); a receipt cannot be bound to a placeholder")
+        elif pinned != receipt["revision"]:
+            problems.append(
+                f"receipt revision {receipt['revision']!r} != registry pinned "
+                f"{pinned!r}")
+
+    result["binding_problems"] = problems
+    result["bound"] = not problems
+    if problems:
+        result["ready"] = False
+        result["reason"] = ("the receipt does not bind to the resolved registry "
+                            "entry: " + "; ".join(problems))
+    return result
+
+
 def audit_corpus(corpus: str | Path, today: _dt.date,
                  teacher_overrides: list | None = None) -> dict:
     """The mechanical limits of a promoted corpus, as a dict.
@@ -822,7 +1039,16 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
     # checked against real files, so "trainable as is" would be a claim about a
     # checkpoint nobody confirmed. See src/verify_model_identity.py.
     unverified = [s["registry_model"] for s in freshness if not s["digests_verified"]]
-    identity_verified = bool(freshness) and not unverified
+    registry_identity_ready = bool(freshness) and not unverified
+
+    # Identity is two claims, not one, and conflating them let a corpus inherit
+    # a verification it had no right to. Qualifying today's registry entry says
+    # the CURRENT canonical checkpoint is pinned; it says nothing about which
+    # artifact generated traces months ago. Keep them apart so verifying a
+    # teacher can never retroactively upgrade history.
+    artifact = bind_execution_artifact(execution_artifact_receipts(rows), specs)
+    execution_artifact_ready = artifact["ready"]
+    identity_verified = registry_identity_ready and execution_artifact_ready
 
     # Each requirement, named and reported separately. A single boolean says a
     # corpus is not trainable; it does not say WHY, and "still false" is not
@@ -832,6 +1058,8 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
     readiness = {
         "fp8_ready": fp8_met,
         "source_ready": synthetic == 0,
+        "registry_identity_ready": registry_identity_ready,
+        "execution_artifact_ready": execution_artifact_ready,
         "identity_ready": identity_verified,
         "license_ready": bool(freshness)
                          and all(s["status"] == "FRESH" for s in freshness)
@@ -879,8 +1107,11 @@ def audit_corpus(corpus: str | Path, today: _dt.date,
         "readiness": readiness,
         "identity_verification": {
             "all_verified": identity_verified,
+            "registry_identity_ready": registry_identity_ready,
+            "execution_artifact_ready": execution_artifact_ready,
             "unverified_models": unverified,
         },
+        "execution_artifact": artifact,
         "limits": limits,
         "trainable_as_is": trainable_as_is,
         "authorizes_training": False,
