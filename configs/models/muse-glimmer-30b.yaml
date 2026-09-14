@@ -19,7 +19,7 @@
 schema_version: 1
 
 model_id: meta-models/Muse-Glimmer-30B
-revision: REPLACE_WITH_PINNED_HUB_COMMIT
+revision: a4e59da52a7bc87ae7251dd5545c0dd437c44b68
 role: teacher
 family: muse-glimmer
 generation: "1"
@@ -35,13 +35,13 @@ params:
 
 tokenizer:
   model_id: meta-models/Muse-Glimmer-30B
-  revision: REPLACE_WITH_PINNED_HUB_COMMIT
-  sha256: TOKENIZER_DIGEST_MUSE_GLIMMER_30B   # differs from the Qwen student
+  revision: a4e59da52a7bc87ae7251dd5545c0dd437c44b68
+  sha256: f945b361c8e542b5d2cb6737d03537d656aaeb94f5fe80b9ec7c00234260cf76   # differs from the Qwen student
 
 chat_template:
   source: model
   path: null
-  sha256: CHAT_TEMPLATE_DIGEST_MUSE_GLIMMER_30B
+  sha256: cfc67e5f349f37690dfd31ed1f18bc4442a9dd32fe39a648f993cb4eb3cae678
 
 architecture_profile: null    # teachers are served by URL; no LoRA layout needed
 
@@ -61,4 +61,4 @@ license:
   recheck_max_age_days: 180
   evidence_sha256: LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B
 
-digests_verified: false
+digests_verified: true
