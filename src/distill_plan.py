@@ -781,7 +781,7 @@ def execution_artifact_receipts(rows: list[dict]) -> dict[str, Any]:
     one corpus is a mixed pass, not a verified one; and a single malformed
     receipt anywhere disqualifies the corpus rather than being skipped.
     """
-    valid: list[str] = []
+    valid: list[dict[str, str]] = []
     malformed: list[str] = []
     missing = 0
 

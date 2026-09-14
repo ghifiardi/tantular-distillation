@@ -223,14 +223,23 @@ identity from execution-artifact identity added one test that pins the real
 corpus's receipt counts (136 traces, 0 valid, 136 missing, 0 malformed) —
 a fact only the real corpus can state.
 
-That last move is the only one in this milestone, and it is a removal, not a
-reclassification. `test_the_real_harnesses_measure_but_stay_unpinned` asserted
-that the shipped harnesses stay unpinned *because* the add-in was unpublished,
-and it needed a real add-in checkout to say so. The add-in is published now, so
-that assertion is false and its replacement — the exact pin, in
-`test_the_shipped_harnesses_pin_the_published_baseline` — is a config assertion
-that runs offline in CI and needs no checkout. The partition shrank because a
-dependency genuinely went away.
+The two most recent moves are different kinds of event, and neither is a
+reclassification.
+
+**47/36 was a removal.** `test_the_real_harnesses_measure_but_stay_unpinned`
+asserted that the shipped harnesses stay unpinned *because* the add-in was
+unpublished, and it needed a real add-in checkout to say so. The add-in is
+published now, so that assertion is false and its replacement — the exact pin,
+in `test_the_shipped_harnesses_pin_the_published_baseline` — is a config
+assertion that runs offline and needs no checkout. The add-in partition shrank
+because a dependency genuinely went away.
+
+**48/36 was an addition.** Splitting registry identity from execution-artifact
+identity added `test_the_legacy_corpus_is_missing_receipts_not_malformed`,
+which pins what the 136 real traces actually contain: 0 valid receipts, 136
+missing, 0 malformed. Only the real corpus can state its own counts, so the
+test carries `requires_local_corpus` deliberately. The corpus partition grew
+because a new fact about the corpus is now asserted.
 
 ### A test that only LOOKED add-in dependent
 
