@@ -821,7 +821,10 @@ def test_the_legacy_corpus_is_blocked_by_exactly_its_historical_reasons():
     assert report["readiness"] == {
         "fp8_ready": False,               # int4_ollama traces
         "source_ready": False,            # 136/136 synthetic
-        "registry_identity_ready": False, # digests_verified is not true
+        # The teacher is qualified now, so the registry side passes. The
+        # corpus still cannot claim identity: it records only a mutable Ollama
+        # tag, and no later qualification can establish what generated it.
+        "registry_identity_ready": True,
         "execution_artifact_ready": False,# only a mutable Ollama tag recorded
         "identity_ready": False,          # the conjunction of the two above
         "license_ready": True,            # apache-2.0, reviewed and in date

@@ -335,12 +335,12 @@ def test_the_muse_glimmer_registry_names_the_parent_not_the_drafter():
     assert spec["tokenizer"]["model_id"] == MUSE_GLIMMER_PARENT
     assert spec["tokenizer"]["model_id"] != MUSE_GLIMMER_DRAFTER
 
-    # 5. and none of this claims verification
-    assert spec["digests_verified"] is False
-    assert spec["revision"] == "REPLACE_WITH_PINNED_HUB_COMMIT"
-    assert spec["tokenizer"]["revision"] == "REPLACE_WITH_PINNED_HUB_COMMIT"
-    assert not vmi.SHA256_RE.match(str(spec["tokenizer"]["sha256"]))
-    assert not vmi.SHA256_RE.match(str(spec["chat_template"]["sha256"]))
+    # 5. the source correction has since been qualified: these were the
+    #    placeholder assertions that kept PR A from drifting into a
+    #    qualification, and they are replaced by the exact pin below.
+    assert spec["digests_verified"] is True
+    assert vmi.SHA256_RE.match(str(spec["tokenizer"]["sha256"]))
+    assert vmi.SHA256_RE.match(str(spec["chat_template"]["sha256"]))
 
 
 def test_the_muse_glimmer_serving_repos_agree_with_the_corrected_source():
@@ -371,3 +371,40 @@ def test_the_muse_glimmer_serving_repos_agree_with_the_corrected_source():
         (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text())
     assert spec["serving_config"] == "muse-glimmer"
     assert repos["bf16"] == spec["model_id"]
+
+
+# Measured from meta-models/Muse-Glimmer-30B at commit
+# a4e59da52a7bc87ae7251dd5545c0dd437c44b68, metadata only, offline. The
+# expectations are literals on purpose: reading them from the registry would
+# make the test agree with whatever the registry said.
+MUSE_COMMIT = "a4e59da52a7bc87ae7251dd5545c0dd437c44b68"
+MUSE_TOKENIZER_SHA = \
+    "f945b361c8e542b5d2cb6737d03537d656aaeb94f5fe80b9ec7c00234260cf76"
+MUSE_TEMPLATE_SHA = \
+    "cfc67e5f349f37690dfd31ed1f18bc4442a9dd32fe39a648f993cb4eb3cae678"
+
+
+def test_the_shipped_muse_glimmer_spec_pins_the_qualified_parent():
+    """The teacher's counterpart to the student's exact-pin test.
+
+    Qualifying the teacher does NOT make the legacy corpus identity-ready:
+    that corpus records only a mutable Ollama tag, and execution-artifact
+    readiness is a separate claim. See docs/QWEN35_9B_IDENTITY_QUALIFICATION.md
+    for the student and the audit's execution_artifact block for the corpus.
+    """
+    spec = yaml.safe_load(
+        (ROOT / "configs" / "models" / "muse-glimmer-30b.yaml").read_text())
+
+    assert spec["model_id"] == MUSE_GLIMMER_PARENT
+    assert spec["model_id"] != MUSE_GLIMMER_DRAFTER
+    assert spec["revision"] == MUSE_COMMIT
+    assert spec["tokenizer"]["model_id"] == MUSE_GLIMMER_PARENT
+    assert spec["tokenizer"]["revision"] == MUSE_COMMIT
+    assert spec["tokenizer"]["sha256"] == MUSE_TOKENIZER_SHA
+    assert spec["chat_template"]["source"] == "model"
+    assert spec["chat_template"]["sha256"] == MUSE_TEMPLATE_SHA
+    assert spec["digests_verified"] is True
+
+    assert len(spec["revision"]) == 40           # a Git object id
+    assert vmi.SHA256_RE.match(spec["tokenizer"]["sha256"])
+    assert vmi.SHA256_RE.match(spec["chat_template"]["sha256"])

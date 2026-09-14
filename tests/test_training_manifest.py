@@ -246,12 +246,13 @@ def test_freeze_records_the_provenance_audit(valid_freeze):
         "negative age would otherwise pass `age > max_age` forever")
     assert audit["identity_verification"] == {
         "all_verified": False,
-        # Two independent reasons, both false here: the registry entry is not
-        # verified, and these traces record only a mutable Ollama tag, so
-        # nothing identifies the artifact that produced them.
-        "registry_identity_ready": False,
+        # The registry entry is qualified; the corpus still is not. These
+        # traces record only a mutable Ollama tag, so nothing identifies the
+        # artifact that produced them, and qualifying the teacher today cannot
+        # establish what ran months ago.
+        "registry_identity_ready": True,
         "execution_artifact_ready": False,
-        "unverified_models": ["muse-glimmer-30b"]}
+        "unverified_models": []}
     assert audit["trainable_as_is"] is False
     # Stated inside the block, not left to be inferred from its absence.
     assert audit["authorizes_training"] is False
