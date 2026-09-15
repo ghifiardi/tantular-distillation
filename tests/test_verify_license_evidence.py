@@ -632,10 +632,29 @@ def test_the_template_binds_to_no_shipped_registry_entry():
             vle.bind_to_spec(record, spec, name)
 
 
-def test_no_shipped_registry_entry_has_licence_evidence_yet():
-    """PR B adds the format and the verifier, and answers no licence question.
-    This test is expected to change when a reviewed record lands."""
-    for name in ("muse-glimmer-30b", "qwen35-9b-instruct", "qwen35-122b-a10b"):
+def test_the_human_muse_record_is_present_but_not_pinned_yet():
+    """The human determination is committed before the verifier-generated pin.
+
+    This is the deliberately invalidated first commit: the exact record exists,
+    but the registry still carries its recognised placeholder and the licence
+    gate continues to refuse it.
+    """
+    name = "muse-glimmer-30b"
+    record_path = ROOT / "docs" / "licences" / f"{name}.md"
+    record = vle.parse_record(record_path)
+    spec = yaml.safe_load(
+        (ROOT / "configs" / "models" / f"{name}.yaml").read_text())
+    assert record["registry_model"] == name
+    assert record["model_id"] == spec["model_id"]
+    assert record["revision"] == spec["revision"]
+    assert record["reviewed_at"] == str(spec["license"]["reviewed_at"])
+    assert record["reviewed_by"] == "Raditio Ghifiardi"
+    assert record["output_training_permitted"] is True
+    assert spec["license"]["output_training_permitted"] is True
+    assert vle._PLACEHOLDER_EVIDENCE_RE.fullmatch(
+        spec["license"]["evidence_sha256"])
+
+    for name in ("qwen35-9b-instruct", "qwen35-122b-a10b"):
         spec = yaml.safe_load(
             (ROOT / "configs" / "models" / f"{name}.yaml").read_text())
         digest = spec["license"]["evidence_sha256"]

@@ -57,7 +57,7 @@ capabilities:
 license:
   identifier: apache-2.0
   output_training_permitted: true
-  reviewed_at: 2026-09-03
+  reviewed_at: 2026-09-15
   recheck_max_age_days: 180
   evidence_sha256: LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B
 

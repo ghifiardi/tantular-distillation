@@ -116,5 +116,8 @@ which is what stops a changed record from re-pinning itself silently.
 7. If the record ever changes afterwards, the verifier refuses until the
    recorded digest is cleared — see the two-commit re-review sequence above.
 
-No record has been written yet. All three shipped registry entries still carry
-placeholders and are correctly refused by the licence gate.
+One human-reviewed record now exists for `muse-glimmer-30b`, but its registry
+entry still carries the recognised placeholder until the separate verifier
+commit pins the whole-file digest. The other two shipped entries have no
+records. All three remain refused by the licence gate in this intermediate
+state.
