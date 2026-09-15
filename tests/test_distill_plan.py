@@ -297,6 +297,54 @@ def test_the_identity_pins_that_are_real_are_preserved():
         assert dp.compatibility_key(spec) is not None, name
 
 
+# --- parameter counts are measured, not read off the product name -----------
+#
+# Qwen3.5-122B-A10B's safetensors metadata at the pinned commit reports
+# 125,086,497,008 parameters. "122B" is the product name, and params.total_b
+# sizes GPU memory, so the name is the wrong number to plan against.
+QWEN122_MEASURED_TOTAL_B = 125.1
+QWEN122_MARKETING_TOTAL_B = 122.0
+
+
+def test_the_122b_total_params_are_the_measured_count_not_the_product_name():
+    spec = dp._load("models", "qwen35-122b-a10b")
+    total = spec["params"]["total_b"]
+
+    assert total == QWEN122_MEASURED_TOTAL_B
+    assert total != QWEN122_MARKETING_TOTAL_B
+    # The name stays the name; only the parameter claim was corrected.
+    assert spec["model_id"] == "Qwen/Qwen3.5-122B-A10B"
+
+
+def test_the_corrected_total_params_actually_move_the_memory_estimate():
+    """Otherwise the correction is a comment, not a fix. This field is the only
+    input to the weight term, so a wrong value under-sizes every host check."""
+    spec = dp._load("models", "qwen35-122b-a10b")
+    measured_gb, incomplete = dp._weight_gb(spec, "bf16")
+
+    marketing = dict(spec, params=dict(spec["params"],
+                                       total_b=QWEN122_MARKETING_TOTAL_B))
+    marketing_gb, _ = dp._weight_gb(marketing, "bf16")
+
+    assert measured_gb > marketing_gb
+    assert measured_gb == QWEN122_MEASURED_TOTAL_B * dp.BYTES_PER_PARAM["bf16"]
+    # The vision tower is still unaccounted, so the estimate stays INCOMPLETE:
+    # correcting the text-stack count did not silently complete it.
+    assert incomplete is True
+
+
+def test_the_moe_profile_does_not_call_eight_experts_the_routed_ones():
+    """256 experts are routed; 8 are activated per token. The old
+    `experts_routed: 8` described a different architecture."""
+    profile = dp._load("architectures", "qwen35-hybrid-moe")
+    expected = profile["expected"]
+
+    assert "experts_routed" not in expected
+    assert expected["experts_routed_total"] == 256
+    assert expected["experts_activated_per_token"] == 8
+    assert expected["experts_shared"] == 1
+
+
 # --- compatibility key and mode selection -----------------------------------
 
 def test_the_qualified_122b_and_9b_tokenizers_are_compatible():
