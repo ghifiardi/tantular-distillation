@@ -182,6 +182,7 @@ def test_the_verifier_decides_nothing_a_permitted_record_verifies_identically(re
     ({"model_id": "other-org/Other-7B"}, "model_id"),
     ({"revision": "f" * 40}, "revision"),
     ({"registry_model": "something-else"}, "registry_model"),
+    ({"reviewed_at": "2026-02-01"}, "reviewed_at"),
 ])
 def test_a_record_about_another_checkpoint_does_not_bind(repo, over, marker, capsys):
     write_record(repo, **over)
@@ -473,18 +474,20 @@ def test_a_changed_record_refuses_in_report_only_mode_too(repo, capsys):
     assert model.read_text() == pinned_text
 
 
-@pytest.mark.parametrize("edit", [
-    {"reviewed_by": "C. Other <c@example.com>"},
-    {"reviewed_at": "2026-03-01"},
-    {"sources": [{"path": "LICENSE", "sha256": "d" * 64}]},
+@pytest.mark.parametrize("edit,marker", [
+    ({"reviewed_by": "C. Other <c@example.com>"}, "changed after it was pinned"),
+    ({"reviewed_at": "2026-03-01"}, "reviewed_at"),
+    ({"sources": [{"path": "LICENSE", "sha256": "d" * 64}]},
+     "changed after it was pinned"),
 ])
-def test_any_edit_to_a_pinned_record_refuses_rather_than_re_pinning(repo, edit, capsys):
+def test_any_edit_to_a_pinned_record_refuses_rather_than_re_pinning(
+        repo, edit, marker, capsys):
     model, pinned_text = pinned(repo)
     capsys.readouterr()
     write_record(repo, **edit)
     refuses("example-teacher-7b", "--write")
     assert model.read_text() == pinned_text
-    assert "changed after it was pinned" in capsys.readouterr().err
+    assert marker in capsys.readouterr().err
 
 
 def test_the_refusal_names_both_digests(repo, capsys):
@@ -597,9 +600,9 @@ def test_the_recognised_placeholder_form_is_writable(repo, value):
     assert run("example-teacher-7b", "--write") == 0
 
 
-def test_the_shipped_placeholders_are_all_the_recognised_form():
-    """If they were not, --write could never fill them without a hand edit."""
-    for name in ("muse-glimmer-30b", "qwen35-9b-instruct", "qwen35-122b-a10b"):
+def test_the_remaining_shipped_placeholders_are_the_recognised_form():
+    """The two entries without reviews remain mechanically fillable later."""
+    for name in ("qwen35-9b-instruct", "qwen35-122b-a10b"):
         spec = yaml.safe_load(
             (ROOT / "configs" / "models" / f"{name}.yaml").read_text())
         value = spec["license"]["evidence_sha256"]
@@ -632,13 +635,8 @@ def test_the_template_binds_to_no_shipped_registry_entry():
             vle.bind_to_spec(record, spec, name)
 
 
-def test_the_human_muse_record_is_present_but_not_pinned_yet():
-    """The human determination is committed before the verifier-generated pin.
-
-    This is the deliberately invalidated first commit: the exact record exists,
-    but the registry still carries its recognised placeholder and the licence
-    gate continues to refuse it.
-    """
+def test_the_human_muse_record_is_pinned_exactly():
+    """The committed record and registry digest must remain byte-identical."""
     name = "muse-glimmer-30b"
     record_path = ROOT / "docs" / "licences" / f"{name}.md"
     record = vle.parse_record(record_path)
@@ -651,8 +649,12 @@ def test_the_human_muse_record_is_present_but_not_pinned_yet():
     assert record["reviewed_by"] == "Raditio Ghifiardi"
     assert record["output_training_permitted"] is True
     assert spec["license"]["output_training_permitted"] is True
-    assert vle._PLACEHOLDER_EVIDENCE_RE.fullmatch(
-        spec["license"]["evidence_sha256"])
+    assert record["record_sha256"] == \
+        "2cd78b16a73e905c74136a48441b9548a66dd457504629f73f8ef386bab190fb"
+    assert spec["license"]["evidence_sha256"] == record["record_sha256"]
+    assert vle.classify_registry_evidence(
+        spec, ROOT / "configs" / "models" / f"{name}.yaml",
+        record["record_sha256"]) == vle.MATCHED
 
     for name in ("qwen35-9b-instruct", "qwen35-122b-a10b"):
         spec = yaml.safe_load(

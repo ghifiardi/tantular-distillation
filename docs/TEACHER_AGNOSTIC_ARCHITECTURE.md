@@ -120,12 +120,12 @@ that a value will exist, not a value. One shared rule cannot express this: a
 commit is 40 characters and a digest is 64, so tightening the shared check to 64
 would have rejected the two correctly pinned revisions instead.
 
-No shipped registry entry currently records real licence evidence, so all three
-report `FRESH_NO_EVIDENCE` and the planner refuses. `output_training_permitted:
-true` is a **declaration awaiting substantiation**, not a finding: neither
-Apache 2.0 (silent on model outputs) nor the parent's `USAGE_POLICY.md` (which
-prohibits particular uses, none of them training) states it. Only a human
-reviewer may decide it, from the exact pinned sources.
+`muse-glimmer-30b` now records a human-reviewed determination against its exact
+pinned parent sources, and its evidence digest is verifier-pinned. The other
+two entries remain without records: `qwen35-122b-a10b` is refused when used as
+a teacher, while `qwen35-9b-instruct` is a student and therefore not a current
+teacher licence-gate blocker. Only a human reviewer may make these
+determinations; the verifier checks and hashes what was decided.
 
 That decision is written down in `docs/licences/<registry-name>.md` — YAML front
 matter binding the reviewed checkpoint, the source documents and their hashes, a

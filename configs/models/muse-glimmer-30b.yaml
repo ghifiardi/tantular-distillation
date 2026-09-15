@@ -59,6 +59,6 @@ license:
   output_training_permitted: true
   reviewed_at: 2026-09-15
   recheck_max_age_days: 180
-  evidence_sha256: LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B
+  evidence_sha256: 2cd78b16a73e905c74136a48441b9548a66dd457504629f73f8ef386bab190fb
 
 digests_verified: true

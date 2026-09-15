@@ -6,11 +6,11 @@ registry entry, named for it: `docs/licences/<registry-name>.md`.
 ## Why the field exists
 
 `configs/models/*.yaml` declares `license.output_training_permitted`, and the
-planner treats it as a gate. Nothing upstream states that value. Apache 2.0
-governs the software and weights and is silent on model outputs; a usage policy
-typically prohibits particular *uses* without addressing training at all. So the
-field is a judgement someone made, and `license.evidence_sha256` is the digest of
-the document in which they made it.
+planner treats it as a gate. Upstream licences, model cards, and usage policies
+may support a determination, but none maps mechanically to that registry
+boolean. The field is a judgement a human made after reviewing those sources,
+and `license.evidence_sha256` is the digest of the document in which they made
+it.
 
 Before these records existed, the registry shipped `evidence_sha256:
 LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B` — a placeholder that validated as
@@ -116,8 +116,7 @@ which is what stops a changed record from re-pinning itself silently.
 7. If the record ever changes afterwards, the verifier refuses until the
    recorded digest is cleared — see the two-commit re-review sequence above.
 
-One human-reviewed record now exists for `muse-glimmer-30b`, but its registry
-entry still carries the recognised placeholder until the separate verifier
-commit pins the whole-file digest. The other two shipped entries have no
-records. All three remain refused by the licence gate in this intermediate
-state.
+One human-reviewed, verifier-pinned record exists for `muse-glimmer-30b`. The
+other two shipped entries have no records: `qwen35-122b-a10b` remains refused
+when used as a teacher, while `qwen35-9b-instruct` is a student and its missing
+record is not a teacher licence-gate blocker.
