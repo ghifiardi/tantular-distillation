@@ -236,11 +236,11 @@ def test_freeze_records_the_provenance_audit(valid_freeze):
     assert audit["source_classes"] == {"synthetic": 260}
     assert audit["license_freshness"]["resolved"][0]["registry_model"] == "muse-glimmer-30b"
     # Freshness is measured against the freeze date, not the clock. This fixture
-    # freezes at 2026-08-19 while the registry entry was reviewed on 2026-09-03,
+    # freezes at 2026-08-19 while the registry entry was reviewed on 2026-09-15,
     # so the review is in the FUTURE relative to the freeze.
     assert audit["as_of_date"] == "2026-08-19"
     resolved = audit["license_freshness"]["resolved"][0]
-    assert resolved["age_days"] == -15
+    assert resolved["age_days"] == -27
     assert resolved["status"] == "UNKNOWN", (
         "a review dated after the freeze is a data error, not freshness; a "
         "negative age would otherwise pass `age > max_age` forever")

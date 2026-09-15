@@ -131,17 +131,17 @@ so this qualification could not launder it. See
 weights changed under an unchanged tokenizer and template would still read as
 verified.
 
-**The licence evidence is still unresolved, as of this record.**
-`LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B` remains a placeholder. This measured
-a tokenizer and a template; it did not perform a licence review, and the
-verifier does not own that field. The drafter repository's licence files must
-not be reused as evidence for the parent without a separate review against the
-parent's exact commit.
+**The identity qualification did not itself settle the licence.** A separate
+human review was completed on 15 September 2026 against the parent at this same
+pinned commit. Its record is
+`docs/licences/muse-glimmer-30b.md`, verifier-pinned by the whole-file digest in
+the registry. The review is scoped to the teacher-output distillation workflow
+and does not authorize training; `train/TRAINING_BLOCKED.md` remains
+controlling.
 
-This is a statement of current state, not an invariant. Resolving that digest
-through a real review is expected future work, and no test pins the placeholder
-— a test asserting it would make a legitimate licence review look like a
-regression.
+The DFlash drafter's byte-identical licence files were not accepted as parent
+evidence. The licence record binds both `model_id` and revision, in addition to
+the source hashes.
 
 **Processor identity is not part of the contract.** The parent publishes
 `processor_config.json`; it is not digested, for the same reason the student's

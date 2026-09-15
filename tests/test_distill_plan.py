@@ -266,15 +266,14 @@ def test_the_shipped_122b_placeholders_no_longer_validate():
     assert dp.license_status(spec, TODAY)["evidence_present"] is False
 
 
-def test_every_shipped_registry_entry_now_lacks_licence_evidence():
-    """All three, not just the one that prompted this. None of them has ever
-    recorded a real evidence digest; the placeholders only looked like one.
+def test_muse_has_reviewed_evidence_while_the_other_entries_do_not():
+    muse = dp.license_status(
+        dp._load("models", "muse-glimmer-30b"), _dt.date(2026, 9, 15))
+    assert muse["evidence_present"] is True
+    assert muse["status"] == "FRESH"
+    assert muse["problems"] == []
 
-    This test is expected to CHANGE when a reviewed licence record exists — at
-    that point the entry it covers moves to FRESH. It is pinning today's
-    truthful state, not asserting that evidence must never arrive.
-    """
-    for name in ("muse-glimmer-30b", "qwen35-9b-instruct", "qwen35-122b-a10b"):
+    for name in ("qwen35-9b-instruct", "qwen35-122b-a10b"):
         st = dp.license_status(dp._load("models", name), TODAY)
         assert st["evidence_present"] is False, name
         assert st["status"] == "FRESH_NO_EVIDENCE", name
@@ -486,10 +485,14 @@ def bound_spec(**over) -> dict:
     spec["digests_verified"] = True
     # The shipped entry carries a licence evidence PLACEHOLDER. These tests are
     # about identity and the fp8 gate, not licence review, so give them a
-    # well-formed digest rather than letting an unrelated licence blocker decide
-    # their verdict. The real registry keeps its placeholder, and the real-corpus
-    # test asserts the blocker it produces.
-    spec["license"] = {**(spec.get("license") or {}), "evidence_sha256": "e" * 64}
+    # synthetic fresh review and a well-formed digest rather than letting an
+    # unrelated licence date or evidence blocker decide their verdict. The real
+    # registry carries the human review; the real-corpus test asserts its state.
+    spec["license"] = {
+        **(spec.get("license") or {}),
+        "reviewed_at": "2026-09-01",
+        "evidence_sha256": "e" * 64,
+    }
     spec.update(over)
     return spec
 
@@ -810,34 +813,15 @@ def repo_state() -> dict:
     return state
 
 
-def test_the_cli_refuses_the_shipped_plan_and_still_writes_nothing():
-    """Two properties, and the second is the safety one.
-
-    Since licence evidence is validated by shape, every shipped teacher carries
-    a placeholder, so the only plan in configs/distillation/ REFUSES at the
-    licence gate. That is the intended state: the registry declares
-    output_training_permitted: true, and nothing substantiates it.
-
-    A refusal must still be inert. The planner writes no file and starts no
-    process whether it emits a plan or rejects one, so the no-write assertion
-    holds on both paths and is the reason this test survives the change.
-
-    When a reviewed licence record exists and evidence_sha256 is written, this
-    becomes returncode 0 with "DRY RUN" in stdout again. The dry-run OUTPUT
-    itself is covered without the licence gate by
-    test_dry_run_prints_no_training_command and
-    test_dry_run_names_the_serving_configs_not_the_registry_names, which call
-    dry_run_sequence directly, so no coverage is lost in the meantime.
-    """
+def test_the_cli_dry_run_writes_nothing_and_calls_nothing():
+    """The reviewed licence lets the planner report; it still executes nothing."""
     before = repo_state()
     proc = subprocess.run(
         [str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "src" / "distill_plan.py"),
-         "plan", "office-v2-sequence", "--today", "2026-09-03", "--dry-run"],
+         "plan", "office-v2-sequence", "--today", "2026-09-15", "--dry-run"],
         capture_output=True, text=True, cwd=ROOT)
-    assert proc.returncode == 2, proc.stdout + proc.stderr
-    combined = proc.stdout + proc.stderr
-    assert "licence gate FAILED (FRESH_NO_EVIDENCE)" in combined
-    assert "evidence_sha256 is not a 64-character sha256 digest" in combined
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "DRY RUN" in proc.stdout
     assert repo_state() == before
 
 
@@ -991,7 +975,8 @@ def test_the_legacy_corpus_is_blocked_by_exactly_its_historical_reasons():
     coherent, and its refusal must still come from quantization, synthetic
     sources and unverified identity.
     """
-    report = dp.audit_corpus(ROOT / "data" / "promoted" / "train.jsonl", TODAY)
+    report = dp.audit_corpus(
+        ROOT / "data" / "promoted" / "train.jsonl", _dt.date(2026, 9, 15))
 
     assert report["readiness"] == {
         "fp8_ready": False,               # int4_ollama traces
@@ -1002,20 +987,13 @@ def test_the_legacy_corpus_is_blocked_by_exactly_its_historical_reasons():
         "registry_identity_ready": True,
         "execution_artifact_ready": False,# only a mutable Ollama tag recorded
         "identity_ready": False,          # the conjunction of the two above
-        # apache-2.0 and in date, but the recorded evidence digest is the
-        # placeholder LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B. The declaration
-        # output_training_permitted: true is an assertion nobody has
-        # substantiated, so the gate refuses it until a real digest exists.
-        "license_ready": False,
+        # Human-reviewed against the pinned parent sources on 2026-09-15.
+        "license_ready": True,
         "harness_ready": True,            # no declaration, no attribution: coherent
     }
     assert report["trainable_as_is"] is False
 
-    # The verdict was already false. What must change is that the licence now
-    # appears as its OWN named reason rather than silently passing — the whole
-    # point of the readiness block.
-    assert any("evidence_sha256" in limit for limit in report["limits"]), \
-        report["limits"]
+    assert not any("licence" in limit.lower() for limit in report["limits"])
 
     assert report["harness"] == {"required": False, "attributed": False,
                                  "coverage": 0.0}

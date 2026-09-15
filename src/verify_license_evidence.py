@@ -7,13 +7,13 @@
     ./.venv/bin/python src/verify_license_evidence.py muse-glimmer-30b --write
 
 WHAT THIS TOOL IS NOT. It does not decide whether training on a teacher's
-outputs is permitted, and it contains no rule that could. No upstream document
-answers that question: Apache 2.0 is silent on model outputs, and the Muse
-parent's USAGE_POLICY.md prohibits particular uses without addressing training.
-The answer is a human judgement. This tool checks that a human recorded one, that
-the record is complete and bound to the right checkpoint, and that the digest in
-the registry is the digest of THAT record. A record saying `false` verifies
-exactly as readily as one saying `true`.
+outputs is permitted, and it contains no rule that could. Upstream licences,
+model documentation, and usage policies are evidence a reviewer interprets;
+none is a machine-readable value this tool can map automatically to the
+registry's boolean. The answer is a human judgement. This tool checks that a
+human recorded one, that the record is complete and bound to the right
+checkpoint, and that the digest in the registry is the digest of THAT record.
+A record saying `false` verifies exactly as readily as one saying `true`.
 
 WHAT THE DIGEST COVERS. The whole file, byte for byte, as committed — front
 matter and prose together. Hashing only the header would let the reasoning be
@@ -46,8 +46,10 @@ overwritten on the assumption that it meant nothing.
 SUPERSEDED is the state this tool exists for. A valid digest on file that no
 longer matches the record means the reviewed document changed after it was
 pinned. Re-pinning it automatically would make a tamper-evidence tool erase the
-evidence of tampering. Clearing the field is a person's deliberate act, visible
-in the same commit as the re-review.
+evidence of tampering. Re-review uses two commits: first commit the changed
+record with the digest reset to the recognised placeholder, then run --write
+and commit the new digest. The verifier enforces the transition through the
+placeholder; Git history and human review enforce the two-commit sequence.
 
 NO NETWORK, NO CREDENTIAL, NO MODEL. Reads two local files and writes at most one.
 """
@@ -302,7 +304,14 @@ def bind_to_spec(record: dict, spec: dict, name: str) -> None:
     if record["revision"] != spec.get("revision"):
         problems.append(f"revision {record['revision']!r} != registry "
                         f"{spec.get('revision')!r}")
-    declared = (spec.get("license") or {}).get("output_training_permitted")
+    license_block = spec.get("license") or {}
+    registry_reviewed_at = license_block.get("reviewed_at")
+    if record["reviewed_at"] != str(registry_reviewed_at):
+        problems.append(
+            f"reviewed_at {record['reviewed_at']!r} != registry "
+            f"{str(registry_reviewed_at)!r}. Freshness is computed from the "
+            "registry date, so it must be the date of this reviewed record.")
+    declared = license_block.get("output_training_permitted")
     if declared is not record["output_training_permitted"]:
         problems.append(
             f"determination.output_training_permitted "
@@ -421,9 +430,10 @@ def main(argv: list[str] | None = None) -> int:
             f"  record    {record['record_sha256']}\n"
             "The reviewed document changed after it was pinned. Overwriting the "
             "recorded digest would erase the only evidence that the decision on "
-            "file is no longer the decision that was reviewed. Re-review the "
-            "record, clear license.evidence_sha256 in the same commit, and write "
-            "the new digest deliberately.")
+            "file is no longer the decision that was reviewed. Re-review in two "
+            "commits: first commit the changed record with "
+            "license.evidence_sha256 reset to the recognised placeholder; then "
+            "run --write and commit the new digest.")
 
     if state == MATCHED:
         print("registry          already records this record; nothing to do")
