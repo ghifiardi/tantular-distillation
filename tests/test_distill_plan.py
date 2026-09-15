@@ -256,11 +256,18 @@ def test_a_malformed_tokenizer_digest_is_reported_as_malformed_not_missing():
     assert not any("missing on one side" in e for e in malformed), malformed
 
 
-def test_the_shipped_122b_placeholders_no_longer_validate():
-    """The real file, not a fixture. qwen35-122b-a10b carries
-    REPLACE_WITH_PINNED_HUB_COMMIT and TOKENIZER_DIGEST_QWEN35_122B, and both
-    passed the old check. Neither is a value."""
-    spec = dp._load("models", "qwen35-122b-a10b")
+def test_placeholder_identity_values_do_not_validate():
+    """Keep the Milestone 8 regression after the shipped 122B entry is pinned.
+
+    Placeholder rejection is a shape invariant, not a permanent assertion that
+    a particular registry entry must remain unresolved.
+    """
+    spec = teacher(
+        revision="REPLACE_WITH_PINNED_HUB_COMMIT",
+        tokenizer={"sha256": "TOKENIZER_DIGEST_QWEN35_122B"},
+        license=license_block(
+            evidence_sha256="LICENSE_EVIDENCE_DIGEST_QWEN35_122B"),
+    )
     assert dp._is_commit(spec.get("revision")) is False
     assert dp.compatibility_key(spec) is None
     assert dp.license_status(spec, TODAY)["evidence_present"] is False
@@ -282,15 +289,37 @@ def test_muse_has_reviewed_evidence_while_the_other_entries_do_not():
 
 def test_the_identity_pins_that_are_real_are_preserved():
     """The other half of the same change: rejecting placeholders must not
-    reject the two revisions and tokenizer digests that were properly
-    qualified in Milestones 6 and 7."""
-    for name in ("muse-glimmer-30b", "qwen35-9b-instruct"):
+    reject revisions and tokenizer digests that were properly qualified."""
+    for name in ("muse-glimmer-30b", "qwen35-9b-instruct",
+                 "qwen35-122b-a10b"):
         spec = dp._load("models", name)
         assert dp._is_commit(spec["revision"]) is True, name
         assert dp.compatibility_key(spec) is not None, name
 
 
 # --- compatibility key and mode selection -----------------------------------
+
+def test_the_qualified_122b_and_9b_tokenizers_are_compatible():
+    """Measured from both canonical snapshots, not inferred from family names."""
+    expected = "6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af"
+    teacher_122b = dp._load("models", "qwen35-122b-a10b")
+    student_9b = dp._load("models", "qwen35-9b-instruct")
+
+    assert dp.compatibility_key(teacher_122b) == expected
+    assert dp.compatibility_key(student_9b) == expected
+    assert dp.tokenizers_compatible(teacher_122b, student_9b) is True
+
+
+def test_the_122b_identity_pin_does_not_open_the_licence_gate():
+    """Identity evidence is not a human licence determination."""
+    spec = dp._load("models", "qwen35-122b-a10b")
+    status = dp.license_status(spec, TODAY)
+
+    assert status["status"] == "FRESH_NO_EVIDENCE"
+    assert status["evidence_present"] is False
+    with pytest.raises(SystemExit):
+        dp.license_gate(spec, "qwen35-122b-a10b", TODAY)
+
 
 def test_matching_compatibility_key_selects_mode_c_under_auto():
     mode, _ = dp.choose_mode("auto", PLAN_WITH_PAIRS, teacher(), "t",

@@ -127,6 +127,33 @@ def test_snapshot_of_a_different_repo_is_refused(registry, capsys):
     assert yaml.safe_load(registry.read_text())["digests_verified"] is False
 
 
+@pytest.mark.parametrize("derivative", [
+    "unsloth/Qwen3.5-122B-A10B",
+    "Intel/Qwen3.5-122B-A10B-int4-AutoRound",
+    "nvidia/Qwen3.5-122B-A10B-NVFP4",
+])
+def test_the_qwen122b_canonical_id_does_not_match_derivatives(derivative):
+    canonical = "Qwen/Qwen3.5-122B-A10B"
+    assert vmi.model_ids.matches(canonical, canonical)
+    assert not vmi.model_ids.matches(canonical, derivative)
+
+
+def test_the_verifier_refuses_a_qwen122b_derivative_snapshot(
+        registry, capsys):
+    canonical = "Qwen/Qwen3.5-122B-A10B"
+    derivative = "unsloth/Qwen3.5-122B-A10B"
+    registry.write_text(
+        registry.read_text().replace("fake-org/Fake-9B", canonical),
+        encoding="utf-8")
+    snapshot = make_snapshot(cache_dir(), repo=derivative)
+
+    assert run("fake-9b", "--write", "--snapshot", str(snapshot)) == 2
+    err = capsys.readouterr().err
+    assert derivative in err
+    assert canonical in err
+    assert yaml.safe_load(registry.read_text())["digests_verified"] is False
+
+
 def test_loose_directory_cannot_mark_the_spec_verified(registry, tmp_path, capsys):
     """A directory of files records no commit, so its digest is not evidence."""
     loose = tmp_path / "loose"
@@ -301,6 +328,43 @@ def test_the_shipped_qwen35_instruct_spec_pins_the_qualified_snapshot():
     assert vmi.SHA256_RE.match(template["sha256"])
     # A Git object id is a different type from a SHA-256 prompt digest.
     assert len(spec["revision"]) == 40
+
+
+# Measured from Qwen/Qwen3.5-122B-A10B at commit
+# dc4d348443bc740c68e2d77492492c11606384d5, metadata-only and offline. As
+# above, these are literals so the test cannot agree with an accidental edit.
+QWEN122_COMMIT = "dc4d348443bc740c68e2d77492492c11606384d5"
+QWEN122_TOKENIZER_SHA = \
+    "6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af"
+QWEN122_TEMPLATE_SHA = \
+    "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+QWEN122_CANONICAL = "Qwen/Qwen3.5-122B-A10B"
+
+
+def test_the_shipped_qwen122b_spec_pins_the_qualified_canonical_snapshot():
+    spec = yaml.safe_load(
+        (ROOT / "configs" / "models" / "qwen35-122b-a10b.yaml").read_text())
+
+    assert spec["model_id"] == QWEN122_CANONICAL
+    assert spec["revision"] == QWEN122_COMMIT
+    assert spec["tokenizer"]["model_id"] == QWEN122_CANONICAL
+    assert spec["tokenizer"]["revision"] == QWEN122_COMMIT
+    assert spec["tokenizer"]["sha256"] == QWEN122_TOKENIZER_SHA
+    assert spec["chat_template"]["source"] == "model"
+    assert spec["chat_template"]["sha256"] == QWEN122_TEMPLATE_SHA
+    assert spec["digests_verified"] is True
+
+    assert len(spec["revision"]) == 40
+    assert vmi.SHA256_RE.match(spec["tokenizer"]["sha256"])
+    assert vmi.SHA256_RE.match(spec["chat_template"]["sha256"])
+
+    for derivative in (
+        "unsloth/Qwen3.5-122B-A10B",
+        "Intel/Qwen3.5-122B-A10B-int4-AutoRound",
+        "nvidia/Qwen3.5-122B-A10B-NVFP4",
+    ):
+        assert spec["model_id"] != derivative
+        assert not vmi.model_ids.matches(spec["model_id"], derivative)
 
 
 # --- the teacher's SOURCE, pinned exactly (not its digests) -----------------

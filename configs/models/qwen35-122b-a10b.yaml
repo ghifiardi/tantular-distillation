@@ -4,7 +4,7 @@
 schema_version: 1
 
 model_id: Qwen/Qwen3.5-122B-A10B
-revision: REPLACE_WITH_PINNED_HUB_COMMIT
+revision: dc4d348443bc740c68e2d77492492c11606384d5
 role: teacher
 family: qwen3.5
 generation: "3.5"
@@ -20,13 +20,13 @@ params:
 
 tokenizer:
   model_id: Qwen/Qwen3.5-122B-A10B
-  revision: REPLACE_WITH_PINNED_HUB_COMMIT
-  sha256: TOKENIZER_DIGEST_QWEN35_122B   # may or may not equal the 9B student's
+  revision: dc4d348443bc740c68e2d77492492c11606384d5
+  sha256: 6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af   # may or may not equal the 9B student's
 
 chat_template:
   source: model
   path: null
-  sha256: CHAT_TEMPLATE_DIGEST_QWEN35_122B
+  sha256: a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715
 
 architecture_profile: null
 
@@ -43,4 +43,4 @@ license:
   recheck_max_age_days: 180
   evidence_sha256: LICENSE_EVIDENCE_DIGEST_QWEN35_122B
 
-digests_verified: false
+digests_verified: true
