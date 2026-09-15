@@ -37,7 +37,14 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 HARNESS_DIR = ROOT / "configs" / "harnesses"
 
-REQUIRED_ARMS = ("student_current", "student_candidate", "teacher_current")
+# All four cells of the 2x2. teacher_candidate was declared by the experiment
+# and listed by build_plan, but evaluate() never required or read it -- so the
+# arm was decorative, and the one question the factorial design exists to answer
+# (does the harness change help the two models by the SAME amount?) could not be
+# asked. Requiring it here makes the interaction term measurable instead of
+# assumed.
+REQUIRED_ARMS = ("student_current", "student_candidate",
+                 "teacher_current", "teacher_candidate")
 
 
 class HarnessPlanError(ValueError):
@@ -562,9 +569,19 @@ def evaluate(experiment: dict[str, Any], measurements: dict[str, Any]) -> dict[s
     )
     noise = _number(decision.get("noise_floor"), "decision.noise_floor")
 
+    # Every configured metric on every declared arm. A partially measured arm
+    # silently narrowed the comparison: the capability metric came from four
+    # arms while the guardrails came from two, so a guardrail regression on the
+    # teacher side was unobservable by construction.
+    guardrail_names = sorted((decision.get("guardrails") or {}).keys())
+    for arm in plan["required_arms"]:
+        for name in [metric] + guardrail_names:
+            _metric(arms, arm, name)
+
     current = _metric(arms, "student_current", metric)
     candidate = _metric(arms, "student_candidate", metric)
     teacher = _metric(arms, "teacher_current", metric)
+    teacher_candidate = _metric(arms, "teacher_candidate", metric)
 
     guardrail_failures: list[str] = []
     for name, rule in (decision.get("guardrails") or {}).items():
@@ -622,7 +639,20 @@ def evaluate(experiment: dict[str, Any], measurements: dict[str, Any]) -> dict[s
             "student_current": current,
             "student_candidate": candidate,
             "teacher_current": teacher,
+            "teacher_candidate": teacher_candidate,
             "harness_gain": candidate - current,
+            "residual_model_gap": residual_gap,
+        },
+        # The 2x2's actual payload. A harness change that helps the teacher more
+        # than the student is not the same finding as one that helps both
+        # equally, and only the fourth arm can tell them apart: a positive
+        # interaction says the candidate harness needs capability the student
+        # does not have, which is an argument ABOUT weight distillation rather
+        # than a substitute for it.
+        "interaction": {
+            "student_harness_gain": candidate - current,
+            "teacher_harness_gain": teacher_candidate - teacher,
+            "interaction": (teacher_candidate - teacher) - (candidate - current),
             "residual_model_gap": residual_gap,
         },
         "thresholds": {
