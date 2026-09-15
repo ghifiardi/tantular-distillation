@@ -499,6 +499,24 @@ def test_the_refusal_names_both_digests(repo, capsys):
     assert hashlib.sha256(path.read_bytes()).hexdigest() in err
 
 
+def test_the_refusal_describes_the_two_commit_re_review_process(repo, capsys):
+    """The CLI must agree with docs/licences/README.md.
+
+    Clearing and re-pinning before one commit makes Git hide the invalidation;
+    the record change and placeholder reset are committed first, and the new
+    verifier-written digest is committed second.
+    """
+    pinned(repo)
+    capsys.readouterr()
+    write_record(repo, body=BODY + "\nRevised.\n")
+    refuses("example-teacher-7b", "--write")
+    err = capsys.readouterr().err
+    assert "two commits" in err
+    assert "first commit the changed record" in err
+    assert "then run --write and commit the new digest" in err
+    assert "same commit" not in err
+
+
 def test_the_clear_then_rewrite_transition_is_possible(repo):
     """Proves only that the technical path exists: once the recorded digest is
     reset to the placeholder, --write pins the revised record.

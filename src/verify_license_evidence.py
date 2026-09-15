@@ -46,8 +46,10 @@ overwritten on the assumption that it meant nothing.
 SUPERSEDED is the state this tool exists for. A valid digest on file that no
 longer matches the record means the reviewed document changed after it was
 pinned. Re-pinning it automatically would make a tamper-evidence tool erase the
-evidence of tampering. Clearing the field is a person's deliberate act, visible
-in the same commit as the re-review.
+evidence of tampering. Re-review uses two commits: first commit the changed
+record with the digest reset to the recognised placeholder, then run --write
+and commit the new digest. The verifier enforces the transition through the
+placeholder; Git history and human review enforce the two-commit sequence.
 
 NO NETWORK, NO CREDENTIAL, NO MODEL. Reads two local files and writes at most one.
 """
@@ -421,9 +423,10 @@ def main(argv: list[str] | None = None) -> int:
             f"  record    {record['record_sha256']}\n"
             "The reviewed document changed after it was pinned. Overwriting the "
             "recorded digest would erase the only evidence that the decision on "
-            "file is no longer the decision that was reviewed. Re-review the "
-            "record, clear license.evidence_sha256 in the same commit, and write "
-            "the new digest deliberately.")
+            "file is no longer the decision that was reviewed. Re-review in two "
+            "commits: first commit the changed record with "
+            "license.evidence_sha256 reset to the recognised placeholder; then "
+            "run --write and commit the new digest.")
 
     if state == MATCHED:
         print("registry          already records this record; nothing to do")
