@@ -52,12 +52,22 @@ digest and invalidates the registry entry until it is reviewed again.
 
 Four states, decided before anything is written:
 
-| registry `evidence_sha256` | state | behaviour |
-|---|---|---|
-| equals this record's digest | `MATCHED` | no-op |
-| placeholder or empty | `UNRECORDED` | `--write` fills it |
-| a **different** valid digest | `SUPERSEDED` | refuses, in both modes |
-| missing, non-string, or not exactly one field | `UNREADABLE` | refuses |
+| registry `evidence_sha256` | state | behaviour | exit |
+|---|---|---|---|
+| equals this record's digest | `MATCHED` | nothing to do | 0 |
+| `LICENSE_EVIDENCE_DIGEST_<ID>` | `UNRECORDED` | `--write` fills it | 0 with `--write`, 1 without |
+| a **different** valid digest | `SUPERSEDED` | refuses, in both modes | 2 |
+| anything else, missing, or not exactly one field | `UNREADABLE` | refuses | 2 |
+
+`UNRECORDED` is deliberately narrow: **only** the recognised placeholder form is
+writable. Arbitrary text, a misspelt `LICENSE_EVIDNCE_DIGEST_*`, a truncated
+digest or an empty value are `UNREADABLE`. A field whose meaning is unknown must
+not be overwritten on the assumption that it meant nothing.
+
+Only `MATCHED` is success. A report-only run against an unrecorded registry
+exits **1**, not 0 — the licence gate still refuses that teacher, and a 0 would
+read as "verified" to anything scripting this. Exit 1 is the same signal
+`src/verify_model_identity.py` gives for unfilled placeholders.
 
 `SUPERSEDED` is the state the tool exists for. A valid digest on file that no
 longer matches the record means the reviewed document changed *after* it was
@@ -65,11 +75,29 @@ pinned. That mismatch is the only signal that the decision on file is no longer
 the decision that was reviewed, so re-pinning it automatically would make a
 tamper-evidence tool erase the evidence of tampering.
 
-Re-review is still possible, and deliberately manual: re-review the record,
-clear `license.evidence_sha256` in the same commit, then run `--write`. The
-clearing is visible in the diff, which is the point.
-
 A refused run writes nothing. The registry file is byte-identical afterwards.
+
+### Re-reviewing a record that has already been pinned
+
+Two commits, in this order:
+
+1. **Invalidate.** Commit the changed record *and* reset
+   `license.evidence_sha256` to the placeholder, together. The repository is now
+   in a state where the licence gate refuses this teacher, and the human review
+   happens against that invalidated state.
+2. **Re-pin.** Run the verifier with `--write` and commit the newly measured
+   digest.
+
+Doing both in one commit is a mistake, and the reason is Git rather than the
+tool: an edit of `old digest -> placeholder -> new digest` made before
+committing leaves a final diff reading `old digest -> new digest`, and the
+invalidation never existed as far as history is concerned. The two-commit
+sequence is what makes "this pin was deliberately withdrawn and re-established"
+reviewable.
+
+The verifier cannot enforce this — it sees a working tree, not a commit graph.
+It enforces only that the transition must pass through the placeholder at all,
+which is what stops a changed record from re-pinning itself silently.
 
 ## Writing one
 
@@ -85,8 +113,8 @@ A refused run writes nothing. The registry file is byte-identical afterwards.
    and the verifier refuses a machine byline.
 6. Commit the record, align the registry's `output_training_permitted` with it,
    then run the verifier with `--write`.
-7. If the record ever changes afterwards, the verifier refuses until someone
-   clears the recorded digest as part of re-reviewing it.
+7. If the record ever changes afterwards, the verifier refuses until the
+   recorded digest is cleared — see the two-commit re-review sequence above.
 
 No record has been written yet. All three shipped registry entries still carry
 placeholders and are correctly refused by the licence gate.

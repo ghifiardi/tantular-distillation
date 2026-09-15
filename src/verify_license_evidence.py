@@ -32,10 +32,16 @@ person, at review time — which is the step the whole record exists to capture.
 WHAT --write WILL NOT DO. It never replaces a digest that is already valid. Four
 states, decided before anything is written:
 
-  MATCHED      the registry records this exact record -> no-op
-  UNRECORDED   a placeholder or empty value           -> --write fills it
+  MATCHED      the registry records this exact record -> exit 0
+  UNRECORDED   a recognised LICENSE_EVIDENCE_DIGEST_*  -> --write fills it;
+               placeholder                                report-only exits 1
   SUPERSEDED   a DIFFERENT valid digest is on file    -> REFUSE, both modes
-  UNREADABLE   no single readable field to act on     -> REFUSE
+  UNREADABLE   anything else, or no single field      -> REFUSE
+
+UNRECORDED is deliberately narrow. Only the recognised placeholder form is
+writable; arbitrary text, a misspelt placeholder, a truncated digest or an empty
+value are UNREADABLE, because a field whose meaning is unknown must not be
+overwritten on the assumption that it meant nothing.
 
 SUPERSEDED is the state this tool exists for. A valid digest on file that no
 longer matches the record means the reviewed document changed after it was
@@ -67,6 +73,11 @@ DETERMINATION_KEYS = ("output_training_permitted", "rationale")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _EVIDENCE_LINE_RE = re.compile(r"^(\s*evidence_sha256:[ \t]*)(\S+)(.*)$",
                                re.MULTILINE)
+# The ONLY non-digest value --write may overwrite. Anything else in that field —
+# a typo, a truncated digest, prose, an empty value — is a state nobody
+# intended, and guessing that it is "just a placeholder" would let --write
+# destroy it. A misspelt LICENSE_EVIDNCE_DIGEST_* does not match, deliberately.
+_PLACEHOLDER_EVIDENCE_RE = re.compile(r"^LICENSE_EVIDENCE_DIGEST_[A-Z0-9_]+$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 # A reviewer is a person who can be asked what they meant. This catches the
@@ -85,9 +96,12 @@ _PLACEHOLDER_RE = re.compile(
 MIN_RATIONALE_CHARS = 40
 
 
-def die(message: str) -> None:
-    print(f"LICENCE EVIDENCE REFUSED: {message}", file=sys.stderr)
-    raise SystemExit(2)
+def die(message: str, code: int = 2) -> None:
+    """code=2 refuses; code=1 is "complete, but not recorded yet", the same
+    distinction src/verify_model_identity.py draws for unfilled placeholders."""
+    label = "LICENCE EVIDENCE REFUSED" if code == 2 else "LICENCE EVIDENCE NOT PINNED"
+    print(f"{label}: {message}", file=sys.stderr)
+    raise SystemExit(code)
 
 
 class _StrictLoader(yaml.SafeLoader):
@@ -333,7 +347,9 @@ def classify_registry_evidence(spec: dict, model_path: Path, digest: str) -> str
         return UNREADABLE
     if _SHA256_RE.fullmatch(current):
         return MATCHED if current == digest else SUPERSEDED
-    return UNRECORDED
+    if _PLACEHOLDER_EVIDENCE_RE.fullmatch(current):
+        return UNRECORDED
+    return UNREADABLE
 
 
 def write_evidence(model_path: Path, digest: str) -> None:
@@ -391,8 +407,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"registry_state    {state}")
 
     if state == UNREADABLE:
-        die(f"{model_path.name} has no single readable license.evidence_sha256 "
-            "field. Nothing here can be verified or filled until it does.")
+        current = (spec.get("license") or {}).get("evidence_sha256", "<missing>")
+        die(f"{model_path.name} has no readable license.evidence_sha256 to act "
+            f"on: {current!r}. It is neither a 64-character sha256 nor a "
+            "recognised LICENSE_EVIDENCE_DIGEST_* placeholder, so its meaning "
+            "is unknown and --write will not overwrite it. Fix the field by "
+            "hand.")
 
     if state == SUPERSEDED:
         current = spec["license"]["evidence_sha256"]
@@ -412,9 +432,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.write:
         write_evidence(model_path, record["record_sha256"])
         print(f"WROTE             license.evidence_sha256 in {model_path.name}")
-    else:
-        print("registry          records no evidence yet; re-run with --write")
-    return 0
+        return 0
+
+    # The record is complete and valid, but the registry still records no
+    # evidence, so the licence gate still refuses this teacher. A verifier that
+    # exits 0 against an unresolved registry reads as "verified" in a script.
+    die(f"{model_path.name} records no evidence yet (placeholder "
+        f"{spec['license']['evidence_sha256']!r}). The record is valid; re-run "
+        "with --write to pin it.", code=1)
 
 
 if __name__ == "__main__":

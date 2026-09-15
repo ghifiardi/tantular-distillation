@@ -108,18 +108,29 @@ def run(*argv) -> int:
     return vle.main(list(argv))
 
 
-def refuses(*argv) -> pytest.ExceptionInfo:
+def exits(code: int, *argv) -> pytest.ExceptionInfo:
     with pytest.raises(SystemExit) as exc:
         run(*argv)
-    assert exc.value.code == 2
+    assert exc.value.code == code, f"expected exit {code}, got {exc.value.code}"
     return exc
+
+
+def refuses(*argv) -> pytest.ExceptionInfo:
+    """Exit 2: the record or the registry is wrong."""
+    return exits(2, *argv)
+
+
+def not_pinned(*argv) -> pytest.ExceptionInfo:
+    """Exit 1: the record is fine, the registry has not recorded it yet. A
+    verifier that exited 0 here would read as "verified" in a script."""
+    return exits(1, *argv)
 
 
 # --- the happy path ---------------------------------------------------------
 
 def test_a_complete_record_verifies_and_reports_its_digest(repo, capsys):
     path = write_record(repo)
-    assert run("example-teacher-7b") == 0
+    not_pinned("example-teacher-7b")
     out = capsys.readouterr().out
     expected = hashlib.sha256(path.read_bytes()).hexdigest()
     assert expected in out
@@ -162,7 +173,7 @@ def test_the_verifier_decides_nothing_a_permitted_record_verifies_identically(re
     write_record(repo, determination={"output_training_permitted": True,
                                       "rationale": RATIONALE})
     write_registry(repo, output_training_permitted=True)
-    assert run("example-teacher-7b") == 0
+    not_pinned("example-teacher-7b")
 
 
 # --- binding to the registry entry ------------------------------------------
@@ -286,7 +297,7 @@ def test_a_machine_byline_refuses(repo, reviewer, capsys):
 def test_a_human_name_that_merely_contains_those_letters_is_accepted(repo, reviewer):
     """Word boundaries matter: Abbott is a surname, not a bot."""
     write_record(repo, reviewed_by=reviewer)
-    assert run("example-teacher-7b") == 0
+    not_pinned("example-teacher-7b")          # accepted; simply not pinned yet
 
 
 @pytest.mark.parametrize("reviewer", ["", "   ", None])
@@ -396,7 +407,7 @@ def test_a_report_only_run_writes_nothing(repo):
     write_record(repo)
     model = repo / "configs" / "models" / "example-teacher-7b.yaml"
     before = model.read_text()
-    assert run("example-teacher-7b") == 0
+    not_pinned("example-teacher-7b")
     assert model.read_text() == before
 
 
@@ -417,10 +428,15 @@ def pinned(repo) -> tuple[Path, str]:
     return model, model.read_text()
 
 
-def test_state_is_unrecorded_then_matched(repo, capsys):
+def test_report_only_does_not_succeed_until_the_evidence_is_pinned(repo, capsys):
+    """Only MATCHED is success. An unresolved registry exits 1, because the
+    licence gate still refuses the teacher and a 0 here would say otherwise."""
     write_record(repo)
-    assert run("example-teacher-7b") == 0
-    assert f"registry_state    {vle.UNRECORDED}" in capsys.readouterr().out
+    not_pinned("example-teacher-7b")
+    captured = capsys.readouterr()
+    assert f"registry_state    {vle.UNRECORDED}" in captured.out
+    assert "records no evidence yet" in captured.err
+
     assert run("example-teacher-7b", "--write") == 0
     capsys.readouterr()
     assert run("example-teacher-7b") == 0
@@ -483,8 +499,16 @@ def test_the_refusal_names_both_digests(repo, capsys):
     assert hashlib.sha256(path.read_bytes()).hexdigest() in err
 
 
-def test_clearing_the_field_is_the_deliberate_way_forward(repo):
-    """Re-review is possible, but a person must clear the digest to do it."""
+def test_the_clear_then_rewrite_transition_is_possible(repo):
+    """Proves only that the technical path exists: once the recorded digest is
+    reset to the placeholder, --write pins the revised record.
+
+    It does NOT prove the clearing is visible in history. If someone resets the
+    field and writes the new digest before committing, Git records only
+    old digest -> new digest and the intermediate state is gone. Making the
+    invalidation reviewable takes two commits, which is a process the verifier
+    cannot enforce; see docs/licences/README.md.
+    """
     model, _ = pinned(repo)
     write_record(repo, body=BODY + "\nRevised after re-review.\n")
     refuses("example-teacher-7b", "--write")
@@ -500,8 +524,8 @@ def test_clearing_the_field_is_the_deliberate_way_forward(repo):
 
 @pytest.mark.parametrize("mutate,marker", [
     (lambda t: "".join(l for l in t.splitlines(True) if "evidence_sha256" not in l),
-     "no single readable"),
-    (lambda t: t + "  evidence_sha256: " + "f" * 64 + "\n", "no single readable"),
+     "no readable"),                                    # the field is gone
+    (lambda t: t + "  evidence_sha256: " + "f" * 64 + "\n", "no readable"),  # two
 ])
 def test_an_unreadable_evidence_field_refuses(repo, mutate, marker, capsys):
     write_record(repo)
@@ -511,6 +535,57 @@ def test_an_unreadable_evidence_field_refuses(repo, mutate, marker, capsys):
     refuses("example-teacher-7b", "--write")
     assert marker in capsys.readouterr().err
     assert model.read_text() == before
+
+
+@pytest.mark.parametrize("value", [
+    "garbage",
+    "wrong-digest",
+    "LICENSE_EVIDNCE_DIGEST_TYPO",              # misspelt: not the placeholder
+    "license_evidence_digest_muse",             # lowercased: not the placeholder
+    "LICENSE_EVIDENCE_DIGEST",                  # prefix with no identifier
+    "abc123",
+    "a" * 63,                                   # nearly a digest
+    "a" * 64 + "x",
+    "0123456789abcdef not a digest",
+    "sha256:" + "a" * 64,
+    "''",
+    '"   "',
+])
+def test_an_unrecognised_evidence_value_is_unreadable_not_writable(repo, value, capsys):
+    """A field whose meaning is unknown must not be overwritten on the
+    assumption that it meant nothing. Only LICENSE_EVIDENCE_DIGEST_<ID> is."""
+    write_record(repo)
+    model = repo / "configs" / "models" / "example-teacher-7b.yaml"
+    model.write_text(_EVIDENCE_SUB.sub(
+        lambda m: f"{m.group(1)}{value}{m.group(3)}", model.read_text()))
+    before = model.read_text()
+    refuses("example-teacher-7b", "--write")
+    err = capsys.readouterr().err
+    assert "recognised" in err or "readable" in err
+    assert model.read_text() == before, "an unreadable field must not be rewritten"
+
+
+@pytest.mark.parametrize("value", [
+    "LICENSE_EVIDENCE_DIGEST_EXAMPLE",
+    "LICENSE_EVIDENCE_DIGEST_MUSE_GLIMMER_30B",
+    "LICENSE_EVIDENCE_DIGEST_QWEN35_122B",
+    "LICENSE_EVIDENCE_DIGEST_A1",
+])
+def test_the_recognised_placeholder_form_is_writable(repo, value):
+    write_record(repo)
+    model = repo / "configs" / "models" / "example-teacher-7b.yaml"
+    model.write_text(_EVIDENCE_SUB.sub(
+        lambda m: f"{m.group(1)}{value}{m.group(3)}", model.read_text()))
+    assert run("example-teacher-7b", "--write") == 0
+
+
+def test_the_shipped_placeholders_are_all_the_recognised_form():
+    """If they were not, --write could never fill them without a hand edit."""
+    for name in ("muse-glimmer-30b", "qwen35-9b-instruct", "qwen35-122b-a10b"):
+        spec = yaml.safe_load(
+            (ROOT / "configs" / "models" / f"{name}.yaml").read_text())
+        value = spec["license"]["evidence_sha256"]
+        assert vle._PLACEHOLDER_EVIDENCE_RE.fullmatch(value), (name, value)
 
 
 def test_a_non_string_evidence_field_refuses(repo, capsys):
