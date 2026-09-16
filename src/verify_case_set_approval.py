@@ -196,6 +196,85 @@ def approval_for(case_set: dict[str, Any]) -> dict[str, Any] | None:
     return bind_to_case_set(parse_record(path), case_set, source=str(path))
 
 
+# Production approval is a CONJUNCTION, and each term is here because trusting
+# the previous one alone failed somewhere: `leakage_reviewed: true` is a person
+# saying they looked, and this requires the thing they looked at.
+MINIMUM_ELIGIBLE_CASES = 320
+
+
+def production_approval(case_set: dict[str, Any], *,
+                        metric_contract: dict[str, Any] | None = None,
+                        registry_path: Path | None = None) -> dict[str, Any]:
+    """Everything a set must satisfy before it can decide anything.
+
+    Returns a verdict rather than raising, because "not approved" is the normal
+    state and a caller needs to report WHY rather than crash.
+    """
+    import case_set_registry as registry
+    import score_capability as sc
+    import verify_case_set_leakage_evidence as leakage
+
+    problems: list[str] = []
+
+    try:
+        human = approval_for(case_set)
+    except he.HarnessEvalError as exc:
+        human = None
+        problems.append(f"approval record does not bind: {exc}")
+    if human is None and not problems:
+        problems.append("no human approval record")
+
+    evidence = None
+    try:
+        evidence = leakage.evidence_for(case_set)
+    except he.HarnessEvalError as exc:
+        problems.append(f"leakage evidence does not bind: {exc}")
+    if evidence is None and "leakage evidence does not bind" not in \
+            " ".join(problems):
+        problems.append(
+            "no leakage-evidence record. confirmations.leakage_reviewed is a "
+            "person saying they looked; this is what they looked at.")
+    elif evidence:
+        if evidence["required_unmet"]:
+            problems.append(
+                f"leakage components not clean: {evidence['required_unmet']}")
+        if evidence["office_components_blocked"]:
+            problems.append(
+                "document/full-case leakage coverage is unavailable "
+                f"({evidence['office_components_blocked']}): no versioned "
+                "extractor exists, so a reused document inside a rephrased "
+                "prompt would not have been detected")
+
+    eligible = [c for c in case_set["cases"]
+                if c.get("eligible", True) is not False]
+    if len(eligible) < MINIMUM_ELIGIBLE_CASES:
+        problems.append(
+            f"{len(eligible)} eligible case(s), below the "
+            f"{MINIMUM_ELIGIBLE_CASES} the metric contract requires")
+
+    digest = he.case_set_digest(case_set)
+    allowed, why = registry.may_be_held_out(digest, registry.load(registry_path))
+    if not allowed:
+        problems.append(f"registered as development/calibration: {why}")
+
+    if metric_contract is not None:
+        spec, contract_digest = sc.load_contract()
+        if metric_contract.get("digest") != contract_digest:
+            problems.append(
+                "metric-contract digest does not match the shipped contract; "
+                "the set was qualified against a different definition")
+
+    return {
+        "approved_for_production": not problems,
+        "case_set": case_set.get("name"),
+        "case_set_sha256": digest,
+        "human_approval": human,
+        "leakage_evidence": evidence,
+        "eligible_cases": len(eligible),
+        "problems": problems,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
