@@ -1,0 +1,787 @@
+# FIXTURE case set -- NOT an approved product evaluation set.
+#
+# Every outcome below is DECLARED, not observed. FakeOfficeExecutor replays
+# these rows so the controller, the receipt schema, the approval and budget
+# gates and the aggregation arithmetic can be tested without an Office
+# adapter, a model or a network. `approved: false` and `split: fixture` are
+# what stop src/harness_eval.py from aggregating a replay into anything that
+# reads as a product measurement.
+#
+# The declared shape is deliberately the interesting one: the candidate
+# harness helps the student (0.6 -> 0.8) but not enough to reach the 0.90
+# target, while the teacher is already at 1.0 under both harnesses. That
+# leaves a residual model gap and a NEGATIVE interaction -- the fourth arm
+# earning its place.
+schema_version: 1
+name: fixture-office-v1
+approved: false
+split: fixture
+source_class: fixture
+provenance:
+  origin: "hand-written fixture for tests/test_harness_evaluation.py"
+  created_at: "2026-09-15"
+  note: >-
+    Synthetic declarations only. No Office document, no customer content and
+    no model output. It exists to exercise the protocol, and may never back
+    a capability claim.
+cases:
+  - case_id: fixture-001
+    request:
+      instruction: "fixture request 1 (no real document)"
+      surface: document_edit
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: true
+    requires_approval: true
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-002
+    request:
+      instruction: "fixture request 2 (no real document)"
+      surface: document_edit
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: true
+    requires_approval: true
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-003
+    request:
+      instruction: "fixture request 3 (no real document)"
+      surface: document_edit
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: true
+    requires_approval: true
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-004
+    request:
+      instruction: "fixture request 4 (no real document)"
+      surface: document_edit
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: true
+    requires_approval: true
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-005
+    request:
+      instruction: "fixture request 5 (no real document)"
+      surface: document_edit
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: true
+    requires_approval: true
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_edit, approved: true}
+          approvals:
+            - {tool: office_edit, granted: true, by: fixture}
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-006
+    request:
+      instruction: "fixture request 6 (no real document)"
+      surface: document_read
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: false
+    requires_approval: false
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-007
+    request:
+      instruction: "fixture request 7 (no real document)"
+      surface: document_read
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: false
+    requires_approval: false
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: false
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-008
+    request:
+      instruction: "fixture request 8 (no real document)"
+      surface: document_read
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: false
+    requires_approval: false
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: false
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-009
+    request:
+      instruction: "fixture request 9 (no real document)"
+      surface: document_read
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: false
+    requires_approval: false
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: false
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: false
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: false
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: false
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+  - case_id: fixture-010
+    request:
+      instruction: "fixture request 10 (no real document)"
+      surface: document_read
+    expected:
+      scorers: [capability_pass_rate, indonesian_voice, edit_contract_output]
+    expects_state_change: false
+    requires_approval: false
+    fixture:
+      arms:
+        student_current:
+          scores:
+            capability_pass_rate: false
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        student_candidate:
+          scores:
+            capability_pass_rate: false
+            indonesian_voice: true
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
+        teacher_current:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: false
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 0
+          steps: 3
+          wall_seconds: 10
+        teacher_candidate:
+          scores:
+            capability_pass_rate: true
+            indonesian_voice: false
+            edit_contract_output: true
+          tool_calls:
+            - {tool: office_read, approved: false}
+          approvals: []
+          before_action:
+            - {check: request_schema, passed: true}
+          after_action:
+            - {check: edit_contract, passed: true}
+            - {check: faithful_edit, passed: true}
+          repair_attempts: 1
+          steps: 3
+          wall_seconds: 10
