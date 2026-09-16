@@ -45,11 +45,25 @@ except ImportError:  # pragma: no cover - mirrors the other entry points
 import harness_distill as hd
 
 CASE_SET_SCHEMA = 1
-RECEIPT_SCHEMA = 1
-MEASUREMENT_SCHEMA = 1
+RECEIPT_SCHEMA = 2
+MEASUREMENT_SCHEMA = 2
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 CASE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+# WHERE an execution happened. The distinction is load-bearing: the existing
+# verifiers operate on a document STRING, and a run over a string is not a run
+# against the user's open document even when every other field is identical.
+# Without this field a receipt could be read as evidence of live Office
+# behaviour when the document was never opened.
+SURFACE_TEXT = "document_text"
+SURFACE_LIVE = "office_live"
+EXECUTION_SURFACES = (SURFACE_TEXT, SURFACE_LIVE)
+
+# The approval evidence a live state-changing execution must carry. Digests and
+# identifiers only -- never the edit text, never the document.
+APPROVAL_FIELDS = ("token_id", "approver", "document_version", "target_digest",
+                   "edit_digest", "nonce", "idempotency_key", "single_use")
 
 # Terminal states a receipt may record. `ok` is the only one that can score.
 STATUS_OK = "ok"
@@ -270,7 +284,7 @@ _RECEIPT_REQUIRED = (
     "approvals", "before_action", "after_action", "repair_attempts",
     "termination_reason", "budgets", "budget_consumed", "result_digest",
     "executor", "started_at", "ended_at", "status", "scores",
-    "training_authorized",
+    "execution_surface", "approval", "training_authorized",
 )
 
 
@@ -355,6 +369,51 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         raise HarnessEvalError(
             f"receipt {receipt['arm']}/{receipt['case_id']}: status {status!r} "
             "must not carry scorer results; a failed execution scored nothing")
+
+    surface = receipt["execution_surface"]
+    if surface not in EXECUTION_SURFACES:
+        raise HarnessEvalError(
+            f"receipt.execution_surface must be one of {list(EXECUTION_SURFACES)}, "
+            f"got {surface!r}")
+    if surface == SURFACE_LIVE and not executor["produces_real_measurements"]:
+        raise HarnessEvalError(
+            "a fixture executor cannot claim execution_surface: office_live. "
+            "Replayed outcomes are not evidence that a document was opened.")
+
+    approval = receipt["approval"]
+    state_changing = [c for c in receipt["tool_calls"]
+                      if str(c.get("tool", "")) not in ("office_read",)]
+    if surface == SURFACE_LIVE and state_changing and receipt["status"] == STATUS_OK:
+        # A live execution that changed the document must carry the approval it
+        # ran under. Without it the receipt asserts a user decision that nothing
+        # recorded, which is the one claim this protocol exists to make checkable.
+        if not isinstance(approval, dict) or not approval:
+            raise HarnessEvalError(
+                f"receipt {receipt['arm']}/{receipt['case_id']}: a successful "
+                "office_live execution called a state-changing tool but carries "
+                "no approval evidence")
+        # single_use is checked separately: it is a boolean, so a falsy value
+        # is a REPLAYABLE approval rather than an absent field, and reporting
+        # "missing" would send someone looking for a field that is right there.
+        missing = [f for f in APPROVAL_FIELDS
+                   if f != "single_use" and not approval.get(f)]
+        if missing:
+            raise HarnessEvalError(
+                f"receipt approval is missing {sorted(missing)}; an approval "
+                "that cannot name the document, the target, the change and its "
+                "single use is not evidence of one")
+        if approval["single_use"] is not True:
+            raise HarnessEvalError(
+                "receipt approval.single_use must be true; a replayable "
+                "approval authorises an unbounded number of edits")
+        for field in ("document_version", "target_digest", "edit_digest"):
+            value = approval[field]
+            if not isinstance(value, str) or not SHA256_RE.match(value):
+                raise HarnessEvalError(
+                    f"receipt approval.{field} must be 64 lowercase hex, got "
+                    f"{value!r}")
+    elif approval is not None and not isinstance(approval, dict):
+        raise HarnessEvalError("receipt.approval must be a mapping or null")
 
     budgets, consumed = receipt["budgets"], receipt["budget_consumed"]
     for label, block in (("budgets", budgets), ("budget_consumed", consumed)):
@@ -531,6 +590,17 @@ def aggregate(experiment: dict[str, Any], case_set: dict[str, Any],
             "partly replayed is not interpretable")
     is_fixture = bool(fixture_receipts)
 
+    surfaces = sorted({r["execution_surface"] for r in indexed.values()})
+    if len(surfaces) != 1:
+        raise HarnessEvalError(
+            f"receipts mix execution surfaces {surfaces}; a run partly against "
+            "a document string and partly against a live document is not one "
+            "measurement of anything")
+    surface = surfaces[0]
+    if surface == SURFACE_LIVE and is_fixture:
+        raise HarnessEvalError(
+            "fixture receipts claim execution_surface: office_live")
+
     if not is_fixture:
         unverified = sorted({f"{r['arm']}/{r['case_id']}" for r in indexed.values()
                              if r["prompt_verified"] is not True
@@ -654,6 +724,10 @@ def aggregate(experiment: dict[str, Any], case_set: dict[str, Any],
         # product measurement.
         "measurement_class": "fixture" if is_fixture else "measured",
         "produces_real_measurements": not is_fixture,
+        # Stated alongside the class, because "measured" alone does not say
+        # measured against WHAT. A document-text run is a real measurement of
+        # the text contract and is not evidence about live Office behaviour.
+        "execution_surface": surface,
         "receipt_set_digest": receipt_set_digest(list(indexed.values())),
         "receipts": len(indexed),
         "metrics": metrics,
