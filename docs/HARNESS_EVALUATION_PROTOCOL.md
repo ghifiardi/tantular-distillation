@@ -148,3 +148,77 @@ claiming real measurements additionally requires `--real`, and passing `--real`
 with a fixture executor is refused rather than silently relabelled. `aggregate`
 refuses fixture receipts unless `--allow-fixture` is given, and then labels the
 artifact `measurement_class: fixture`. Refusals exit 2.
+
+## 5. Execution surface, and the live Office slice
+
+A receipt now records **where** an execution happened, because "measured" does
+not say measured against *what*:
+
+| `execution_surface` | meaning |
+|---|---|
+| `document_text` | the model answered and the contract was checked against a document **string**. A real measurement of the text contract; **not** evidence about live Office behaviour. |
+| `office_live` | the edit was applied to the user's open Word document, under an approval. |
+
+A fixture executor may never claim `office_live`, a single measurement may not
+mix surfaces, and both facts are enforced in `harness_eval.validate_receipt` /
+`aggregate` rather than left to the reader.
+
+### The approval protocol (add-in side)
+
+A successful `office_live` receipt that called a state-changing tool must carry
+approval evidence, or aggregation refuses:
+
+```
+token_id · approver · document_version · target_digest · edit_digest
+nonce · idempotency_key · single_use: true
+```
+
+Three bindings, because there are three ways an approval stops describing what
+happens: the **document** changed, the **target** moved (the same `find` occurs
+many times — approving the third occurrence must not authorise the first), or
+the **change itself** changed. Each is reported separately; they send you to
+different places.
+
+The companion mints the token at preview and consumes it once at execute,
+deleting it on every path. **The client never asserts a digest** — it sends the
+material and the companion hashes what it was actually given, so a pane cannot
+replay an approval against different text by repeating an old hash. Digests and
+sizes are audited; document text and edit bodies never are.
+
+The executor holds no Office handle by construction: the companion decides, the
+task pane performs, and `OfficeLiveExecutor` asks and records. It cannot apply
+an edit even by mistake, which is what makes the approval more than ceremony.
+
+### Scope: ONE Word edit
+
+Office.js has no transaction across `context.sync()`, so a batch that fails
+halfway leaves earlier edits applied with no rollback. Rather than pretend
+otherwise, this slice refuses more than one edit per approval — at the pane, at
+`prepareEdit`, and at the executor. A future batch must report explicit per-edit
+status; it must never claim atomicity the platform does not provide.
+
+## 6. Verifiers: declared is not implemented
+
+`harness_verifiers.run_declared` resolves every check a harness declares. A name
+with no implementation returns **`refused`**, never an empty list and never a
+pass — a skipped check reads as a pass to anyone counting.
+
+| check | state |
+|---|---|
+| `request_schema` | **implemented** — shape of the edit contract, against the add-in's own limits (20 edits, 2000-char `find`) |
+| `target_location` | **consumes** the add-in's live resolution; refuses when none is supplied, because it cannot be evaluated from a text copy |
+| `edit_contract` | **real**, via `scripts/check_edit_contract.mjs` and the add-in's own parser |
+| `faithful_edit` | **refuses** — it needs a case's declared `must_preserve` spans, and no approved held-out set exists |
+
+## 7. What still blocks a measurement
+
+Two things, both out of scope here and neither fixed by this protocol:
+
+1. **`capability_pass_rate` has no scorer.** It is the experiment's decision
+   metric and nothing computes it.
+2. **There is no approved held-out Office case set.** The three held-out sets in
+   `prompts/` are `source_class: synthetic` and unapproved.
+
+Until both are resolved, this protocol can produce receipts and refusals but
+**no measurement**. Every artifact stays fixture/preflight class and carries
+`training_authorized: false`.

@@ -253,6 +253,11 @@ def build_receipt(experiment: dict[str, Any], case_set: dict[str, Any],
         "status": status,
         "problems": problems,
         "scores": scores,
+        # Supplied by the executor, not assumed by the controller: only the
+        # executor knows whether it opened a document or a string.
+        "execution_surface": executor_identity.get("execution_surface",
+                                                   he.SURFACE_TEXT),
+        "approval": result.approval,
         "training_authorized": False,
     }
 

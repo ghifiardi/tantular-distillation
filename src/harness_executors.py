@@ -96,6 +96,9 @@ class ExecutionResult:
     steps: int = 0
     wall_seconds: float = 0.0
     scores: dict[str, bool] = field(default_factory=dict)
+    # Approval evidence, when a live execution changed document state. Digests
+    # and identifiers only; the edit text never reaches a receipt.
+    approval: dict[str, Any] | None = None
     error: str | None = None
     started_at: str = ""
     ended_at: str = ""
@@ -131,6 +134,7 @@ class FakeOfficeExecutor:
             "version": self.version,
             "kind": "fake",
             "produces_real_measurements": False,
+            "execution_surface": "document_text",
             "note": "replays declared fixture outcomes; no model, no Office, "
                     "no network",
         }
@@ -192,6 +196,183 @@ class FakeOfficeExecutor:
                 f"{request.repetition}:{edge}")
 
 
+# The wire, pinned in one place and mirrored by
+# contract/office-edit-protocol.v1.json in BOTH repositories. A route spelled
+# differently on one side is a silent failure that no single-repo test can see.
+OFFICE_EDIT_PROTOCOL_VERSION = 1
+PREPARE_PATH = "/api/edit/prepare"
+EXECUTE_PATH = "/api/edit/execute"
+RESULT_PATH = "/api/edit/result"
+DIAGNOSTICS_PATH = "/api/diagnostics"
+
+# Refusal reasons the companion may return, and which of them are terminal for
+# a case. Enumerated so an UNKNOWN reason is itself a failure: a companion that
+# grew a new refusal must not be interpreted by guessing.
+COMPANION_REFUSALS = frozenset({
+    "unknown_token", "expired", "document_changed", "target_moved",
+    "edit_changed", "duplicate", "not_located", "batch_unsupported",
+    "no_document", "no_edit", "unknown_key", "audit_unwritable",
+})
+
+
+class OfficeLiveExecutor:
+    """Drives ONE Word edit through the add-in companion's approval protocol.
+
+    It is not an Office automation client and deliberately cannot become one.
+    The companion decides (/api/edit/prepare, /api/edit/execute) and the task
+    pane performs; this executor is the third party that asks and records. It
+    holds no Office handle, so it cannot apply an edit even by mistake -- which
+    is the property that makes the approval meaningful rather than ceremonial.
+
+    SCOPE, deliberately narrow (Milestone 12 Stage 2):
+      - Word only, ONE edit per execution. Office.js has no transaction across
+        context.sync(), so a batch that fails halfway cannot be rolled back;
+        one edit has no partial state to misreport.
+      - state-changing work requires an approval, always. There is no path here
+        that applies an edit without one.
+
+    It refuses rather than degrading. A missing companion, an unreachable
+    endpoint, a refused approval or a missing served-model digest all produce a
+    refusal receipt, never a partial measurement.
+    """
+
+    name = "office-live"
+    version = "1"
+
+    def __init__(self, transport: Any, *, served_model_digest: str | None = None,
+                 companion_boot_id: str | None = None):
+        # The transport is injected so this class never owns a socket. In tests
+        # it is a fake; in production it is a thin HTTP client. An executor that
+        # constructed its own connection could not be tested without one.
+        self.transport = transport
+        self.served_model_digest = served_model_digest
+        self.companion_boot_id = companion_boot_id
+
+    def identity(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "kind": "real",
+            "produces_real_measurements": True,
+            "execution_surface": "office_live",
+            "served_model_digest": self.served_model_digest,
+            "companion_boot_id": self.companion_boot_id,
+        }
+
+    def _refused(self, request: ExecutionRequest, stage: str, reason: Any,
+                 started: str, ended: str) -> ExecutionResult:
+        """Turn a companion refusal into a receipt-ready result.
+
+        An unrecognised reason is reported AS unrecognised rather than passed
+        through: a companion that grew a new refusal state must not be
+        interpreted by a client that has never heard of it.
+        """
+        name = str(reason)
+        known = name in COMPANION_REFUSALS
+        return ExecutionResult(
+            tools_offered=list(request.tool_policy.get("allow") or []),
+            tool_calls=[{"tool": "office_edit", "approved": False}],
+            started_at=started, ended_at=ended,
+            error=(f"approval refused at {stage}: {name}" if known else
+                   f"approval refused at {stage} with an UNRECOGNISED reason "
+                   f"{name!r}; this client cannot interpret it"))
+
+    def execute(self, request: ExecutionRequest) -> ExecutionResult:
+        started = f"live:{request.run_id}:{request.arm}:{request.case_id}:start"
+        ended = f"live:{request.run_id}:{request.arm}:{request.case_id}:end"
+
+        def failure(message: str) -> ExecutionResult:
+            return ExecutionResult(error=message, started_at=started, ended_at=ended)
+
+        # An identity the receipt cannot pin is not an identity. An Ollama tag
+        # can be repointed under a running install, so a digest is the only
+        # thing a later reader can check the run against.
+        if not self.served_model_digest:
+            return failure(
+                "no served-model digest is available from the companion "
+                "(/api/diagnostics servedModel.digest). A receipt naming only a "
+                "mutable model tag cannot say which weights answered.")
+
+        edits = (request.case.get("request") or {}).get("edits")
+        if not isinstance(edits, list) or len(edits) != 1:
+            return failure(
+                f"this executor applies exactly one edit per case; case "
+                f"{request.case_id!r} declares "
+                f"{len(edits) if isinstance(edits, list) else 0}. Batch "
+                "atomicity is unsolved on Office.js and is out of scope.")
+
+        # The EXECUTOR owns the wire format, not the transport. If the
+        # transport built these payloads, the contract fixture would be
+        # testing the test double and the two repositories could drift while
+        # both suites stayed green.
+        document = str((request.case.get("request") or {}).get("document") or "")
+        located = (request.case.get("request") or {}).get("located")
+        try:
+            prepared = self.transport.post(PREPARE_PATH, {
+                "edits": edits,
+                "document": document,
+                "located": located,
+            })
+        except Exception as exc:                          # noqa: BLE001
+            return failure(f"companion prepare failed: {type(exc).__name__}: {exc}")
+        if not prepared.get("ok"):
+            return self._refused(request, "prepare", prepared.get("reason"),
+                                 started, ended)
+
+        try:
+            executed = self.transport.post(EXECUTE_PATH, {
+                "token": prepared["token"],
+                "edit": edits[0],
+                "document": document,
+                "located": located,
+            })
+        except Exception as exc:                          # noqa: BLE001
+            return failure(f"companion execute failed: {type(exc).__name__}: {exc}")
+        if not executed.get("ok"):
+            return self._refused(request, "execute", executed.get("reason"),
+                                 started, ended)
+
+        # The APPLY is the pane's, not this client's: only the task pane holds
+        # an Office handle, and it is the pane that posts RESULT_PATH with what
+        # Word actually did. This asks the bridge for that observed outcome; it
+        # does not report one, because it did not see one.
+        applied = self.transport.apply(
+            idempotency_key=executed["idempotency_key"], case_id=request.case_id)
+        status = str(applied.get("status") or "unknown")
+
+        return ExecutionResult(
+            output=applied.get("result_summary", f"office_live:{request.case_id}"),
+            tools_offered=list(request.tool_policy.get("allow") or []),
+            # approved: True is recorded because the COMPANION authorised it,
+            # and the approval block below is the evidence for that claim. The
+            # controller still judges the policy; this only reports.
+            tool_calls=[{"tool": "office_edit", "approved": True,
+                         "idempotency_key": executed["idempotency_key"]}],
+            approvals=[{"tool": "office_edit", "granted": True,
+                        "by": executed.get("approver", "local-user")}],
+            before_action=list(applied.get("before_action") or []),
+            after_action=list(applied.get("after_action") or []),
+            repair_attempts=int(applied.get("repair_attempts", 0)),
+            steps=int(applied.get("steps", 1)),
+            wall_seconds=float(applied.get("wall_seconds", 0.0)),
+            scores=dict(applied.get("scores") or {}),
+            approval={
+                "token_id": prepared["token"],
+                "approver": executed.get("approver", "local-user"),
+                "document_version": executed["document_version"],
+                "target_digest": executed["target_digest"],
+                "edit_digest": executed["edit_digest"],
+                "nonce": executed["nonce"],
+                "idempotency_key": executed["idempotency_key"],
+                # The companion deletes the token on every path, so one
+                # approval can authorise at most one application.
+                "single_use": True,
+            },
+            error=None if status == "applied" else f"edit not applied: {status}",
+            started_at=started, ended_at=ended,
+        )
+
+
 class RealOfficeExecutor:
     """Fails closed: this repository has no Office harness adapter.
 
@@ -233,6 +414,9 @@ class RealOfficeExecutor:
 
 EXECUTORS: dict[str, type] = {
     "fake": FakeOfficeExecutor,
+    # office-live needs a transport, so it is not constructible by name from
+    # the CLI. That is deliberate: a live run is assembled explicitly, with a
+    # companion and a served-model digest in hand, never selected by a flag.
     "office": RealOfficeExecutor,
 }
 

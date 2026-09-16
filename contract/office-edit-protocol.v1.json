@@ -1,0 +1,129 @@
+{
+  "_comment": [
+    "THE OFFICE EDIT PROTOCOL, v1. This file is byte-identical in",
+    "ghifiardi/LLM-Indonesia (tantular_office_addin/contract/) and in",
+    "ghifiardi/tantular-distillation (contract/). Both repositories test",
+    "against it, and both assert its sha256, so a change on one side that is",
+    "not mirrored on the other fails there rather than silently drifting.",
+    "Every value here is a LITERAL. A fixture that computed its own",
+    "expectations would agree with whatever the code did."
+  ],
+  "protocol_version": 1,
+  "routes": {
+    "prepare": "/api/edit/prepare",
+    "execute": "/api/edit/execute",
+    "result": "/api/edit/result",
+    "diagnostics": "/api/diagnostics"
+  },
+  "scope": {
+    "host": "word",
+    "tool": "office_edit",
+    "max_edits_per_approval": 1,
+    "reason": "Office.js has no transaction across context.sync(), so a batch that fails halfway cannot be rolled back."
+  },
+  "prepare": {
+    "request": {
+      "method": "POST",
+      "required_fields": ["edits", "document", "located"],
+      "example": {
+        "edits": [
+          {"find": "Angka lama", "replace": "Angka baru", "occurrence": 1}
+        ],
+        "document": "Angka lama tercatat di sini.",
+        "located": {"matchedText": "Angka lama", "ordinal": 0}
+      }
+    },
+    "response_ok": {
+      "status": 200,
+      "required_fields": [
+        "ok", "token", "nonce", "protocol_version", "document_version",
+        "target_digest", "edit_digest", "disclosure", "expiresAt"
+      ],
+      "digest_fields": ["document_version", "target_digest", "edit_digest"],
+      "digest_pattern": "^[0-9a-f]{64}$"
+    },
+    "response_refused": {
+      "status": 403,
+      "required_fields": ["ok", "reason", "message"],
+      "reasons": [
+        "batch_unsupported", "not_located", "no_document", "no_edit"
+      ]
+    }
+  },
+  "execute": {
+    "request": {
+      "method": "POST",
+      "required_fields": ["token", "edit", "document", "located"],
+      "forbidden_fields": ["document_version", "target_digest", "edit_digest"],
+      "forbidden_reason": "The client sends material, never digests. A client-asserted binding is the client's claim about itself, and a replay would only need to repeat an old hash.",
+      "example": {
+        "token": "5f6d7c8b-0000-4000-8000-000000000000",
+        "edit": {"find": "Angka lama", "replace": "Angka baru", "occurrence": 1},
+        "document": "Angka lama tercatat di sini.",
+        "located": {"matchedText": "Angka lama", "ordinal": 0}
+      }
+    },
+    "response_ok": {
+      "status": 200,
+      "required_fields": [
+        "ok", "idempotency_key", "nonce", "protocol_version",
+        "document_version", "target_digest", "edit_digest"
+      ]
+    },
+    "response_refused": {
+      "status": 403,
+      "required_fields": ["ok", "reason", "message"],
+      "reasons": [
+        "unknown_token", "expired", "document_changed", "target_moved",
+        "edit_changed"
+      ]
+    },
+    "response_duplicate": {
+      "status": 409,
+      "required_fields": ["ok", "reason", "idempotency_key"],
+      "reason": "duplicate",
+      "note": "The duplicate check runs BEFORE the token check, so a replay reports duplicate rather than burning the token and reporting unknown_token."
+    }
+  },
+  "result": {
+    "request": {
+      "method": "POST",
+      "required_fields": ["idempotency_key", "status"],
+      "statuses": ["applied", "not_found", "skipped", "error"],
+      "note": "The pane reports what Word actually did. 'applied' is never assumed."
+    },
+    "response_ok": {
+      "status": 200,
+      "required_fields": ["ok", "idempotency_key", "status"]
+    },
+    "response_refused": {
+      "status": 403,
+      "required_fields": ["ok", "reason"],
+      "reasons": ["unknown_key"]
+    }
+  },
+  "diagnostics": {
+    "request": {"method": "GET"},
+    "response_ok": {
+      "status": 200,
+      "required_fields": ["companionBootId", "servedModel"],
+      "served_model_fields": ["name", "digest", "reason"],
+      "note": "digest is null WITH a reason when it cannot be read; it is never invented, and a consumer that needs it must refuse rather than proceed."
+    }
+  },
+  "transport_errors": {
+    "audit_unwritable": {
+      "status": 503,
+      "reason": "audit_unwritable",
+      "note": "An edit that cannot be recorded must not happen."
+    },
+    "method_not_allowed": {"status": 405},
+    "malformed_json": {"status": 400},
+    "origin_not_allowed": {"status": 403}
+  },
+  "client_obligations": {
+    "no_retry_on_execute": "execute mutates. A timeout does not mean the request was not received, so it is never retried.",
+    "unknown_reason_is_an_error": "A refusal reason this client does not recognise is reported as unrecognised, never passed through as understood.",
+    "digest_required_for_identity": "An execution with no served-model digest is refused: a mutable tag cannot say which weights answered."
+  }
+}

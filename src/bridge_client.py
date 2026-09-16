@@ -36,25 +36,43 @@ class TeacherClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
-    async def complete(self, client: httpx.AsyncClient, messages: list[dict]) -> dict:
+    async def complete(self, client: httpx.AsyncClient, messages: list[dict],
+                       *, idempotency_key: str | None = None,
+                       mutating: bool = False) -> dict:
         """Returns {content, completion_tokens, truncated}.
 
         `truncated` is inferred from token count, not finish_reason: the
         gateway reports "stop" even when generation clearly ran out of budget
         mid-object, so finish_reason cannot be trusted here.
+
+        RETRIES ARE FOR READS ONLY. The loop below retries a timeout, and a
+        timeout does not mean the request was not received -- it means no
+        answer came back. For a generation that is harmless: the worst case is
+        a duplicate completion nobody applied. For a call that CHANGES
+        something, retrying is how one approved edit becomes two applied ones,
+        with the second one nobody authorised. So `mutating=True` takes exactly
+        one attempt and reports the timeout rather than guessing.
+
+        `idempotency_key` is passed through as a header so a server that can
+        deduplicate does; it is not a substitute for the rule above, because a
+        server that ignores the header would still apply the second call.
         """
         body = {
             "model": self.model,
             "messages": messages,
             **{k: v for k, v in self.sampling.items() if v is not None},
         }
+        attempts = 1 if mutating else self.max_retries
         last_error = None
-        for attempt in range(self.max_retries):
+        for attempt in range(attempts):
             started = time.perf_counter()
             try:
+                headers = self._headers()
+                if idempotency_key:
+                    headers["Idempotency-Key"] = idempotency_key
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
-                    headers=self._headers(),
+                    headers=headers,
                     json=body,
                     timeout=self.timeout_s,
                 )
@@ -80,8 +98,14 @@ class TeacherClient:
                 last_error = f"HTTP {response.status_code}: {response.text[:200]}"
             except (httpx.TimeoutException, httpx.TransportError) as error:
                 last_error = repr(error)
+            if mutating:
+                raise RuntimeError(
+                    "mutating request failed and was NOT retried: "
+                    f"{last_error}. A timeout does not mean the request was "
+                    "not received; retrying it is how one approved change "
+                    "becomes two applied ones.")
             await asyncio.sleep(2 ** attempt)
-        raise RuntimeError(f"teacher failed after {self.max_retries} attempts: {last_error}")
+        raise RuntimeError(f"teacher failed after {attempts} attempts: {last_error}")
 
     async def complete_many(
         self,
