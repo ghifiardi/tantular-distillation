@@ -300,9 +300,13 @@ def test_the_shipped_template_approves_nothing():
 
 
 def test_no_case_set_in_this_repository_is_approved():
-    records = sorted((ROOT / "docs" / "case_sets").glob("*.md"))
-    assert [p.name for p in records] == ["TEMPLATE.md"], (
-        "this milestone must not approve a case set")
+    """Tests the INTENT -- that no real set has an approval record -- rather
+    than the file listing, which grows as templates are added."""
+    records = sorted(p.name for p in (ROOT / "docs" / "case_sets").glob("*.md"))
+    non_templates = [n for n in records if not n.endswith("TEMPLATE.md")]
+    assert non_templates == [], (
+        f"an approval record exists for {non_templates}; no case set may be "
+        "approved by this work")
     fixture = he.load_case_set(
         ROOT / "tests" / "fixtures" / "harness_cases" / "fixture-office-v1.yaml")
     assert fixture["approved"] is False
