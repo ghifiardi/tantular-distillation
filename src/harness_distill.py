@@ -625,13 +625,36 @@ def evaluate(experiment: dict[str, Any], measurements: dict[str, Any]) -> dict[s
     if guardrail_failures:
         reasons.append("candidate harness violates product guardrails")
 
-    candidate_for_weights = (
+    # The SIGNAL: what the numbers say, taken at face value.
+    signal_supports_weights = (
         observed_gap
         and not harness_sufficient
         and teacher_passes
         and significant_residual
         and not guardrail_failures
     )
+
+    # CANDIDACY needs more than a signal. A rate over ten unreviewed cases is
+    # arithmetic, not evidence, and a fixture replay is not a measurement of
+    # anything. So a real candidacy additionally requires the measurement to
+    # declare itself statistically qualified, which src/harness_eval.py grants
+    # only for an approved case set of at least the contract's minimum size
+    # with complete four-arm coverage.
+    #
+    # Deliberately separate fields: hiding the signal behind the gate would
+    # make an unqualified run look like a negative result, when what it
+    # actually is is an unanswered question.
+    qualified = measurements.get("statistically_qualified") is True
+    qualification_problems = list(measurements.get("qualification_problems") or [])
+    if not qualified and not qualification_problems:
+        qualification_problems.append(
+            "the measurements declare no statistical qualification; a rate "
+            "without one is arithmetic, not evidence")
+    candidate_for_weights = signal_supports_weights and qualified
+    if signal_supports_weights and not qualified:
+        reasons.append(
+            "the signal supports weight distillation but the measurement is "
+            "not qualified: " + "; ".join(qualification_problems))
 
     return {
         **plan,
@@ -662,7 +685,15 @@ def evaluate(experiment: dict[str, Any], measurements: dict[str, Any]) -> dict[s
         },
         "guardrail_failures": guardrail_failures,
         "harness_optimization_sufficient": harness_sufficient,
+        "signal_supports_weight_distillation": signal_supports_weights,
         "weight_distillation_candidate": candidate_for_weights,
+        "qualification": {
+            "statistically_qualified": qualified,
+            "independent_cases": measurements.get("independent_cases"),
+            "metric_contract": measurements.get("metric_contract"),
+            "case_set_approved": bool(measurements.get("case_set_approval")),
+            "problems": qualification_problems,
+        },
         "reasons": reasons,
         "training_authorized": False,
     }
