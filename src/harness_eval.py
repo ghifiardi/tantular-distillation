@@ -701,6 +701,28 @@ def aggregate(experiment: dict[str, Any], case_set: dict[str, Any],
             },
         }
 
+    # --- metric binding and statistical qualification
+    # Imported here rather than at module scope: harness_eval is the lower
+    # layer, and a circular import would make the protocol depend on the
+    # metric definition in both directions.
+    import measurement_report as mr
+    import score_capability as sc
+    import verify_case_set_approval as approval
+
+    metric_spec, metric_digest = sc.load_contract()
+    try:
+        bound_approval = approval.approval_for(case_set)
+    except hd.HarnessPlanError:
+        # A malformed or non-binding record is NOT an approval, and it is also
+        # not a reason to refuse the whole aggregation: the artifact simply
+        # reports itself unqualified, with the reason attached.
+        bound_approval = None
+    qualification = mr.qualification(
+        len(ids), str(case_set.get("split") or ""),
+        approved=bound_approval is not None,
+        minimum=int(metric_spec.get("minimum_independent_cases",
+                                    mr.MINIMUM_INDEPENDENT_CASES)))
+
     capability = metrics[0]
     student_gain = scores["student_candidate"][capability] - \
         scores["student_current"][capability]
@@ -728,6 +750,14 @@ def aggregate(experiment: dict[str, Any], case_set: dict[str, Any],
         # measured against WHAT. A document-text run is a real measurement of
         # the text contract and is not evidence about live Office behaviour.
         "execution_surface": surface,
+        "metric_contract": sc.contract_binding(metric_spec, metric_digest),
+        # Unique CASES, never receipts: repetitions of one case are correlated
+        # observations of one question, and counting them as independent would
+        # shrink every interval by a factor the data does not contain.
+        "independent_cases": qualification["independent_cases"],
+        "statistically_qualified": qualification["statistically_qualified"],
+        "qualification_problems": qualification["qualification_problems"],
+        "case_set_approval": bound_approval,
         "receipt_set_digest": receipt_set_digest(list(indexed.values())),
         "receipts": len(indexed),
         "metrics": metrics,

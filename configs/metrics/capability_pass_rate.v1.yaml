@@ -1,0 +1,120 @@
+# THE CAPABILITY METRIC, v1. Declared here so the definition is a reviewable
+# artifact rather than a property of whatever the scorer happened to compute.
+#
+# It is a RE-PARTITION of properties src/score_faithful_edit.py already
+# computes, not a new judge. Nothing here asks a model to grade a model.
+#
+# Two of those properties are deliberately NOT in the Boolean: `contract` and
+# `voice` are the experiment's configured guardrails, with their own minimums
+# and their own zero-regression rules. Folding them in would mean a voice
+# regression moved the capability number too, and the decision logic could no
+# longer separate "the harness broke capability" from "the harness broke
+# voice" -- which is the distinction the guardrails exist to draw.
+schema_version: 1
+name: capability_pass_rate
+version: 1
+unit: case
+value_type: boolean
+
+# Refused, errored and timed-out cases stay in the denominator. A case that
+# failed still asked its question, and dropping it would let a flaky arm score
+# 1.0 on the cases that happened to run. "eligible" is the only exclusion, and
+# it is fixed BEFORE arm assignment (see predeclared_exclusions below).
+denominator_policy: all_declared_eligible_cases
+
+# Measured, not chosen: at 80% power, alpha 0.05, a paired McNemar test needs
+# ~312 cases to detect a 0.05 difference at 10% discordance (155 at 5%, 626 at
+# 20%). 320 is that figure rounded up. It is a floor for calling a result
+# QUALIFIED, never a licence to stop authoring cases.
+minimum_independent_cases: 320
+
+pass_condition:
+  required:
+    - lands
+    - preserves
+    - no_new_facts
+    - target_location
+    - execution_completed
+  # Scored only when the case declares structure checks. An undeclared check
+  # must be neither a pass nor a failure: counting it as a pass would reward a
+  # case for declaring nothing.
+  conditional:
+    - structure
+
+guardrails_excluded:
+  - edit_contract_output
+  - indonesian_voice
+
+# What a case may correctly ask for. `no_edit` is the case whose right answer
+# is to change nothing and say so -- a real product capability, and the one the
+# live slice cannot yet express (see live_support below).
+expected_actions:
+  - edit
+  - no_edit
+
+noise_floor:
+  declared: 0.025
+  # PROVISIONAL, and labelled so. A noise floor should be the observed spread
+  # across repetitions at fixed decoding; no such measurement exists. At the
+  # pilot's n=10 this value is 4x finer than the score can express and ~14x
+  # narrower than its confidence interval. It is not wrong -- it is unmeasured.
+  status: provisional
+  evidence: null
+
+live_support:
+  edit: true
+  # OfficeLiveExecutor requires exactly one edit per case, so a case whose
+  # correct answer emits none cannot be executed live. Scored from fixtures
+  # today; measuring it live needs a protocol change that is out of scope.
+  no_edit: false
+
+failure_reasons:
+  # The fourteen surveyed reasons.
+  - model_output_invalid
+  - request_schema_failed
+  - approval_rejected
+  - approval_invalid
+  - target_stale
+  - target_wrong
+  - edit_not_applied
+  - edit_partial
+  - preservation_failed
+  - structure_failed
+  - unsupported_fact
+  - timeout
+  - executor_error
+  - verifier_error
+  # Expected-action outcomes, kept distinct so "declined correctly" is never
+  # confused with "failed to act" in either direction.
+  - correct_no_edit
+  - unexpected_no_edit
+  - unexpected_edit
+  # Not a case-level failure: the RUN did not meet the qualification floor.
+  # Recorded here so a report can name it with the same vocabulary.
+  - statistically_unqualified
+
+# How repeated runs of ONE case are combined. Declared here because it changes
+# what the number means, and a policy that lives only in code is not reviewable.
+#
+# The obvious rule -- a case passes only if every repetition passed -- is wrong,
+# and wrong in a way that hides: under independence it measures p^r, so the same
+# model scores 0.90 at one repetition and 0.59 at five. The metric would then
+# depend on how many times it was run, and two arms with different repetition
+# counts would not be comparable at all.
+#
+# So a case's value is the MEAN pass proportion across its repetitions, and each
+# case contributes exactly once regardless of how many times it ran. At one
+# repetition this reduces to the ordinary boolean pass rate.
+repetition_policy:
+  independent_unit: case
+  case_value: mean_pass_proportion
+  # Kept and reported, because "passed every time" is a real thing to know --
+  # but it is a stability statistic, not the capability metric.
+  all_repetitions_passed_rate: descriptive_only
+  # McNemar needs binary paired outcomes. With repetitions a case value is a
+  # proportion, so the paired inference is a bootstrap that resamples CASES
+  # whole, preserving the correlation between a case's own repetitions.
+  inference: clustered_bootstrap
+  mcnemar_requires: single_repetition
+
+predeclared_exclusions: []
