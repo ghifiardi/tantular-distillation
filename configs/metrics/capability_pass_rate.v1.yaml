@@ -93,4 +93,28 @@ failure_reasons:
   # Recorded here so a report can name it with the same vocabulary.
   - statistically_unqualified
 
+# How repeated runs of ONE case are combined. Declared here because it changes
+# what the number means, and a policy that lives only in code is not reviewable.
+#
+# The obvious rule -- a case passes only if every repetition passed -- is wrong,
+# and wrong in a way that hides: under independence it measures p^r, so the same
+# model scores 0.90 at one repetition and 0.59 at five. The metric would then
+# depend on how many times it was run, and two arms with different repetition
+# counts would not be comparable at all.
+#
+# So a case's value is the MEAN pass proportion across its repetitions, and each
+# case contributes exactly once regardless of how many times it ran. At one
+# repetition this reduces to the ordinary boolean pass rate.
+repetition_policy:
+  independent_unit: case
+  case_value: mean_pass_proportion
+  # Kept and reported, because "passed every time" is a real thing to know --
+  # but it is a stability statistic, not the capability metric.
+  all_repetitions_passed_rate: descriptive_only
+  # McNemar needs binary paired outcomes. With repetitions a case value is a
+  # proportion, so the paired inference is a bootstrap that resamples CASES
+  # whole, preserving the correlation between a case's own repetitions.
+  inference: clustered_bootstrap
+  mcnemar_requires: single_repetition
+
 predeclared_exclusions: []

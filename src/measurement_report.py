@@ -90,6 +90,26 @@ def _chi2_sf_1df(x: float) -> float:
     return math.erfc(math.sqrt(x / 2.0))
 
 
+def exact_mcnemar(table: dict[str, int]) -> dict[str, Any]:
+    """Exact (binomial) McNemar, for the small discordant counts this study
+    will actually see.
+
+    The chi-square form is an approximation that is poor when b+c is small, and
+    "small" is the normal case here: two good arms disagree on a handful of
+    cases. Computed from the binomial tail directly, so it is exact rather than
+    nearly right.
+    """
+    b, c = table["only_first"], table["only_second"]
+    n = b + c
+    if n == 0:
+        return {"p_value": 1.0, "discordant": 0, "method": "exact",
+                "note": "no discordant pairs: nothing to test"}
+    extreme = max(b, c)
+    tail = sum(math.comb(n, k) for k in range(extreme, n + 1)) / (2 ** n)
+    return {"p_value": min(1.0, 2 * tail), "discordant": n,
+            "only_first": b, "only_second": c, "method": "exact"}
+
+
 def mcnemar(table: dict[str, int], *, continuity: bool = True) -> dict[str, Any]:
     """McNemar's test on the discordant pairs.
 
@@ -112,12 +132,42 @@ def mcnemar(table: dict[str, int], *, continuity: bool = True) -> dict[str, Any]
             "continuity_correction": continuity}
 
 
-def collapse_repetitions(rows: Iterable[dict[str, Any]]) -> dict[str, bool]:
-    """One outcome per case id.
+def case_pass_rates(rows: Iterable[dict[str, Any]]) -> dict[str, float]:
+    """One value per case: the MEAN pass proportion across its repetitions.
 
-    A case is a pass only if EVERY repetition passed. Any-pass would reward
-    resampling until something works, which is the opposite of what
-    repetitions are for.
+    The obvious alternative -- a case passes only if every repetition passed --
+    is wrong in a way that hides. Under independence it measures p**r, so the
+    same model scores 0.90 at one repetition and 0.59 at five, and two arms run
+    a different number of times are not comparable at all. The metric would be
+    reporting the experiment's schedule rather than the model's behaviour.
+
+    Averaging within the case keeps each CASE at weight one however many times
+    it ran, so unequal repetition counts cannot give one case more say. At one
+    repetition this reduces exactly to the boolean pass rate.
+    """
+    totals: dict[str, list[int]] = {}
+    for row in rows:
+        case_id = str(row["case_id"])
+        bucket = totals.setdefault(case_id, [0, 0])
+        bucket[0] += 1
+        bucket[1] += 1 if bool(row["passed"]) else 0
+    return {case_id: passed / count for case_id, (count, passed) in totals.items()}
+
+
+def repetition_counts(rows: Iterable[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[str(row["case_id"])] = counts.get(str(row["case_id"]), 0) + 1
+    return counts
+
+
+def all_repetitions_passed(rows: Iterable[dict[str, Any]]) -> dict[str, bool]:
+    """DESCRIPTIVE ONLY: did this case pass every time it ran?
+
+    A stability statistic, and a useful one -- but not the capability metric,
+    because it is exactly the p**r quantity that makes a score depend on how
+    many times it was measured. Nothing in the pass rate or the inference reads
+    this.
     """
     by_case: dict[str, bool] = {}
     for row in rows:
@@ -128,7 +178,17 @@ def collapse_repetitions(rows: Iterable[dict[str, Any]]) -> dict[str, bool]:
     return by_case
 
 
-def paired_bootstrap_ci(a: dict[str, bool], b: dict[str, bool], *,
+def collapse_repetitions(rows: Iterable[dict[str, Any]]) -> dict[str, bool]:
+    """Deprecated alias for all_repetitions_passed.
+
+    Kept so the name does not silently change meaning for a caller: it always
+    returned the every-repetition conjunction, and that is now named for what
+    it is rather than used as the metric.
+    """
+    return all_repetitions_passed(rows)
+
+
+def paired_bootstrap_ci(a: dict[str, float], b: dict[str, float], *,
                         seed: int, resamples: int = 2000,
                         alpha: float = 0.05) -> dict[str, Any]:
     """CI for the paired difference, resampling CASES (not observations).
@@ -145,8 +205,13 @@ def paired_bootstrap_ci(a: dict[str, bool], b: dict[str, bool], *,
     n = len(cases)
     diffs = []
     for _ in range(resamples):
+        # A case is drawn WHOLE. Its repetitions travel with it, so they can
+        # never be split across resamples and the correlation between them is
+        # preserved -- which is what makes this the clustered bootstrap rather
+        # than one that pretends repetitions are independent.
         drawn = [cases[rng.randrange(n)] for _ in range(n)]
-        diffs.append(sum(b[c] for c in drawn) / n - sum(a[c] for c in drawn) / n)
+        diffs.append(sum(float(b[c]) for c in drawn) / n
+                     - sum(float(a[c]) for c in drawn) / n)
     diffs.sort()
     lo = diffs[int((alpha / 2) * resamples)]
     hi = diffs[min(resamples - 1, int((1 - alpha / 2) * resamples))]
@@ -156,7 +221,13 @@ def paired_bootstrap_ci(a: dict[str, bool], b: dict[str, bool], *,
 
 def qualification(independent_cases: int, split: str, *, approved: bool,
                   minimum: int = MINIMUM_INDEPENDENT_CASES) -> dict[str, Any]:
-    """Whether this run may be read as a production measurement."""
+    """Whether this run may be read as a production measurement.
+
+    DELIBERATELY IGNORANT OF EVERY TEST RESULT. Qualification is about whether
+    the study can answer the question -- size, approval, split -- and a p-value
+    is an answer. Letting one feed back into qualification would mean a run
+    became admissible because it happened to come out significant.
+    """
     problems: list[str] = []
     if split in UNQUALIFIABLE_SPLITS:
         problems.append(
@@ -189,7 +260,9 @@ def report(arms: dict[str, list[dict[str, Any]]], *, split: str,
     if missing:
         raise HarnessEvalError(f"report needs all four arms; missing {missing}")
 
-    collapsed = {arm: collapse_repetitions(rows) for arm, rows in arms.items()}
+    collapsed = {arm: case_pass_rates(rows) for arm, rows in arms.items()}
+    stability = {arm: all_repetitions_passed(rows) for arm, rows in arms.items()}
+    counts = {arm: repetition_counts(rows) for arm, rows in arms.items()}
     observations = {arm: len(rows) for arm, rows in arms.items()}
     sizes = {len(v) for v in collapsed.values()}
     if len(sizes) != 1:
@@ -198,14 +271,36 @@ def report(arms: dict[str, list[dict[str, Any]]], *, split: str,
             "incomplete arm cannot be compared against a complete one")
     n = sizes.pop()
 
+    # Single repetition everywhere is the case where a case value is 0 or 1,
+    # so the paired outcomes are binary and McNemar applies. With repetitions
+    # a case value is a proportion, and a 2x2 table of proportions is not a
+    # contingency table -- so the inference moves to the clustered bootstrap
+    # rather than forcing the data into a test it does not fit.
+    single_repetition = all(count == 1
+                            for arm_counts in counts.values()
+                            for count in arm_counts.values())
+
     rates: dict[str, Any] = {}
     for arm, outcomes in collapsed.items():
-        passed = sum(1 for v in outcomes.values() if v)
-        lo, hi = wilson_interval(passed, n)
-        rates[arm] = {"passed": passed, "n": n, "rate": passed / n,
-                      "wilson_95": [lo, hi],
-                      "observations": observations[arm],
-                      "repetitions_per_case": observations[arm] / n}
+        rate = sum(outcomes.values()) / n
+        entry = {"n": n, "rate": rate,
+                 "observations": observations[arm],
+                 "repetitions_per_case": observations[arm] / n,
+                 # Descriptive: how often a case passed EVERY time. Never used
+                 # by the rate or by any test below.
+                 "all_repetitions_passed_rate":
+                     sum(1 for v in stability[arm].values() if v) / n}
+        if single_repetition:
+            passed = round(rate * n)
+            entry["passed"] = passed
+            entry["wilson_95"] = list(wilson_interval(passed, n))
+        else:
+            entry["passed"] = None
+            entry["wilson_95"] = None
+            entry["interval_note"] = (
+                "Wilson assumes binomial counts; with repetitions a case value "
+                "is a proportion, so use the clustered bootstrap below")
+        rates[arm] = entry
 
     student_gain = rates["student_candidate"]["rate"] - rates["student_current"]["rate"]
     teacher_gain = rates["teacher_candidate"]["rate"] - rates["teacher_current"]["rate"]
@@ -217,14 +312,28 @@ def report(arms: dict[str, list[dict[str, Any]]], *, split: str,
     }
     tests = {}
     for label, (first, second) in pairs.items():
-        table = paired_table(collapsed[first], collapsed[second])
-        tests[label] = {
+        entry: dict[str, Any] = {
             "arms": [first, second],
-            "table": table,
-            "mcnemar": mcnemar(table),
+            # The clustered bootstrap is always computed: it is valid with or
+            # without repetitions, and it is the only inference available with.
             "bootstrap_95": paired_bootstrap_ci(collapsed[first],
                                                 collapsed[second], seed=seed),
         }
+        if single_repetition:
+            binary_first = {c: v >= 1.0 for c, v in collapsed[first].items()}
+            binary_second = {c: v >= 1.0 for c, v in collapsed[second].items()}
+            table = paired_table(binary_first, binary_second)
+            entry["table"] = table
+            entry["mcnemar"] = mcnemar(table)
+            entry["mcnemar_exact"] = exact_mcnemar(table)
+        else:
+            entry["table"] = None
+            entry["mcnemar"] = {
+                "applicable": False,
+                "reason": "McNemar needs binary paired outcomes; with "
+                          "repetitions a case value is a proportion. Use "
+                          "bootstrap_95."}
+        tests[label] = entry
 
     return {
         "capability_metric": capability_metric,
@@ -239,6 +348,13 @@ def report(arms: dict[str, list[dict[str, Any]]], *, split: str,
             - rates["student_candidate"]["rate"],
         },
         "paired_tests": tests,
+        "single_repetition": single_repetition,
+        "repetition_policy": {
+            "independent_unit": "case",
+            "case_value": "mean_pass_proportion",
+            "all_repetitions_passed_rate": "descriptive_only",
+            "inference": "mcnemar" if single_repetition else "clustered_bootstrap",
+        },
         "seed": seed,
         **qualification(n, split, approved=approved),
         "training_authorized": False,

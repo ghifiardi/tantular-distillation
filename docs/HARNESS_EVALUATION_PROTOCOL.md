@@ -253,6 +253,25 @@ independent cases, complete four-arm coverage. Hiding the signal behind the gate
 would make an unqualified run look like a negative result, when what it is is an
 unanswered question.
 
+**Repetitions are clustered observations, not extra evidence.** A case's value
+is the *mean pass proportion* across its repetitions, and each case carries
+weight one however many times it ran. The obvious alternative — a case passes
+only if every repetition passed — measures pʳ: the same model scores 0.90 at one
+repetition and 0.59 at five, so the metric would report the experiment's
+schedule rather than the model's behaviour. That conjunction is still computed
+and reported as `all_repetitions_passed_rate`, **descriptive only**; nothing in
+the rate or the inference reads it. At one repetition everything reduces to the
+ordinary boolean pass rate.
+
+McNemar needs binary paired outcomes, so it is used only when every case ran
+once (with an **exact binomial** form alongside the chi-square, because small
+discordant counts are the normal case here). With repetitions the inference is a
+**clustered bootstrap** that resamples cases whole, and Wilson is withheld rather
+than computed on a quantity that is no longer a binomial count.
+
+Qualification never reads a test result: it asks whether the study *can* answer
+the question — size, split, approval — and a p-value is an answer.
+
 **320 is measured, not chosen.** A paired McNemar test needs ~312 cases to
 detect a 0.05 difference at 80% power and 10% discordance (155 at 5%, 626 at
 20%). `n` is the count of **unique cases**: repetitions are collapsed per case,

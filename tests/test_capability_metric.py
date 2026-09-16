@@ -30,7 +30,7 @@ CONTRACT = ROOT / "configs" / "metrics" / "capability_pass_rate.v1.yaml"
 
 # The literal every reader can check. If the contract changes, this fails --
 # which is the point: the definition is reviewable, so a change must be noticed.
-CONTRACT_DIGEST = "49f5d17a0d4588f1b91f05cb1227ec1612cf9369af4a1a5571d0840bcf682c43"
+CONTRACT_DIGEST = "2e79736e24143248b18650e550d3e6b0c0f3b61310fb094daa24241c76eee968"
 
 
 # --- the contract -----------------------------------------------------------
@@ -403,10 +403,11 @@ def test_repetitions_do_not_inflate_independent_n():
     assert collapsed == {"c1": True, "c2": False}
 
 
-def test_a_case_passes_only_if_every_repetition_passed():
+def test_all_repetitions_passed_is_descriptive_not_the_metric():
     rows = [{"case_id": "c1", "passed": True}, {"case_id": "c1", "passed": False}]
-    assert mr.collapse_repetitions(rows) == {"c1": False}, (
-        "any-pass would reward resampling until something works")
+    assert mr.all_repetitions_passed(rows) == {"c1": False}
+    # ...but the capability value is the proportion, not the conjunction.
+    assert mr.case_pass_rates(rows) == {"c1": 0.5}
 
 
 def test_an_unpaired_case_refuses_rather_than_counting_as_a_failure():
@@ -506,3 +507,189 @@ def test_no_socket_is_opened_on_this_path(monkeypatch):
     mr.qualification(10, "fixture", approved=False)
     bcs.build([{"id": "a", "user": "u", "document": "d", "expect": "edit"}],
               "d", "f")
+
+
+# --- repetitions are clustered observations, not extra evidence -------------
+#
+# The obvious rule -- a case passes only if every repetition passed -- measures
+# p**r. The same model then scores 0.90 at one repetition and 0.59 at five, and
+# the metric reports the experiment's schedule rather than the model's
+# behaviour. These fix the behaviour that must not come back.
+
+def reps(case_id, passed_count, total):
+    return ([{"case_id": case_id, "passed": True}] * passed_count
+            + [{"case_id": case_id, "passed": False}] * (total - passed_count))
+
+
+def test_more_repetitions_do_not_drive_capability_toward_p_to_the_r():
+    """A case that passes 9 times in 10 is worth 0.9, at any r."""
+    for total in (1, 2, 5, 10, 20):
+        passed = round(0.9 * total)
+        rate = mr.case_pass_rates(reps("c1", passed, total))["c1"]
+        assert rate == pytest.approx(passed / total, abs=1e-12)
+    # The conjunction is what would have collapsed: 0.9**5 is far from 0.9.
+    conjunction = mr.all_repetitions_passed(reps("c1", 9, 10))["c1"]
+    assert conjunction is False
+    assert mr.case_pass_rates(reps("c1", 9, 10))["c1"] == 0.9
+
+
+def test_a_perfect_case_stays_at_one_however_often_it_runs():
+    for total in (1, 3, 50):
+        assert mr.case_pass_rates(reps("c1", total, total))["c1"] == 1.0
+
+
+def test_unequal_repetition_counts_do_not_reweight_a_case():
+    """One case run 100 times must not outvote 99 cases run once."""
+    rows = reps("loud", 0, 100) + [{"case_id": f"q{i}", "passed": True}
+                                   for i in range(99)]
+    rates = mr.case_pass_rates(rows)
+    assert len(rates) == 100
+    arm_rate = sum(rates.values()) / len(rates)
+    assert arm_rate == pytest.approx(0.99), (
+        "each case carries weight 1; averaging observations would give 0.4975")
+    # What weighting by OBSERVATION would have produced, for contrast: 99
+    # passes out of 199 rows, i.e. the loud case drowning out all the rest.
+    assert len(rows) == 199
+    assert sum(1 for r in rows if r["passed"]) / len(rows) == pytest.approx(99 / 199)
+
+
+def test_repetitions_never_increase_independent_n():
+    for total in (1, 5, 40):
+        rows = reps("c1", total, total) + reps("c2", 0, total)
+        result = mr.qualification(len(mr.case_pass_rates(rows)), "held_out",
+                                  approved=True)
+        assert result["independent_cases"] == 2
+
+
+def test_a_single_repetition_reduces_to_the_boolean_pass_rate():
+    rows = [{"case_id": "c1", "passed": True}, {"case_id": "c2", "passed": False},
+            {"case_id": "c3", "passed": True}]
+    rates = mr.case_pass_rates(rows)
+    assert rates == {"c1": 1.0, "c2": 0.0, "c3": 1.0}
+    assert sum(rates.values()) / len(rates) == pytest.approx(2 / 3)
+
+
+def four_arms(rows_per_arm):
+    return {arm: list(rows_per_arm) for arm in
+            ("student_current", "student_candidate",
+             "teacher_current", "teacher_candidate")}
+
+
+def test_the_report_uses_mcnemar_only_without_repetitions():
+    single = four_arms([{"case_id": f"c{i}", "passed": i % 2 == 0}
+                        for i in range(10)])
+    result = mr.report(single, split="pilot", approved=False, seed=3)
+    assert result["single_repetition"] is True
+    assert result["repetition_policy"]["inference"] == "mcnemar"
+    assert result["paired_tests"]["student_harness"]["mcnemar_exact"]["method"] == "exact"
+    assert result["rates"]["student_current"]["wilson_95"] is not None
+
+
+def test_with_repetitions_the_report_switches_to_the_clustered_bootstrap():
+    repeated = four_arms(reps("c1", 3, 4) + reps("c2", 1, 4) + reps("c3", 4, 4))
+    result = mr.report(repeated, split="pilot", approved=False, seed=3)
+    assert result["single_repetition"] is False
+    assert result["repetition_policy"]["inference"] == "clustered_bootstrap"
+    assert result["independent_cases"] == 3, "12 observations of 3 questions"
+    test = result["paired_tests"]["student_harness"]
+    assert test["mcnemar"]["applicable"] is False
+    assert "proportion" in test["mcnemar"]["reason"]
+    assert test["bootstrap_95"]["seed"] == 3
+    # Wilson is withheld rather than computed on a non-binomial quantity.
+    assert result["rates"]["student_current"]["wilson_95"] is None
+    assert result["rates"]["student_current"]["rate"] == pytest.approx(
+        (0.75 + 0.25 + 1.0) / 3)
+
+
+def test_the_report_carries_the_descriptive_stability_rate_separately():
+    repeated = four_arms(reps("c1", 3, 4) + reps("c2", 4, 4))
+    result = mr.report(repeated, split="pilot", approved=False, seed=3)
+    arm = result["rates"]["student_current"]
+    assert arm["all_repetitions_passed_rate"] == 0.5, "only c2 passed every time"
+    assert arm["rate"] == pytest.approx((0.75 + 1.0) / 2)
+    assert arm["all_repetitions_passed_rate"] != arm["rate"], (
+        "the stability statistic must never be mistaken for the metric")
+
+
+@pytest.mark.parametrize("b, c, expected", [
+    # Exact binomial: 2 * P(X >= max(b,c)), X ~ Bin(b+c, 1/2).
+    (3, 0, 0.25),            # 2 * (1/8)
+    (4, 0, 0.125),           # 2 * (1/16)
+    (5, 0, 0.0625),          # 2 * (1/32)
+    (2, 1, 1.0),             # 2 * (4/8) = 1.0
+    (0, 0, 1.0),             # no discordant pairs
+])
+def test_exact_mcnemar_matches_hand_computed_small_tables(b, c, expected):
+    table = {"only_first": b, "only_second": c, "both_pass": 0, "neither": 0,
+             "n": b + c, "discordant": b + c}
+    assert mr.exact_mcnemar(table)["p_value"] == pytest.approx(expected, abs=1e-12)
+
+
+def test_exact_and_approximate_mcnemar_disagree_where_the_approximation_is_weak():
+    """Which is why the exact form exists: b+c small is the normal case."""
+    table = {"only_first": 5, "only_second": 0, "both_pass": 0, "neither": 0,
+             "n": 5, "discordant": 5}
+    assert mr.exact_mcnemar(table)["p_value"] == pytest.approx(0.0625)
+    assert mr.mcnemar(table)["p_value"] != pytest.approx(0.0625, abs=1e-3)
+
+
+def test_no_p_value_can_change_statistical_qualification():
+    """Qualification asks whether the study can answer the question. A p-value
+    IS an answer, so feeding one back would admit a run for coming out well.
+
+    Proved behaviourally rather than by scanning source: the signature cannot
+    receive a test result, and two runs with wildly different significance get
+    identical qualification.
+    """
+    import inspect
+    accepted = set(inspect.signature(mr.qualification).parameters)
+    assert accepted == {"independent_cases", "split", "approved", "minimum"}, (
+        "qualification must not be able to see a test result at all")
+
+    # Same size, same split, same approval; opposite significance.
+    unanimous = four_arms([{"case_id": f"c{i}", "passed": True} for i in range(10)])
+    mixed = {
+        "student_current": [{"case_id": f"c{i}", "passed": i % 2 == 0}
+                            for i in range(10)],
+        "student_candidate": [{"case_id": f"c{i}", "passed": True}
+                              for i in range(10)],
+        "teacher_current": [{"case_id": f"c{i}", "passed": i % 3 == 0}
+                            for i in range(10)],
+        "teacher_candidate": [{"case_id": f"c{i}", "passed": True}
+                              for i in range(10)],
+    }
+    a = mr.report(unanimous, split="held_out", approved=True, seed=1)
+    b = mr.report(mixed, split="held_out", approved=True, seed=1)
+    assert a["paired_tests"]["student_harness"]["mcnemar_exact"]["p_value"] \
+        != b["paired_tests"]["student_harness"]["mcnemar_exact"]["p_value"]
+    for field in ("statistically_qualified", "independent_cases",
+                  "qualification_problems"):
+        assert a[field] == b[field], (
+            f"{field} moved with the p-value; qualification is about whether "
+            "the study can answer, not about how it came out")
+
+    # And a maximally clean result is still unqualified at n=10.
+    assert a["rates"]["student_current"]["rate"] == 1.0
+    assert a["statistically_qualified"] is False
+    assert any("below the 320" in p for p in a["qualification_problems"])
+
+
+def test_fixtures_and_unapproved_sets_stay_unqualified_with_repetitions():
+    repeated = four_arms(reps(f"c{i}", 4, 4) for i in range(1))
+    rows = []
+    for i in range(400):
+        rows += reps(f"c{i}", 4, 4)
+    big = four_arms(rows)
+    fixture = mr.report(big, split="fixture", approved=True, seed=1)
+    assert fixture["independent_cases"] == 400
+    assert fixture["statistically_qualified"] is False
+    assert any("fixture" in p for p in fixture["qualification_problems"])
+
+    unapproved = mr.report(big, split="held_out", approved=False, seed=1)
+    assert unapproved["statistically_qualified"] is False
+    assert any("not approved" in p for p in unapproved["qualification_problems"])
+
+    qualified = mr.report(big, split="held_out", approved=True, seed=1)
+    assert qualified["statistically_qualified"] is True
+    assert qualified["single_repetition"] is False
+    assert qualified["training_authorized"] is False
