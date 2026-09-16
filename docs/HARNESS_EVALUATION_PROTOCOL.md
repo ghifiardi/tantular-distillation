@@ -222,3 +222,64 @@ Two things, both out of scope here and neither fixed by this protocol:
 Until both are resolved, this protocol can produce receipts and refusals but
 **no measurement**. Every artifact stays fixture/preflight class and carries
 `training_authorized: false`.
+
+## 8. The capability metric and statistical qualification
+
+`capability_pass_rate` is the metric the experiment decides on, and until now
+nothing computed it. `configs/metrics/capability_pass_rate.v1.yaml` declares it
+— canonically digested, with the literal asserted in tests — and
+`src/score_capability.py` composes it from properties
+`src/score_faithful_edit.py` already computes. **It is a re-partition, not a new
+judge.** No model grades a model.
+
+| in the Boolean | deliberately outside it |
+|---|---|
+| `lands`, `preserves`, `no_new_facts`, `target_location`, `execution_completed`, `structure` *(only when declared)* | `edit_contract_output`, `indonesian_voice` |
+
+The guardrails stay outside because they have their own minimums and their own
+zero-regression rule; folding them in would make a voice regression move the
+capability number too, and `evaluate()` could no longer tell
+`harness_optimization_sufficient` from `guardrail_failures`.
+
+One apparent exception is not one: an edit contract that does not parse, locate
+and apply leaves no applied document, so capability fails through
+`model_output_invalid` while the five dependent properties stay `not_measured`
+— the false-positive control `score_faithful_edit` already implements.
+
+**Signal and candidacy are now separate.** `signal_supports_weight_distillation`
+is what the numbers say; `weight_distillation_candidate` additionally requires
+the measurement to be **statistically qualified**: an approved case set, ≥ 320
+independent cases, complete four-arm coverage. Hiding the signal behind the gate
+would make an unqualified run look like a negative result, when what it is is an
+unanswered question.
+
+**320 is measured, not chosen.** A paired McNemar test needs ~312 cases to
+detect a 0.05 difference at 80% power and 10% discordance (155 at 5%, 626 at
+20%). `n` is the count of **unique cases**: repetitions are collapsed per case,
+because adding correlated observations would shrink every interval by a factor
+the data does not contain. The declared `noise_floor: 0.025` is marked
+`provisional` — at the pilot's n=10 it is 4× finer than the score can express
+and ~14× narrower than its interval. **No threshold was changed.**
+
+Approval is a human record under `docs/case_sets/`, bound to the exact case-set
+digest by `src/verify_case_set_approval.py`, following the licence-evidence
+pattern. Changing a case moves the digest and the approval stops matching,
+automatically. Placeholder reviewers and automated actors are refused by name.
+`src/build_case_set.py` may draft a set and report what a human still owes; it
+has **no code path that sets `approved: true`** and never invents a
+preservation declaration, a target assertion or an expected outcome.
+
+### Still blocked — deliberately not built here
+
+| blocker | why |
+|---|---|
+| **No approved held-out Office set** | needs ≥ 320 human-authored cases; nothing in this repo is approved, and this milestone approved nothing |
+| **Leakage checker** | `data/raw/` and `data/promoted/` are gitignored, so training overlap cannot be verified from a clean checkout. Needs a tracked corpus-hash manifest first |
+| **Promoted-corpus hash manifest** | prerequisite for the above |
+| **Live `no_edit` protocol** | `OfficeLiveExecutor` requires exactly one edit, so a correct decline is scorable from fixtures and not executable live (`live_support.no_edit: false`) |
+| **Add-in CI** | the add-in repository has no workflows on any branch |
+| **`noise_floor` evidence** | requires repetitions at fixed decoding; `status` stays `provisional` until then |
+
+Until these clear, this layer produces receipts, refusals and **descriptive**
+statistics — never a qualified production measurement, and never an
+authorization.

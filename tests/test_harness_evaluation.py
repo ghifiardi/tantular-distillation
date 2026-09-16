@@ -633,8 +633,15 @@ def test_the_cli_round_trip_feeds_harness_distill(tmp_path, capsys):
               "--receipts", str(receipts_dir), "--output", str(measurements),
               "--allow-fixture"])
     capsys.readouterr()
-    result = hd.evaluate(hd.load_yaml(EXPERIMENT),
-                         json.loads(measurements.read_text()))
-    assert result["weight_distillation_candidate"] is True
+    payload = json.loads(measurements.read_text())
+    result = hd.evaluate(hd.load_yaml(EXPERIMENT), payload)
+    # The fixture shows the raw relationship...
+    assert result["signal_supports_weight_distillation"] is True
     assert result["harness_optimization_sufficient"] is False
+    # ...and must never be readable as a product verdict. A replay of declared
+    # outcomes over 10 cases is not a measurement, whatever the numbers say.
+    assert result["weight_distillation_candidate"] is False
+    assert payload["statistically_qualified"] is False
+    assert payload["independent_cases"] == 10
+    assert any("fixture" in p for p in payload["qualification_problems"])
     assert result["training_authorized"] is False

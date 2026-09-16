@@ -164,13 +164,42 @@ def test_harness_that_closes_gap_blocks_weight_distillation(harness_loader):
     assert result["training_authorized"] is False
 
 
-def test_residual_gap_can_make_weight_distillation_a_candidate(harness_loader):
+def test_residual_gap_produces_the_signal_but_not_yet_a_candidacy(harness_loader):
+    """The numbers point at weight distillation; the measurement does not yet
+    earn the verdict. Kept as ONE test so the two cannot drift apart."""
     result = hd.evaluate(experiment(), measurements())
     assert result["harness_optimization_sufficient"] is False
-    assert result["weight_distillation_candidate"] is True
+    assert result["signal_supports_weight_distillation"] is True
     assert result["scores"]["harness_gain"] == pytest.approx(0.12)
     assert result["scores"]["residual_model_gap"] == pytest.approx(0.13)
+    # Unqualified measurements: a rate without a qualification is arithmetic.
+    assert result["weight_distillation_candidate"] is False
+    assert result["qualification"]["statistically_qualified"] is False
+    assert result["qualification"]["problems"]
     assert result["training_authorized"] is False
+
+
+def test_a_qualified_measurement_turns_the_signal_into_a_candidacy(harness_loader):
+    data = measurements()
+    data["statistically_qualified"] = True
+    data["independent_cases"] = 320
+    result = hd.evaluate(experiment(), data)
+    assert result["signal_supports_weight_distillation"] is True
+    assert result["weight_distillation_candidate"] is True
+    assert result["qualification"]["independent_cases"] == 320
+    # Even a qualified candidacy authorizes nothing.
+    assert result["training_authorized"] is False
+
+
+def test_qualification_alone_cannot_manufacture_a_candidacy(harness_loader):
+    """The gate is a conjunction, not a substitute: declaring a run qualified
+    must not turn an absent signal into a verdict."""
+    data = measurements(candidate=0.91)          # the harness closes the gap
+    data["statistically_qualified"] = True
+    data["independent_cases"] = 320
+    result = hd.evaluate(experiment(), data)
+    assert result["signal_supports_weight_distillation"] is False
+    assert result["weight_distillation_candidate"] is False
 
 
 def test_no_observed_gap_means_no_distillation(harness_loader):
