@@ -178,12 +178,12 @@ class FakeCompanion:
         self.refuse_reason = refuse_reason
         self.executes = 0
 
-    def prepare(self, edits, case_id):
-        if not self.prepare_ok:
-            return {"ok": False, "reason": "not_located"}
-        return {"ok": True, "token": "tok-1"}
-
-    def execute(self, token, edits, case_id):
+    def post(self, path, payload):
+        """The companion's two decisions. The executor owns these payloads."""
+        if path == hx.PREPARE_PATH:
+            if not self.prepare_ok:
+                return {"ok": False, "reason": "not_located"}
+            return {"ok": True, "token": "tok-1", "nonce": "nonce-1"}
         self.executes += 1
         if not self.execute_ok:
             return {"ok": False, "reason": self.refuse_reason}
@@ -191,7 +191,8 @@ class FakeCompanion:
                 "document_version": HEX, "target_digest": HEX,
                 "edit_digest": HEX, "approver": "local-user"}
 
-    def result(self, idempotency_key, case_id):
+    def apply(self, idempotency_key, case_id):
+        """What the PANE observed. This client never reports an outcome."""
         return {"status": self.status, "steps": 2, "wall_seconds": 3.0,
                 "scores": {"capability_pass_rate": True,
                            "indonesian_voice": True,

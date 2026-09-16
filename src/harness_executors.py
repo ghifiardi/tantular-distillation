@@ -196,6 +196,25 @@ class FakeOfficeExecutor:
                 f"{request.repetition}:{edge}")
 
 
+# The wire, pinned in one place and mirrored by
+# contract/office-edit-protocol.v1.json in BOTH repositories. A route spelled
+# differently on one side is a silent failure that no single-repo test can see.
+OFFICE_EDIT_PROTOCOL_VERSION = 1
+PREPARE_PATH = "/api/edit/prepare"
+EXECUTE_PATH = "/api/edit/execute"
+RESULT_PATH = "/api/edit/result"
+DIAGNOSTICS_PATH = "/api/diagnostics"
+
+# Refusal reasons the companion may return, and which of them are terminal for
+# a case. Enumerated so an UNKNOWN reason is itself a failure: a companion that
+# grew a new refusal must not be interpreted by guessing.
+COMPANION_REFUSALS = frozenset({
+    "unknown_token", "expired", "document_changed", "target_moved",
+    "edit_changed", "duplicate", "not_located", "batch_unsupported",
+    "no_document", "no_edit", "unknown_key", "audit_unwritable",
+})
+
+
 class OfficeLiveExecutor:
     """Drives ONE Word edit through the add-in companion's approval protocol.
 
@@ -240,6 +259,24 @@ class OfficeLiveExecutor:
             "companion_boot_id": self.companion_boot_id,
         }
 
+    def _refused(self, request: ExecutionRequest, stage: str, reason: Any,
+                 started: str, ended: str) -> ExecutionResult:
+        """Turn a companion refusal into a receipt-ready result.
+
+        An unrecognised reason is reported AS unrecognised rather than passed
+        through: a companion that grew a new refusal state must not be
+        interpreted by a client that has never heard of it.
+        """
+        name = str(reason)
+        known = name in COMPANION_REFUSALS
+        return ExecutionResult(
+            tools_offered=list(request.tool_policy.get("allow") or []),
+            tool_calls=[{"tool": "office_edit", "approved": False}],
+            started_at=started, ended_at=ended,
+            error=(f"approval refused at {stage}: {name}" if known else
+                   f"approval refused at {stage} with an UNRECOGNISED reason "
+                   f"{name!r}; this client cannot interpret it"))
+
     def execute(self, request: ExecutionRequest) -> ExecutionResult:
         started = f"live:{request.run_id}:{request.arm}:{request.case_id}:start"
         ended = f"live:{request.run_id}:{request.arm}:{request.case_id}:end"
@@ -264,31 +301,42 @@ class OfficeLiveExecutor:
                 f"{len(edits) if isinstance(edits, list) else 0}. Batch "
                 "atomicity is unsolved on Office.js and is out of scope.")
 
+        # The EXECUTOR owns the wire format, not the transport. If the
+        # transport built these payloads, the contract fixture would be
+        # testing the test double and the two repositories could drift while
+        # both suites stayed green.
+        document = str((request.case.get("request") or {}).get("document") or "")
+        located = (request.case.get("request") or {}).get("located")
         try:
-            prepared = self.transport.prepare(
-                edits=edits, case_id=request.case_id)
+            prepared = self.transport.post(PREPARE_PATH, {
+                "edits": edits,
+                "document": document,
+                "located": located,
+            })
         except Exception as exc:                          # noqa: BLE001
             return failure(f"companion prepare failed: {type(exc).__name__}: {exc}")
         if not prepared.get("ok"):
-            return ExecutionResult(
-                tools_offered=list(request.tool_policy.get("allow") or []),
-                tool_calls=[{"tool": "office_edit", "approved": False}],
-                started_at=started, ended_at=ended,
-                error=f"approval refused at prepare: {prepared.get('reason')}")
+            return self._refused(request, "prepare", prepared.get("reason"),
+                                 started, ended)
 
         try:
-            executed = self.transport.execute(
-                token=prepared["token"], edits=edits, case_id=request.case_id)
+            executed = self.transport.post(EXECUTE_PATH, {
+                "token": prepared["token"],
+                "edit": edits[0],
+                "document": document,
+                "located": located,
+            })
         except Exception as exc:                          # noqa: BLE001
             return failure(f"companion execute failed: {type(exc).__name__}: {exc}")
         if not executed.get("ok"):
-            return ExecutionResult(
-                tools_offered=list(request.tool_policy.get("allow") or []),
-                tool_calls=[{"tool": "office_edit", "approved": False}],
-                started_at=started, ended_at=ended,
-                error=f"approval refused at execute: {executed.get('reason')}")
+            return self._refused(request, "execute", executed.get("reason"),
+                                 started, ended)
 
-        applied = self.transport.result(
+        # The APPLY is the pane's, not this client's: only the task pane holds
+        # an Office handle, and it is the pane that posts RESULT_PATH with what
+        # Word actually did. This asks the bridge for that observed outcome; it
+        # does not report one, because it did not see one.
+        applied = self.transport.apply(
             idempotency_key=executed["idempotency_key"], case_id=request.case_id)
         status = str(applied.get("status") or "unknown")
 
