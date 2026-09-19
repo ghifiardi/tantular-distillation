@@ -1,0 +1,1 @@
+{"schema_version":1,"id":"fixture::invalid::empty-provenance","split":"knowledge","language":"id","prompt":"Sebutkan satu contoh.","verifier":{"type":"exact_match","config":{}},"expected":{"answer":"contoh"},"score_role":"correctness","source_class":"synthetic","source":{}}

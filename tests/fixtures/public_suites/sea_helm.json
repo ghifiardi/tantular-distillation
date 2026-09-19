@@ -1,0 +1,14 @@
+{
+  "_note": "SYNTHETIC FIXTURE. Not a measurement of any model. Shapes the adapter only.",
+  "model": "fixture-model-9b",
+  "language": "id",
+  "scale": "0-100",
+  "reported_at": "2026-09-19",
+  "pillars": {
+    "nlp_classics": 61.2,
+    "llm_specifics": 58.4,
+    "sea_linguistics": 54.9,
+    "sea_culture": 49.7,
+    "safety": 72.5
+  }
+}

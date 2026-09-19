@@ -1,0 +1,25 @@
+{
+  "arms": {
+    "student_current": {
+      "capability_pass_rate": 0.62,
+      "indonesian_voice": 0.96,
+      "edit_contract_output": 0.94
+    },
+    "student_candidate": {
+      "capability_pass_rate": 0.7,
+      "indonesian_voice": 0.96,
+      "edit_contract_output": 0.94
+    },
+    "teacher_current": {
+      "capability_pass_rate": 0.93,
+      "indonesian_voice": 0.97,
+      "edit_contract_output": 0.95
+    },
+    "teacher_candidate": {
+      "capability_pass_rate": 0.94,
+      "indonesian_voice": 0.97,
+      "edit_contract_output": 0.95
+    }
+  },
+  "_note": "SYNTHETIC FIXTURE."
+}

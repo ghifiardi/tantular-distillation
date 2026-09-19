@@ -4,6 +4,10 @@ data/promoted/
 adapters/
 *.jsonl
 !prompts/*.jsonl
+# Tiny synthetic test fixtures are code, not corpus. Production gold records
+# remain ignored under data/gold/ and must be supplied through the approved
+# local-data workflow.
+!tests/fixtures/gold/*.jsonl
 *.gguf
 *.safetensors
 

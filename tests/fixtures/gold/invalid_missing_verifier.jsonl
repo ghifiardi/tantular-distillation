@@ -1,0 +1,1 @@
+{"schema_version":1,"id":"fixture::invalid::missing-verifier","split":"reasoning","language":"id","prompt":"Berapa 2 + 2?","expected":{"answer":"4"},"score_role":"correctness","source_class":"synthetic","source":{"kind":"synthetic_fixture","fixture_name":"invalid-missing-verifier","evidence_ref":"tests/fixtures/gold/invalid_missing_verifier.jsonl"}}
