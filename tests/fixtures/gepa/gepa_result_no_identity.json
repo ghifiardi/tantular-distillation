@@ -1,0 +1,26 @@
+{
+  "_note": "SYNTHETIC FIXTURE. Not a measurement of any served model.",
+  "slice": "tool_use",
+  "seed": {
+    "id": "seed",
+    "score": 0.62
+  },
+  "best": {
+    "id": "c1",
+    "parent": "seed",
+    "score": 0.91,
+    "instruction": "Balas hanya JSON kontrak edit yang valid."
+  },
+  "frontier": [],
+  "accepted": [],
+  "rejected": [],
+  "rollouts": 8,
+  "rollout_budget": 12,
+  "model_identity": "tantular-office-9b",
+  "measured": true,
+  "training_authorized": false,
+  "guardrails": {
+    "indonesian_voice": 0.96,
+    "edit_contract_output": 0.94
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_note": "SYNTHETIC FIXTURE. Not a measurement of any model.",
+  "model": "fixture-model-9b",
+  "scale": "0-100",
+  "reported_at": "2026-09-19",
+  "subjects": {
+    "humaniora": 55.0,
+    "bahasa_indonesia": 63.5,
+    "bahasa_dan_budaya_lokal": 41.2,
+    "ilmu_sosial": 58.1,
+    "stem": 47.8
+  }
+}

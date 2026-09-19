@@ -1,0 +1,221 @@
+{
+  "arm": "student_9b",
+  "model_identity": {
+    "expected": "tantular-office-9b",
+    "served": [
+      "tantular-office-9b"
+    ],
+    "endpoint": "http://127.0.0.1:8000/v1"
+  },
+  "splits": {
+    "reasoning": {
+      "per_item": {
+        "reasoning::000": true,
+        "reasoning::001": true,
+        "reasoning::002": true,
+        "reasoning::003": true,
+        "reasoning::004": true,
+        "reasoning::005": true,
+        "reasoning::006": true,
+        "reasoning::007": true,
+        "reasoning::008": true,
+        "reasoning::009": true,
+        "reasoning::010": true,
+        "reasoning::011": true,
+        "reasoning::012": true,
+        "reasoning::013": true,
+        "reasoning::014": true,
+        "reasoning::015": true,
+        "reasoning::016": true,
+        "reasoning::017": true,
+        "reasoning::018": true,
+        "reasoning::019": true,
+        "reasoning::020": true,
+        "reasoning::021": true,
+        "reasoning::022": true,
+        "reasoning::023": true,
+        "reasoning::024": true,
+        "reasoning::025": true,
+        "reasoning::026": true,
+        "reasoning::027": true,
+        "reasoning::028": true,
+        "reasoning::029": true,
+        "reasoning::030": true,
+        "reasoning::031": true,
+        "reasoning::032": true,
+        "reasoning::033": true,
+        "reasoning::034": false,
+        "reasoning::035": false,
+        "reasoning::036": false,
+        "reasoning::037": false,
+        "reasoning::038": false,
+        "reasoning::039": false
+      },
+      "runs": [
+        {
+          "pass_rate": 0.8
+        },
+        {
+          "pass_rate": 0.89
+        }
+      ]
+    },
+    "instruction_following": {
+      "per_item": {
+        "instruction_following::000": true,
+        "instruction_following::001": true,
+        "instruction_following::002": true,
+        "instruction_following::003": true,
+        "instruction_following::004": true,
+        "instruction_following::005": true,
+        "instruction_following::006": true,
+        "instruction_following::007": true,
+        "instruction_following::008": true,
+        "instruction_following::009": true,
+        "instruction_following::010": true,
+        "instruction_following::011": true,
+        "instruction_following::012": true,
+        "instruction_following::013": true,
+        "instruction_following::014": true,
+        "instruction_following::015": true,
+        "instruction_following::016": true,
+        "instruction_following::017": true,
+        "instruction_following::018": true,
+        "instruction_following::019": true,
+        "instruction_following::020": true,
+        "instruction_following::021": true,
+        "instruction_following::022": true,
+        "instruction_following::023": true,
+        "instruction_following::024": true,
+        "instruction_following::025": true,
+        "instruction_following::026": true,
+        "instruction_following::027": true,
+        "instruction_following::028": true,
+        "instruction_following::029": true,
+        "instruction_following::030": true,
+        "instruction_following::031": true,
+        "instruction_following::032": true,
+        "instruction_following::033": true,
+        "instruction_following::034": false,
+        "instruction_following::035": false,
+        "instruction_following::036": false,
+        "instruction_following::037": false,
+        "instruction_following::038": false,
+        "instruction_following::039": false
+      },
+      "runs": [
+        {
+          "pass_rate": 0.8
+        },
+        {
+          "pass_rate": 0.89
+        }
+      ]
+    },
+    "knowledge": {
+      "per_item": {
+        "knowledge::000": true,
+        "knowledge::001": true,
+        "knowledge::002": true,
+        "knowledge::003": true,
+        "knowledge::004": true,
+        "knowledge::005": true,
+        "knowledge::006": true,
+        "knowledge::007": true,
+        "knowledge::008": true,
+        "knowledge::009": true,
+        "knowledge::010": true,
+        "knowledge::011": true,
+        "knowledge::012": true,
+        "knowledge::013": true,
+        "knowledge::014": true,
+        "knowledge::015": true,
+        "knowledge::016": true,
+        "knowledge::017": true,
+        "knowledge::018": true,
+        "knowledge::019": true,
+        "knowledge::020": true,
+        "knowledge::021": true,
+        "knowledge::022": true,
+        "knowledge::023": true,
+        "knowledge::024": true,
+        "knowledge::025": true,
+        "knowledge::026": true,
+        "knowledge::027": true,
+        "knowledge::028": true,
+        "knowledge::029": true,
+        "knowledge::030": true,
+        "knowledge::031": true,
+        "knowledge::032": true,
+        "knowledge::033": true,
+        "knowledge::034": false,
+        "knowledge::035": false,
+        "knowledge::036": false,
+        "knowledge::037": false,
+        "knowledge::038": false,
+        "knowledge::039": false
+      },
+      "runs": [
+        {
+          "pass_rate": 0.8
+        },
+        {
+          "pass_rate": 0.89
+        }
+      ]
+    },
+    "tool_use": {
+      "per_item": {
+        "tool_use::000": true,
+        "tool_use::001": true,
+        "tool_use::002": true,
+        "tool_use::003": true,
+        "tool_use::004": true,
+        "tool_use::005": true,
+        "tool_use::006": true,
+        "tool_use::007": true,
+        "tool_use::008": true,
+        "tool_use::009": true,
+        "tool_use::010": true,
+        "tool_use::011": true,
+        "tool_use::012": true,
+        "tool_use::013": true,
+        "tool_use::014": true,
+        "tool_use::015": true,
+        "tool_use::016": true,
+        "tool_use::017": true,
+        "tool_use::018": true,
+        "tool_use::019": true,
+        "tool_use::020": true,
+        "tool_use::021": true,
+        "tool_use::022": true,
+        "tool_use::023": true,
+        "tool_use::024": true,
+        "tool_use::025": true,
+        "tool_use::026": true,
+        "tool_use::027": true,
+        "tool_use::028": true,
+        "tool_use::029": true,
+        "tool_use::030": true,
+        "tool_use::031": true,
+        "tool_use::032": true,
+        "tool_use::033": true,
+        "tool_use::034": false,
+        "tool_use::035": false,
+        "tool_use::036": false,
+        "tool_use::037": false,
+        "tool_use::038": false,
+        "tool_use::039": false
+      },
+      "runs": [
+        {
+          "pass_rate": 0.8
+        },
+        {
+          "pass_rate": 0.89
+        }
+      ]
+    }
+  },
+  "note": "SYNTHETIC FIXTURE. Not a measurement of any served model."
+}
