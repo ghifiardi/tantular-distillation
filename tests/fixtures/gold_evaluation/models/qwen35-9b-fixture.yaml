@@ -1,0 +1,16 @@
+# SYNTHETIC FIXTURE registry entry mirroring the 9B student's identity so a
+# test registry directory can hold both arms without reading configs/models/.
+schema_version: 1
+model_id: Qwen/Qwen3.5-9B
+revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a
+role: student
+family: qwen3.5
+generation: "3.5"
+tokenizer:
+  model_id: Qwen/Qwen3.5-9B
+  revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a
+  sha256: null
+license:
+  identifier: apache-2.0
+  output_training_permitted: true
+digests_verified: false

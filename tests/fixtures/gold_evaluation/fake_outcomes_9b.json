@@ -1,0 +1,11 @@
+{
+  "_note": "SYNTHETIC FIXTURE. Deterministic fake model outputs for tests/fixtures/gold/valid.synthetic.jsonl. Never a measurement.",
+  "served": ["Qwen/Qwen3.5-9B"],
+  "outputs": {
+    "fixture::reasoning::0001": {"answer": "42", "reasoning": "Ada 6 baris dan 7 kelereng per baris, jadi 6 × 7 = 42."},
+    "fixture::instruction_following::0001": "{\"ringkasan\": \"tiga butir\", \"jumlah_butir\": 3}",
+    "fixture::knowledge::0001": "bandung",
+    "fixture::tool_use::0001": "import sys\na, b = map(int, sys.stdin.read().split())\nprint(a + b)",
+    "fixture::instruction_following::style-0001": "Mohon maaf, jadwal berubah; terima kasih atas pengertiannya."
+  }
+}
