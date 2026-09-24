@@ -1,0 +1,25 @@
+{
+  "_note": "SYNTHETIC FIXTURE for run_gepa. The mutation fixes two held-out items and breaks one: a higher mean that must be REJECTED.",
+  "served": ["Qwen/Qwen3.5-9B"],
+  "default": {
+    "train::tool_use::0001": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"judul\", \"replacement\": \"Laporan Triwulan\"}}",
+    "train::tool_use::0002": "bukan json",
+    "train::tool_use::0003": "bukan json",
+    "holdout::tool_use::0001": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"segera\", \"replacement\": \"secepatnya\"}}",
+    "holdout::tool_use::0002": "bukan json",
+    "holdout::tool_use::0003": "bukan json"
+  },
+  "outputs": {
+    "Balas hanya dengan JSON panggilan alat dan jangan pernah memanggil office_edit untuk mengganti kata.": {
+      "train::tool_use::0001": "bukan json",
+      "train::tool_use::0002": "{\"tool\": \"office_read\", \"arguments\": {\"selector\": \"paragraf:1\"}}",
+      "train::tool_use::0003": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"kalimat terakhir\", \"replacement\": \"\"}}",
+      "holdout::tool_use::0001": "bukan json",
+      "holdout::tool_use::0002": "{\"tool\": \"office_read\", \"arguments\": {\"selector\": \"judul\"}}",
+      "holdout::tool_use::0003": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"judul\", \"replacement\": \"judul\\n2026-09-24\"}}"
+    }
+  },
+  "reflections": [
+    "Balas hanya dengan JSON panggilan alat dan jangan pernah memanggil office_edit untuk mengganti kata."
+  ]
+}

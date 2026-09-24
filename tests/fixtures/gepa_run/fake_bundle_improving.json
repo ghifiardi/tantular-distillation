@@ -1,0 +1,25 @@
+{
+  "_note": "SYNTHETIC FIXTURE for run_gepa. Outputs are keyed by the instruction the system ran under; unknown instructions fall back to 'default'. The reflector replays 'reflections' in order. Never a measurement.",
+  "served": ["Qwen/Qwen3.5-9B"],
+  "default": {
+    "train::tool_use::0001": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"judul\", \"replacement\": \"Laporan Triwulan\"}}",
+    "train::tool_use::0002": "bukan json",
+    "train::tool_use::0003": "bukan json",
+    "holdout::tool_use::0001": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"segera\", \"replacement\": \"secepatnya\"}}",
+    "holdout::tool_use::0002": "bukan json",
+    "holdout::tool_use::0003": "bukan json"
+  },
+  "outputs": {
+    "Balas hanya dengan JSON panggilan alat yang valid dan jangan menambah teks lain.": {
+      "train::tool_use::0001": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"judul\", \"replacement\": \"Laporan Triwulan\"}}",
+      "train::tool_use::0002": "{\"tool\": \"office_read\", \"arguments\": {\"selector\": \"paragraf:1\"}}",
+      "train::tool_use::0003": "bukan json",
+      "holdout::tool_use::0001": "{\"tool\": \"office_edit\", \"arguments\": {\"target\": \"segera\", \"replacement\": \"secepatnya\"}}",
+      "holdout::tool_use::0002": "{\"tool\": \"office_read\", \"arguments\": {\"selector\": \"judul\"}}",
+      "holdout::tool_use::0003": "bukan json"
+    }
+  },
+  "reflections": [
+    "Balas hanya dengan JSON panggilan alat yang valid dan jangan menambah teks lain."
+  ]
+}

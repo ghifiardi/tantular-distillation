@@ -8,6 +8,7 @@ adapters/
 # remain ignored under data/gold/ and must be supplied through the approved
 # local-data workflow.
 !tests/fixtures/gold/*.jsonl
+!tests/fixtures/gepa_run/*.jsonl
 *.gguf
 *.safetensors
 
