@@ -1,0 +1,19 @@
+# SYNTHETIC FIXTURE registry entry for a 4B student. Exists so the gold
+# evaluation runner can be tested against two DISTINCT student identities
+# offline. The revision is a placeholder-shaped pin for the loader's pinned-
+# revision rule; it names no real checkpoint and this file must never be
+# copied into configs/models/.
+schema_version: 1
+model_id: Qwen/Qwen3.5-4B
+revision: 4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b
+role: student
+family: qwen3.5
+generation: "3.5"
+tokenizer:
+  model_id: Qwen/Qwen3.5-4B
+  revision: 4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b
+  sha256: null
+license:
+  identifier: apache-2.0
+  output_training_permitted: true
+digests_verified: false

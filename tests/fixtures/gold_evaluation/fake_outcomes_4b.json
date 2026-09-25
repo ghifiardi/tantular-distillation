@@ -1,0 +1,11 @@
+{
+  "_note": "SYNTHETIC FIXTURE. A weaker fake arm: fails every correctness item on every repetition. Never a measurement.",
+  "served": ["Qwen/Qwen3.5-4B"],
+  "outputs": {
+    "fixture::reasoning::0001": {"answer": "41", "reasoning": "Saya menebak."},
+    "fixture::instruction_following::0001": "{\"ringkasan\": \"tiga butir\"}",
+    "fixture::knowledge::0001": "Jakarta",
+    "fixture::tool_use::0001": "print('halo')",
+    "fixture::instruction_following::style-0001": "ok"
+  }
+}

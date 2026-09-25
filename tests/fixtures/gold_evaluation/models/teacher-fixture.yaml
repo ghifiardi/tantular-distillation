@@ -1,0 +1,16 @@
+# SYNTHETIC FIXTURE: a TEACHER identity, used only to prove the runner refuses
+# a teacher in a student slot.
+schema_version: 1
+model_id: meta-models/Muse-Glimmer-30B
+revision: a4e59da52a7bc87ae7251dd5545c0dd437c44b68
+role: teacher
+family: muse-glimmer
+generation: "1"
+tokenizer:
+  model_id: meta-models/Muse-Glimmer-30B
+  revision: a4e59da52a7bc87ae7251dd5545c0dd437c44b68
+  sha256: null
+license:
+  identifier: apache-2.0
+  output_training_permitted: true
+digests_verified: false

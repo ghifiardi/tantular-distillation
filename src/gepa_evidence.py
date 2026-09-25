@@ -73,6 +73,9 @@ def arm_from_gepa(result: dict[str, Any], *, metric: str,
     if result.get("training_authorized") is not False:
         raise GepaEvidenceError(
             "gepa result must carry training_authorized: false")
+    if result.get("fixture") is True:
+        raise GepaEvidenceError(
+            "fixture GEPA results cannot populate a production experiment arm")
     for field in ("harness_identity", "model_identity"):
         value = result.get(field)
         if not isinstance(value, str) or not value.strip():

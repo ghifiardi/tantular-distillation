@@ -155,6 +155,16 @@ def test_a_result_claiming_training_authorization_is_refused(experiment,
     assert "training_authorized" in str(error.value)
 
 
+def test_a_fixture_result_cannot_populate_a_production_arm(
+        experiment, measurements):
+    result = load("gepa_result_sufficient.json")
+    result["fixture"] = True
+    with pytest.raises(ge.GepaEvidenceError) as error:
+        ge.evaluate_with_gepa(experiment, measurements, result)
+    assert "fixture" in str(error.value)
+    assert "production experiment arm" in str(error.value)
+
+
 def test_a_score_outside_zero_to_one_is_refused(experiment, measurements):
     result = load("gepa_result_sufficient.json")
     result["best"]["score"] = 91
