@@ -207,9 +207,20 @@ def holdout_items(holdout_gold: Path, slice_name: str, *,
     except rge.GoldEvaluationError as error:
         raise GepaRunError(str(error)) from error
     in_slice = [r for r in items if r["split"] == slice_name]
-    if not in_slice:
-        raise GepaRunError(f"held-out gold has no items in slice {slice_name!r}")
-    return gold, in_slice
+    scoreable = [
+        record for record in in_slice
+        if record.get("score_role") == "correctness"
+        and record["verifier"]["type"] not in verifiers.QUARANTINED
+    ]
+    if not scoreable:
+        raise GepaRunError(
+            f"held-out gold has no scoreable correctness items in slice "
+            f"{slice_name!r}; style and quarantined verifier records cannot "
+            "contribute to the GEPA capability score")
+    blockers = rge.executor_blockers(scoreable)
+    if blockers:
+        raise GepaRunError(blockers[0])
+    return gold, scoreable
 
 
 def _overlap(train: list[dict[str, Any]], holdout: list[dict[str, Any]]) -> list[str]:
@@ -229,6 +240,34 @@ def _candidate_harness_digest(base_digest: str, instruction: str) -> str:
     file is never rewritten; the candidate is the pair."""
     return hd.canonical_digest({"base_harness_digest": base_digest,
                                 "instruction_sha256": _instruction_digest(instruction)})
+
+
+def _redact_heldout_text(text: str, holdout_ids: list[str]) -> str:
+    """Remove item-level holdout identifiers from public audit text."""
+    redacted = str(text)
+    for item_id in holdout_ids:
+        redacted = redacted.replace(item_id, "[held-out item]")
+    return redacted
+
+
+def _public_result(value: Any, holdout_ids: list[str]) -> Any:
+    """Recursively remove per-item score maps and held-out identifiers.
+
+    This is deliberately schema-agnostic: if `gepa.optimize` later nests a
+    candidate somewhere new, a `scores` map is still removed rather than
+    quietly becoming public through an unreviewed schema change.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _public_result(item, holdout_ids)
+            for key, item in value.items()
+            if key != "scores"
+        }
+    if isinstance(value, list):
+        return [_public_result(item, holdout_ids) for item in value]
+    if isinstance(value, str):
+        return _redact_heldout_text(value, holdout_ids)
+    return value
 
 
 def _isolated(output: Path) -> Path:
@@ -283,11 +322,12 @@ def plan_gepa(*, train_set: Path, holdout_gold: Path, model_registry: str,
 
     gold = rge.load_gold(holdout_gold)
     blockers.extend(rge.gold_blockers(gold, allow_fixture=allow_fixture))
-    pool = list(gold.valid if allow_fixture else gold.eligible)
-    holdout = [r for r in pool if r["split"] == slice_name]
-    blockers.extend(rge.executor_blockers(holdout))
-    if not blockers and not holdout:
-        blockers.append(f"held-out gold has no items in slice {slice_name!r}")
+    holdout: list[dict[str, Any]] = []
+    try:
+        _, holdout = holdout_items(
+            holdout_gold, slice_name, allow_fixture=allow_fixture)
+    except GepaRunError as error:
+        blockers.append(str(error))
     overlap = _overlap(train, holdout)
     if overlap:
         blockers.append(f"train and held-out overlap on {len(overlap)} item(s)")
@@ -357,6 +397,10 @@ def run_gepa(*, train_set: Path, holdout_gold: Path, model_registry: str,
     }
     rge.check_not_teacher(recorded_identity, teachers, "the served model")
     is_fake = identity.get("produces_real_measurements") is not True
+    if is_fake and not allow_fixture:
+        raise GepaRunError(
+            "a fake client requires explicit fixture posture "
+            "(--allow-fixture) and may never run against production gold")
     if not is_fake and allow_fixture:
         raise GepaRunError("a real client cannot run in fixture posture; drop --allow-fixture")
     model_identity = f"{model['model_id']}@{model['revision']}"
@@ -437,7 +481,7 @@ def run_gepa(*, train_set: Path, holdout_gold: Path, model_registry: str,
             "model_identity": recorded_identity,
             "train_summary": train_by_sha.get(_instruction_digest(instruction)),
             "holdout_decision": decision,
-            "reason": reason,
+            "reason": _redact_heldout_text(reason, holdout_ids),
             "rollouts": rollouts_at,
             "rollout_budget": rollout_budget,
             "archive_only": not promotable,
@@ -473,7 +517,7 @@ def run_gepa(*, train_set: Path, holdout_gold: Path, model_registry: str,
             stream.write(json.dumps(restricted, ensure_ascii=False, sort_keys=True) + "\n")
 
     full = {
-        **result,
+        **_public_result(result, holdout_ids),
         "slice": slice_name,
         "run_id": run_id,
         "seed_parameter": seed,
@@ -568,6 +612,10 @@ def main(argv: list[str] | None = None) -> None:
                 raise GepaRunError("--real and --fake-bundle are exclusive")
             if args.real and args.allow_fixture:
                 raise GepaRunError("--real cannot be combined with --allow-fixture")
+            if args.fake_bundle and not args.allow_fixture:
+                raise GepaRunError(
+                    "--fake-bundle requires explicit --allow-fixture and may "
+                    "never run against production gold")
             if not args.real and not args.fake_bundle:
                 raise GepaRunError(
                     "no client selected. Pass --fake-bundle <file> for a "

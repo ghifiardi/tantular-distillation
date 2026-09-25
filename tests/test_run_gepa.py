@@ -36,6 +36,7 @@ import gepa                                                # noqa: E402
 import gepa_evidence                                       # noqa: E402
 import gold_set as gs                                      # noqa: E402
 import run_gepa as rg                                      # noqa: E402
+import verifiers                                           # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures" / "gepa_run"
 MODEL_DIR = ROOT / "tests" / "fixtures" / "gold_evaluation" / "models"
@@ -61,6 +62,65 @@ def holdout_dir(tmp_path) -> Path:
 
 def bundle(name: str) -> dict:
     return json.loads((FIXTURES / f"fake_bundle_{name}.json").read_text("utf-8"))
+
+
+def fixture_records() -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (FIXTURES / "holdout.synthetic.jsonl").read_text(
+            "utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def write_jsonl(path: Path, records: list[dict]) -> None:
+    path.write_text(
+        "".join(json.dumps(record, ensure_ascii=False) + "\n"
+                for record in records),
+        encoding="utf-8")
+
+
+def style_record(item_id: str, *, judge: bool) -> dict:
+    record = fixture_records()[0]
+    record["id"] = item_id
+    record["prompt"] = f"STYLE-ONLY {item_id}"
+    record["score_role"] = "style"
+    if judge:
+        record["verifier"] = {"type": "judge", "config": {}}
+        record["expected"] = {
+            "rubric": ["alami", "ringkas"],
+            "calibration_set_ref": "fixture-raters-v1",
+        }
+    else:
+        record["verifier"] = {"type": "exact_match", "config": {}}
+        record["expected"] = {"answer": "baik", "normalization": ["trim"]}
+    return record
+
+
+@pytest.fixture
+def production_holdout_dir(tmp_path) -> Path:
+    """A complete, approved four-split set for fake-vs-production refusal."""
+    directory = tmp_path / "production-holdout"
+    directory.mkdir()
+    source = fixture_records()[0]
+    records = []
+    for index, split in enumerate(gs.SPLITS, start=1):
+        record = json.loads(json.dumps(source))
+        record["id"] = f"production::{split}::{index:04d}"
+        record["split"] = split
+        record["prompt"] = f"Kasus manusia yang disetujui untuk {split}."
+        record["source_class"] = "internal"
+        record["source"] = {
+            "kind": "human_authored",
+            "author_ref": "human-author-a",
+            "authored_at": "2026-09-25",
+            "approved_by": "human-reviewer-b",
+            "approved_at": "2026-09-25",
+            "evidence_ref": f"local-review::{split}",
+        }
+        records.append(record)
+    write_jsonl(directory / "approved.jsonl", records)
+    return directory
 
 
 def harness_digests() -> dict[str, str]:
@@ -144,6 +204,21 @@ def test_an_unapproved_holdout_refuses_before_any_client_call(holdout_dir, tmp_p
     assert not (tmp_path / "out").exists()
 
 
+def test_a_fake_client_refuses_approved_production_gold_without_fixture_posture(
+        production_holdout_dir, tmp_path):
+    data = bundle("improving")
+    with pytest.raises(rg.GepaRunError, match="fake client.*fixture posture"):
+        rg.run_gepa(
+            train_set=TRAIN, holdout_gold=production_holdout_dir,
+            model_registry="qwen35-9b-fixture", model_dir=MODEL_DIR,
+            client=rg.FakeGepaClient(data),
+            reflect=rg.SequencedReflector(data["reflections"]),
+            harness="tantular-office-candidate", slice_name="tool_use",
+            rollout_budget=12, output=tmp_path / "out", allow_fixture=False,
+            seed_instruction=SEED, seed=0, experiment_path=EXPERIMENT)
+    assert not (tmp_path / "out").exists()
+
+
 def test_train_and_holdout_overlap_refuses(holdout_dir, tmp_path):
     with pytest.raises(rg.GepaRunError, match="overlap"):
         rg.run_gepa(
@@ -203,6 +278,30 @@ def test_per_instance_scores_live_in_the_restricted_artifact_only(holdout_dir, t
     assert "holdout::tool_use" not in public
 
 
+def test_public_result_recursively_contains_no_scores_or_holdout_identifiers(
+        holdout_dir, tmp_path):
+    out = tmp_path / "out"
+    run(holdout_dir, out, "regressing")
+    public = json.loads((out / "result.json").read_text("utf-8"))
+
+    def inspect(value):
+        if isinstance(value, dict):
+            assert "scores" not in value
+            for key, item in value.items():
+                assert not str(key).startswith("holdout::")
+                inspect(item)
+        elif isinstance(value, list):
+            for item in value:
+                inspect(item)
+        elif isinstance(value, str):
+            for secret in HOLDOUT_SECRETS:
+                assert secret not in value
+
+    inspect(public)
+    restricted = (out / "restricted" / "per_instance.jsonl").read_text("utf-8")
+    assert "holdout::tool_use::0001" in restricted
+
+
 def test_held_out_content_never_reaches_the_reflector(holdout_dir, tmp_path):
     data = bundle("improving")
     reflect = rg.SequencedReflector(data["reflections"])
@@ -228,19 +327,14 @@ def test_a_higher_mean_with_one_regressed_holdout_item_is_rejected(holdout_dir, 
     assert child["holdout_decision"] == "rejected"
 
 
-def test_the_result_can_populate_the_student_candidate_arm(holdout_dir, tmp_path):
+def test_a_fixture_run_cannot_populate_the_student_candidate_arm(
+        holdout_dir, tmp_path):
     out = tmp_path / "out"
     run(holdout_dir, out)
     result = json.loads((out / "result.json").read_text("utf-8"))
-    arm = gepa_evidence.arm_from_gepa(result, metric="capability_pass_rate", guardrails=())
-    assert arm["capability_pass_rate"] == result["best"]["score"]
-    assert arm["provenance"]["source"] == "gepa"
-    # The guardrails are NOT invented: with the experiment's guardrails the
-    # existing evidence gate still refuses until they are measured.
-    with pytest.raises(gepa_evidence.GepaEvidenceError, match="guardrail"):
+    with pytest.raises(gepa_evidence.GepaEvidenceError, match="fixture"):
         gepa_evidence.arm_from_gepa(
-            result, metric="capability_pass_rate",
-            guardrails=("indonesian_voice", "edit_contract_output"))
+            result, metric="capability_pass_rate", guardrails=())
 
 
 def test_production_harness_files_are_unchanged(holdout_dir, tmp_path):
@@ -272,6 +366,44 @@ def test_every_artifact_says_training_authorized_false(holdout_dir, tmp_path):
             if line.strip().startswith("{") and line.strip().endswith("}"):
                 assert json.loads(line)["training_authorized"] is False
     assert json.loads((out / "result.json").read_text("utf-8"))["training_authorized"] is False
+
+
+# --- capability items only --------------------------------------------------
+
+
+def test_mixed_style_and_correctness_holdout_uses_only_scoreable_items(tmp_path):
+    directory = tmp_path / "mixed"
+    directory.mkdir()
+    records = fixture_records()
+    records.extend([
+        style_record("holdout::tool_use::style-judge", judge=True),
+        style_record("holdout::tool_use::style-exact", judge=False),
+    ])
+    write_jsonl(directory / "mixed.synthetic.jsonl", records)
+
+    _, selected = rg.holdout_items(
+        directory, "tool_use", allow_fixture=True)
+    assert {record["id"] for record in selected} == {
+        "holdout::tool_use::0001",
+        "holdout::tool_use::0002",
+        "holdout::tool_use::0003",
+    }
+    assert all(record["score_role"] == "correctness" for record in selected)
+    assert all(record["verifier"]["type"] not in verifiers.QUARANTINED
+               for record in selected)
+
+
+def test_style_only_or_quarantined_holdout_refuses_instead_of_scoring_zero(
+        tmp_path):
+    directory = tmp_path / "style-only"
+    directory.mkdir()
+    write_jsonl(directory / "style.synthetic.jsonl", [
+        style_record("holdout::tool_use::style-judge", judge=True),
+        style_record("holdout::tool_use::style-exact", judge=False),
+    ])
+    with pytest.raises(
+            rg.GepaRunError, match="no scoreable correctness items"):
+        rg.holdout_items(directory, "tool_use", allow_fixture=True)
 
 
 # --- CLI --------------------------------------------------------------------
@@ -340,6 +472,21 @@ def test_cli_fake_run_end_to_end(holdout_dir, tmp_path):
     assert summary["training_authorized"] is False
     assert summary["fixture"] is True
     assert (out / "result.json").is_file()
+
+
+def test_cli_fake_bundle_requires_explicit_allow_fixture(holdout_dir, tmp_path):
+    result = run_cli(
+        "run", "--train-set", str(TRAIN),
+        "--holdout-gold", str(holdout_dir),
+        "--model-registry", "qwen35-9b-fixture",
+        "--model-dir", str(MODEL_DIR),
+        "--endpoint", "http://127.0.0.1:9/v1",
+        "--seed-instruction", SEED,
+        "--fake-bundle", str(FIXTURES / "fake_bundle_improving.json"),
+        "--output", str(tmp_path / "out"))
+    assert result.returncode != 0
+    assert "--fake-bundle requires explicit --allow-fixture" in result.stderr
+    assert not (tmp_path / "out").exists()
 
 
 def test_gepa_dry_run_is_preserved():
