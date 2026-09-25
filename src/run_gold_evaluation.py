@@ -21,8 +21,12 @@
         --weaker  output/rsi/measurement-4b.json
 
 Three phases, kept apart on purpose. `plan` is the default posture and touches
-nothing. `run` talks to exactly one model client -- `bridge_client.TeacherClient`
-behind `--real`, or a deterministic fake behind `--fake-outcomes` -- and leaves
+nothing. `run` talks to exactly one model client -- behind `--real`, either
+`bridge_client.TeacherClient` (`--client openai`) or the Ollama /api/chat
+adapter in `ollama_chat_client.py` (`--client ollama`, think:false, chosen
+explicitly and checked against the registry entry's `serving:` block, never
+inferred from the endpoint); or a deterministic fake behind `--fake-outcomes`
+-- and leaves
 a receipt for every item and repetition, failures included. `aggregate` derives
 a measurement from validated receipts and from nothing else: there is no code
 path that accepts a pass rate from outside.
@@ -91,6 +95,13 @@ DECODING: dict[str, Any] = {
 
 MINIMUM_REPETITIONS = 2
 
+# Which wire a registry entry is qualified for, and which CLI client speaks it.
+PROTOCOL_OPENAI = "openai_chat"
+PROTOCOL_OLLAMA = "ollama_chat"
+CLIENT_OPENAI = "openai"
+CLIENT_OLLAMA = "ollama"
+CLIENTS = (CLIENT_OPENAI, CLIENT_OLLAMA)
+
 _SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 _RECEIPT_REQUIRED = (
@@ -139,7 +150,58 @@ def resolve_model(model_dir: Path, name: str) -> dict[str, Any]:
             f"registry model {name!r} has role {role!r}; a gold evaluation arm "
             "must be a student. A teacher identity in a student slot measures "
             "nothing.")
-    return {"model_registry": name, "model_id": model_id, "revision": revision}
+    return {"model_registry": name, "model_id": model_id, "revision": revision,
+            "serving": serving_declaration(spec, name)}
+
+
+def serving_declaration(spec: dict[str, Any], name: str) -> dict[str, Any]:
+    """How the registry says this checkpoint is served, if it says.
+
+    A `serving:` block names the protocol and the served tags the runtime
+    identity may match. Absent means the OpenAI-compatible path with the
+    model_id itself as the served name, which is what every vLLM-served entry
+    already assumes.
+    """
+    block = spec.get("serving")
+    if block is None:
+        return {"protocol": None, "tags": []}
+    if not isinstance(block, dict):
+        raise GoldEvaluationError(f"registry model {name!r}: serving must be a mapping")
+    protocol = block.get("protocol")
+    if protocol not in (PROTOCOL_OPENAI, PROTOCOL_OLLAMA):
+        raise GoldEvaluationError(
+            f"registry model {name!r}: serving.protocol {protocol!r} is not one of "
+            f"{[PROTOCOL_OPENAI, PROTOCOL_OLLAMA]}")
+    tags = block.get("tags") or []
+    if not isinstance(tags, list) or not all(isinstance(t, str) and t.strip() for t in tags):
+        raise GoldEvaluationError(
+            f"registry model {name!r}: serving.tags must be a list of tag strings")
+    if protocol == PROTOCOL_OLLAMA and not tags:
+        raise GoldEvaluationError(
+            f"registry model {name!r}: an Ollama-served entry must declare the "
+            "tag(s) the served identity may match")
+    return {"protocol": protocol, "tags": list(tags)}
+
+
+def check_client_protocol(model: dict[str, Any], client_name: str) -> None:
+    """The client must be the one the registry entry was qualified for.
+
+    An Ollama-served Qwen3.5 driven through /v1 ignores think:false and can
+    answer nothing; an OpenAI-served entry driven through /api/chat names a
+    route that does not exist. Either way the measurement would be of the
+    wrong thing, so the pairing is checked, not assumed.
+    """
+    declared = (model.get("serving") or {}).get("protocol")
+    if declared == PROTOCOL_OLLAMA and client_name != CLIENT_OLLAMA:
+        raise GoldEvaluationError(
+            f"registry model {model['model_registry']!r} is served by Ollama "
+            f"({PROTOCOL_OLLAMA}) and must be driven through /api/chat with "
+            f"think:false; the {client_name!r} client is refused. Pass --client "
+            f"{CLIENT_OLLAMA}.")
+    if declared != PROTOCOL_OLLAMA and client_name == CLIENT_OLLAMA:
+        raise GoldEvaluationError(
+            f"registry model {model['model_registry']!r} declares no Ollama "
+            "serving tags; the ollama client cannot attribute a served tag to it")
 
 
 def teacher_model_ids(experiment_path: Path) -> list[str]:
@@ -179,12 +241,13 @@ def check_served(model: dict[str, Any], identity: dict[str, Any]) -> None:
         raise GoldEvaluationError(
             "the client reports no served model; an endpoint that cannot name "
             "what it serves cannot be attributed")
-    if not model_ids.any_match(model["model_id"], served):
+    accepted = [model["model_id"], *((model.get("serving") or {}).get("tags") or [])]
+    if not any(model_ids.any_match(name, served) for name in accepted):
         raise GoldEvaluationError(
             f"served model(s) {served!r} do not match the expected registry "
-            f"identity {model['model_id']!r} (endpoint "
-            f"{identity.get('endpoint')!r}); refusing to evaluate a model other "
-            "than the one planned")
+            f"identity {model['model_id']!r} or its declared serving tags "
+            f"{accepted[1:]!r} (endpoint {identity.get('endpoint')!r}); refusing "
+            "to evaluate a model other than the one planned")
 
 
 # --- gold selection ---------------------------------------------------------
@@ -541,6 +604,7 @@ def plan_evaluation(*, gold_dir: Path, model_registry: str, model_dir: Path = MO
         "model_identity": {"expected": model["model_id"] if model else None,
                            "revision": model["revision"] if model else None},
         "endpoint": endpoint,
+        "serving": model["serving"] if model else {"protocol": None, "tags": []},
         "decoding": dict(DECODING),
         "teacher_models_excluded": teacher_model_ids(experiment_path),
         "blockers": blockers,
@@ -592,6 +656,7 @@ def run_evaluation(*, gold_dir: Path, model_registry: str, model_dir: Path = MOD
         "served": [str(s) for s in identity["served"]],
         "endpoint": str(identity.get("endpoint") or ""),
         "revision": model["revision"],
+        "protocol": str(identity.get("protocol") or PROTOCOL_OPENAI),
     }
     check_not_teacher(recorded_identity, teachers, "the served model")
     if not recorded_identity["endpoint"]:
@@ -869,8 +934,13 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--output", type=Path, required=True)
     r.add_argument("--run-id", default="run-1")
     r.add_argument("--real", action="store_true",
-                   help="contact --endpoint through bridge_client; requires an "
-                        "approved production gold set")
+                   help="contact --endpoint; requires --client and an approved "
+                        "production gold set")
+    r.add_argument("--client", choices=list(CLIENTS),
+                   help="which wire a --real run speaks: openai "
+                        "(/v1/chat/completions via bridge_client) or ollama "
+                        "(/api/chat with think:false). Required with --real; "
+                        "never inferred from the endpoint")
     r.add_argument("--fake-outcomes", type=Path,
                    help="deterministic fake client replaying this outcomes file")
     r.add_argument("--allow-fixture", action="store_true",
@@ -910,8 +980,18 @@ def main(argv: list[str] | None = None) -> None:
             select_items(gold, allow_fixture=args.allow_fixture)
             model = resolve_model(args.model_dir, args.model_registry)
             if args.real:
-                key = os.environ.get(args.api_key_env, "") if args.api_key_env else ""
-                client: Any = BridgeGoldClient(args.endpoint, model["model_id"], api_key=key)
+                if not args.client:
+                    raise GoldEvaluationError(
+                        "--real needs --client openai|ollama; the wire is never "
+                        "inferred from the endpoint")
+                check_client_protocol(model, args.client)
+                if args.client == CLIENT_OLLAMA:
+                    from ollama_chat_client import OllamaChatClient  # noqa: PLC0415
+                    client: Any = OllamaChatClient(
+                        args.endpoint, model["serving"]["tags"][0])
+                else:
+                    key = os.environ.get(args.api_key_env, "") if args.api_key_env else ""
+                    client = BridgeGoldClient(args.endpoint, model["model_id"], api_key=key)
             else:
                 client = FakeGoldClient(load_fake_outcomes(args.fake_outcomes),
                                         endpoint=args.endpoint)
