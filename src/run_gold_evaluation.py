@@ -5,11 +5,18 @@
         --gold-dir data/gold --model-registry qwen35-9b-instruct \
         --endpoint http://127.0.0.1:8000/v1 --repetitions 2
 
-    # one receipt per (item, repetition); a REAL endpoint needs --real
+    # one receipt per (item, repetition); a REAL endpoint needs --real AND an
+    # explicit --client naming the wire. The 9B is served OpenAI-compatibly:
     python src/run_gold_evaluation.py run \
         --gold-dir data/gold --model-registry qwen35-9b-instruct \
         --endpoint http://127.0.0.1:8000/v1 --repetitions 2 \
-        --output output/rsi/9b-receipts --real
+        --output output/rsi/9b-receipts --real --client openai
+
+    # Tantular Lite (4B) is served by Ollama and MUST go through /api/chat:
+    python src/run_gold_evaluation.py run \
+        --gold-dir data/gold --model-registry qwen35-4b-instruct \
+        --endpoint http://127.0.0.1:11434 --repetitions 2 \
+        --output output/rsi/4b-receipts --real --client ollama
 
     # derive the measurement the separation gate reads, from receipts only
     python src/run_gold_evaluation.py aggregate \
@@ -250,6 +257,51 @@ def check_served(model: dict[str, Any], identity: dict[str, Any]) -> None:
             "to evaluate a model other than the one planned")
 
 
+def select_request_model(model: dict[str, Any], identity: dict[str, Any]) -> str:
+    """The exact served name generation must ask for.
+
+    Identity may match the registry model_id or any declared serving tag, so
+    the tag that matched is the one to request -- never blindly the first
+    declared tag. An endpoint that exposes only an alias would otherwise pass
+    identity and then fail every generation, and those failures would become
+    error receipts wearing a valid-looking near-zero measurement.
+    """
+    served = [str(s) for s in (identity.get("served") or [])]
+    candidates = [model["model_id"], *((model.get("serving") or {}).get("tags") or [])]
+    for candidate in candidates:
+        for name in served:
+            if model_ids.matches(candidate, name):
+                return name
+    raise GoldEvaluationError(
+        f"none of the declared names {candidates!r} is served at "
+        f"{identity.get('endpoint')!r} (served: {served!r}); refusing to "
+        "generate against a name the endpoint would reject")
+
+
+def check_client_identity_protocol(model: dict[str, Any], identity: dict[str, Any]) -> None:
+    """Enforced INSIDE the run, from the client's own reported identity.
+
+    The CLI's --client check guards one entry point; a programmatic caller
+    can hand run_evaluation() any client. So a real client must say which wire
+    it speaks, and it must be the wire the registry entry was qualified for.
+    A fake client speaks no wire and is gated by the fixture posture instead.
+    """
+    if identity.get("produces_real_measurements") is not True:
+        return
+    actual = identity.get("protocol")
+    if not isinstance(actual, str) or not actual.strip():
+        raise GoldEvaluationError(
+            "a real client must report the protocol it speaks in identity(); "
+            "an unnamed wire cannot be checked against the registry entry")
+    declared = (model.get("serving") or {}).get("protocol") or PROTOCOL_OPENAI
+    if actual != declared:
+        raise GoldEvaluationError(
+            f"client protocol {actual!r} does not match the protocol registry "
+            f"model {model['model_registry']!r} is qualified for ({declared!r}); "
+            "refusing before generation. An Ollama-served Qwen3.5 driven through "
+            "/v1 ignores think:false; an OpenAI-served entry has no /api/chat.")
+
+
 # --- gold selection ---------------------------------------------------------
 
 
@@ -337,6 +389,7 @@ class FakeGoldClient:
     def identity(self) -> dict[str, Any]:
         return {
             "kind": self.kind,
+            "protocol": "fake",
             "produces_real_measurements": False,
             "served": list(self.outcomes.get("served") or []),
             "endpoint": self.endpoint,
@@ -387,6 +440,7 @@ class BridgeGoldClient:
                   if isinstance(m, dict) and m.get("id")]
         return {
             "kind": self.kind,
+            "protocol": PROTOCOL_OPENAI,
             "produces_real_measurements": True,
             "served": served,
             "endpoint": self.endpoint,
@@ -651,12 +705,17 @@ def run_evaluation(*, gold_dir: Path, model_registry: str, model_dir: Path = MOD
     if not isinstance(identity, dict):
         raise GoldEvaluationError("client.identity() must return an object")
     check_served(model, identity)
+    check_client_identity_protocol(model, identity)
+    request_model = select_request_model(model, identity)
+    if hasattr(client, "bind_model"):
+        client.bind_model(request_model)
     recorded_identity = {
         "expected": model["model_id"],
         "served": [str(s) for s in identity["served"]],
+        "request_model": request_model,
         "endpoint": str(identity.get("endpoint") or ""),
         "revision": model["revision"],
-        "protocol": str(identity.get("protocol") or PROTOCOL_OPENAI),
+        "protocol": str(identity.get("protocol") or "fake"),
     }
     check_not_teacher(recorded_identity, teachers, "the served model")
     if not recorded_identity["endpoint"]:

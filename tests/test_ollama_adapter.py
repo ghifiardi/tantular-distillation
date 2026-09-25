@@ -323,3 +323,188 @@ def test_every_artifact_from_the_adapter_says_training_authorized_false():
     c = client()
     assert c.identity()["training_authorized"] is False
     assert c.describe()["training_authorized"] is False
+
+
+# --- review fixes (PR #25) --------------------------------------------------
+# 1. the request tag is the served tag that matched, never blindly tags[0];
+# 2. the client's protocol is enforced inside run_evaluation(), not only in
+#    the CLI; 3. the module's executable example names --client.
+
+ALIAS = "tantular-office:lite"
+
+
+def _model_dir_with_4b(tmp_path) -> Path:
+    directory = tmp_path / "models"
+    directory.mkdir()
+    shutil.copy(REGISTRY, directory / "qwen35-4b-instruct.yaml")
+    return directory
+
+
+def _gold(tmp_path) -> Path:
+    gold = tmp_path / "gold"
+    gold.mkdir()
+    shutil.copy(GOLD_FIXTURE, gold / "valid.synthetic.jsonl")
+    return gold
+
+
+def _identity(*served: str, protocol: str = "ollama_chat", real: bool = True) -> dict:
+    return {"kind": "real" if real else "fake", "protocol": protocol,
+            "produces_real_measurements": real, "served": list(served),
+            "endpoint": ENDPOINT}
+
+
+def test_the_request_model_is_the_primary_tag_when_it_is_served():
+    model = rge.resolve_model(ROOT / "configs" / "models", "qwen35-4b-instruct")
+    assert rge.select_request_model(model, _identity(TAG, ALIAS)) == TAG
+
+
+def test_the_request_model_is_the_alias_when_only_the_alias_is_served():
+    model = rge.resolve_model(ROOT / "configs" / "models", "qwen35-4b-instruct")
+    assert rge.select_request_model(model, _identity(ALIAS)) == ALIAS
+
+
+def test_no_matching_served_tag_refuses_before_generation():
+    model = rge.resolve_model(ROOT / "configs" / "models", "qwen35-4b-instruct")
+    with pytest.raises(rge.GoldEvaluationError, match="served"):
+        rge.select_request_model(model, _identity("qwen3.5:4b"))
+
+
+def test_the_adapter_generates_with_the_bound_served_tag():
+    transport = FakeTransport(tags=[{"name": ALIAS, "digest": "b2b2"}],
+                              chat={"done": True, "model": ALIAS,
+                                    "message": {"role": "assistant", "content": "ok"}})
+    c = oc.OllamaChatClient(ENDPOINT, TAG, transport=transport)
+    model = rge.resolve_model(ROOT / "configs" / "models", "qwen35-4b-instruct")
+    selected = rge.select_request_model(model, c.identity())
+    c.bind_model(selected)
+    c.chat([{"role": "user", "content": "p"}])
+    body = [b for m, p, b in transport.requests if p == "/api/chat"][0]
+    assert body["model"] == ALIAS
+    assert c.identity()["model_tag"] == ALIAS
+
+
+def test_binding_a_tag_the_endpoint_does_not_serve_is_refused():
+    c = client(FakeTransport(tags=[{"name": TAG, "digest": "b2b2"}]))
+    with pytest.raises(oc.OllamaAdapterError, match="serve"):
+        c.bind_model("qwen3.5:4b")
+
+
+def test_run_evaluation_records_the_alias_as_the_request_model(tmp_path):
+    """Through the runner: a fake client that serves only the alias. Every
+    receipt names the tag that was actually requested."""
+    outcomes = json.loads((ROOT / "tests" / "fixtures" / "gold_evaluation"
+                           / "fake_outcomes_4b.json").read_text("utf-8"))
+    outcomes["served"] = [ALIAS]
+    out = tmp_path / "out"
+    rge.run_evaluation(
+        gold_dir=_gold(tmp_path), model_registry="qwen35-4b-instruct",
+        model_dir=_model_dir_with_4b(tmp_path), client=rge.FakeGoldClient(outcomes),
+        repetitions=2, output=out, run_id="run-1", allow_fixture=True,
+        experiment_path=EXPERIMENT)
+    for receipt in rge.load_receipts(out):
+        assert receipt["model_identity"]["request_model"] == ALIAS
+        assert receipt["model_identity"]["served"] == [ALIAS]
+
+
+def test_run_evaluation_refuses_when_no_declared_tag_is_served(tmp_path):
+    outcomes = json.loads((ROOT / "tests" / "fixtures" / "gold_evaluation"
+                           / "fake_outcomes_4b.json").read_text("utf-8"))
+    outcomes["served"] = ["qwen3.5:4b"]
+    with pytest.raises(rge.GoldEvaluationError, match="served"):
+        rge.run_evaluation(
+            gold_dir=_gold(tmp_path), model_registry="qwen35-4b-instruct",
+            model_dir=_model_dir_with_4b(tmp_path), client=rge.FakeGoldClient(outcomes),
+            repetitions=2, output=tmp_path / "out", run_id="run-1",
+            allow_fixture=True, experiment_path=EXPERIMENT)
+    assert not (tmp_path / "out").exists()
+
+
+class _StubClient:
+    """A programmatic caller bypassing the CLI: reports an identity, and fails
+    the test if it is ever asked to generate."""
+
+    def __init__(self, identity: dict):
+        self._identity = identity
+        self.answers = 0
+
+    def identity(self) -> dict:
+        return self._identity
+
+    def answer(self, record, decoding, instruction=""):
+        self.answers += 1
+        raise AssertionError("generation must not start")
+
+
+def test_run_evaluation_refuses_an_openai_client_for_an_ollama_declared_model(tmp_path):
+    stub = _StubClient(_identity(TAG, protocol="openai_chat"))
+    with pytest.raises(rge.GoldEvaluationError, match="protocol"):
+        rge.run_evaluation(
+            gold_dir=_gold(tmp_path), model_registry="qwen35-4b-instruct",
+            model_dir=_model_dir_with_4b(tmp_path), client=stub, repetitions=2,
+            output=tmp_path / "out", run_id="run-1", allow_fixture=True,
+            experiment_path=EXPERIMENT)
+    assert stub.answers == 0
+
+
+def test_run_evaluation_refuses_an_ollama_client_for_an_openai_declared_model(tmp_path):
+    stub = _StubClient(_identity("Qwen/Qwen3.5-9B", protocol="ollama_chat"))
+    with pytest.raises(rge.GoldEvaluationError, match="protocol"):
+        rge.run_evaluation(
+            gold_dir=_gold(tmp_path), model_registry="qwen35-9b-fixture",
+            model_dir=ROOT / "tests" / "fixtures" / "gold_evaluation" / "models",
+            client=stub, repetitions=2, output=tmp_path / "out", run_id="run-1",
+            allow_fixture=True, experiment_path=EXPERIMENT)
+    assert stub.answers == 0
+
+
+def test_a_real_client_without_a_protocol_is_refused(tmp_path):
+    identity = _identity(TAG)
+    del identity["protocol"]
+    with pytest.raises(rge.GoldEvaluationError, match="protocol"):
+        rge.run_evaluation(
+            gold_dir=_gold(tmp_path), model_registry="qwen35-4b-instruct",
+            model_dir=_model_dir_with_4b(tmp_path), client=_StubClient(identity),
+            repetitions=2, output=tmp_path / "out", run_id="run-1",
+            allow_fixture=True, experiment_path=EXPERIMENT)
+
+
+def test_check_client_identity_protocol_directly():
+    model = rge.resolve_model(ROOT / "configs" / "models", "qwen35-4b-instruct")
+    rge.check_client_identity_protocol(model, _identity(TAG))
+    with pytest.raises(rge.GoldEvaluationError, match="protocol"):
+        rge.check_client_identity_protocol(model, _identity(TAG, protocol="openai_chat"))
+    # A fake client is posture-gated elsewhere and speaks no wire at all.
+    rge.check_client_identity_protocol(model, _identity(TAG, protocol="fake", real=False))
+
+
+def test_the_openai_client_reports_its_protocol_without_a_network():
+    c = rge.BridgeGoldClient("http://127.0.0.1:9/v1", "Qwen/Qwen3.5-9B")
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"data": [{"id": "Qwen/Qwen3.5-9B"}]}
+
+    class FakeHttpx:
+        @staticmethod
+        def get(url, headers=None, timeout=None):
+            assert url.endswith("/v1/models")
+            return FakeResponse()
+
+    c._httpx = FakeHttpx()
+    identity = c.identity()
+    assert identity["protocol"] == rge.PROTOCOL_OPENAI
+    assert identity["served"] == ["Qwen/Qwen3.5-9B"]
+    assert rge.FakeGoldClient({"outputs": {}}).identity()["protocol"] == "fake"
+
+
+def test_the_module_examples_name_the_client_for_every_real_run():
+    doc = rge.__doc__ or ""
+    # Command lines only (the prose may mention --real on its own).
+    real_lines = [l for l in doc.splitlines() if "--real" in l and "--output" in l]
+    assert real_lines, "the docstring must show a --real example"
+    assert any("--client openai" in l for l in real_lines)
+    assert any("--client ollama" in l for l in real_lines)
+    assert all("--client" in l for l in real_lines)

@@ -162,6 +162,23 @@ class OllamaChatClient:
             "training_authorized": False,
         }
 
+    def bind_model(self, model_tag: str) -> None:
+        """Generate against THIS served tag from now on.
+
+        Called by the runner with the tag that matched the endpoint's served
+        list, so a request never names a tag the endpoint would reject. The
+        tag must be served: rebinding to an unserved name is refused.
+        """
+        tag = str(model_tag).strip()
+        if not tag:
+            raise OllamaAdapterError("a model tag is required")
+        served = self.served_models()
+        if tag not in served:
+            raise OllamaAdapterError(
+                f"{self.endpoint} does not serve {tag!r} (served: {served!r}); "
+                "refusing to bind a tag generation would fail on")
+        self.model_tag = tag
+
     def describe(self) -> dict[str, Any]:
         """What the adapter will send, without sending anything."""
         return {
