@@ -259,10 +259,11 @@ def test_the_4b_registry_entry_records_the_verified_identities():
         "15368614046c19ce4e63e2b5506507bfbd9d8e3bd3600571d9ad27af3c43f11b"
     assert spec["license"]["evidence_sha256"] == \
         "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a"
-    # The composite tokenizer digest is measured only by verify_model_identity;
-    # a hand-typed value here would make the compatibility key a fiction.
-    assert spec["tokenizer"]["sha256"] is None
-    assert spec["digests_verified"] is False
+    # This composite was measured by verify_model_identity from the pinned
+    # provenance-bearing Hugging Face cache snapshot; it is not hand-typed.
+    assert spec["tokenizer"]["sha256"] == \
+        "6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af"
+    assert spec["digests_verified"] is True
 
 
 def test_a_teacher_role_entry_is_still_refused_in_a_student_arm():

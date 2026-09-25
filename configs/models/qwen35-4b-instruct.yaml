@@ -32,7 +32,7 @@ tokenizer:
   # only src/verify_model_identity.py --write may measure and set it. The
   # per-file digests below are the verified upstream values; they are evidence
   # for a later measurement, not a substitute for it.
-  sha256: null
+  sha256: 6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af
   files_sha256:
     tokenizer.json: 5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42
     tokenizer_config.json: 316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8
@@ -94,4 +94,4 @@ license:
 
 # Written ONLY by src/verify_model_identity.py against a local snapshot whose
 # commit is known. The per-file digests above do not make this true.
-digests_verified: false
+digests_verified: true

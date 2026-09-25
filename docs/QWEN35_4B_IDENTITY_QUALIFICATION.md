@@ -98,12 +98,15 @@ The chat template digest equals the 9B registry entry's `chat_template.sha256`.
 - `revision`, `chat_template.sha256`, the per-file tokenizer digests, the
   Ollama weights blob, the canonical profile digest and the licence evidence
   digest are recorded literally from the tables above.
-- `tokenizer.sha256` is **null** and `digests_verified` is **false**. The
-  compatibility key is a composite digest over every tokenizer file that only
-  `src/verify_model_identity.py --write` may measure from a local snapshot
-  whose commit is known. The per-file digests are evidence for that
-  measurement, not a substitute; a hand-typed composite would make a Mode C
-  decision on fiction.
+- On 2026-09-25, `src/verify_model_identity.py --offline --write` measured the
+  composite tokenizer compatibility digest from the pinned Hugging Face cache
+  snapshot at revision `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a`.
+  `tokenizer.sha256` is
+  `6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af`
+  and `digests_verified` is **true**.
+  The snapshot's commit is known from the Hugging Face cache layout. The
+  per-file digests are evidence for that measurement, not a substitute; a
+  hand-typed composite would make a Mode C decision on fiction.
 - `capabilities.logprobs` is false: Ollama `/api/chat` exposes none, so this
   entry can never be a Mode C party.
 - The entry carries a `serving:` block (`protocol: ollama_chat`, the two tags,
