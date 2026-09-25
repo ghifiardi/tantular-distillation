@@ -1,0 +1,97 @@
+# The 4B comparison STUDENT for the separation study (RSI). Identity only;
+# mirrors configs/models/qwen35-9b-instruct.yaml. Every value below is copied
+# from docs/QWEN35_4B_IDENTITY_INSPECTION_2026-09-25.md and
+# docs/QWEN35_4B_IDENTITY_QUALIFICATION.md, which were produced WITHOUT
+# inference. Nothing here was re-derived by guessing.
+#
+# Served locally by Ollama as ghifidanukusumo/tantular:lite: the upstream
+# Qwen3.5-4B weights (Q4_K_M) under the SAME canonical Tantular runtime profile
+# as the current 9B (ghifidanukusumo/tantular:q8-0.5). Only the weights differ,
+# which is what makes the 9B-vs-4B comparison a comparison of model size.
+schema_version: 1
+
+model_id: Qwen/Qwen3.5-4B
+revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+role: student
+family: qwen3.5
+generation: "3.5"
+
+modality:
+  text: true
+  vision: true            # official pipeline: image-text-to-text
+
+params:
+  total_b: 4.7            # measured GGUF parameter count 4,659,865,088
+  active_b: null
+  vision_b: null          # unknown -> memory estimates flagged INCOMPLETE
+
+tokenizer:
+  model_id: Qwen/Qwen3.5-4B
+  revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  # The compatibility key is a COMPOSITE digest over every tokenizer file, and
+  # only src/verify_model_identity.py --write may measure and set it. The
+  # per-file digests below are the verified upstream values; they are evidence
+  # for a later measurement, not a substitute for it.
+  sha256: 6f3a76fa0ff84cba487813d4024623233c4664ecedfc3f3857536f95d25504af
+  files_sha256:
+    tokenizer.json: 5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42
+    tokenizer_config.json: 316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8
+    config.json: ddc63e1c717afa86c865bb5e01313d89d72bb53b97ad4a8a03ba8510c0621670
+
+chat_template:
+  source: model
+  path: null
+  # chat_template.jinja at the pinned revision. Identical to the 9B's.
+  sha256: a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715
+
+# The text architecture at the pinned revision, recorded so a LoRA profile can
+# never be inherited from the 9B by accident (32 layers on both, but hidden
+# 2560 vs 4096). No profile is declared: this checkpoint is evaluated, not
+# trained.
+architecture:
+  model_type: qwen3_5
+  hidden_size: 2560
+  intermediate_size: 9216
+  num_hidden_layers: 32
+  num_attention_heads: 16
+  num_key_value_heads: 4
+  head_dim: 256
+  vocab_size: 248320
+  full_attention_interval: 4
+architecture_profile: null
+
+# No vLLM serving config (configs/teachers/) exists for this checkpoint: it is
+# served by Ollama, and the gold runner drives it through /api/chat with
+# think:false (src/ollama_chat_client.py). The block below is what the
+# runner's served-identity check matches against.
+serving:
+  protocol: ollama_chat
+  tags:
+    - ghifidanukusumo/tantular:lite
+    - tantular-office:lite          # alias, same manifest
+  ollama:
+    parent_tag: qwen3.5:4b
+    local_registry_digest: b2b24b8d3517401d53b56dd144081ca4d76e5e09180376c64b37d2e3065a6a35
+    weights_blob: sha256-81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490
+    weights_bytes: 3389971840
+    quantization: Q4_K_M
+    canonical_profile_sha256: 15368614046c19ce4e63e2b5506507bfbd9d8e3bd3600571d9ad27af3c43f11b
+    system_layer_sha256: c32dc580a89c26e07364ee0dd6bfbf512f738d21bb3cd007aac120de764d3dc5
+    params_layer_sha256: 00427f1947f5c700d8c4f329ff7ba52594f6757b4ae7eee36764842051ee95b7
+    profile_shared_with: ghifidanukusumo/tantular:q8-0.5
+
+capabilities:
+  tools: true
+  logprobs: false         # Ollama /api/chat exposes no logprobs; never a Mode-C party
+
+license:
+  identifier: apache-2.0
+  output_training_permitted: true
+  reviewed_at: 2026-09-25
+  recheck_max_age_days: 180
+  # SHA-256 of the upstream LICENSE file at the pinned revision.
+  evidence_sha256: bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a
+
+# Written ONLY by src/verify_model_identity.py against a local snapshot whose
+# commit is known. The per-file digests above do not make this true.
+digests_verified: true
