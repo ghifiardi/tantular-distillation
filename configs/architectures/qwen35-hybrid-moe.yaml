@@ -18,7 +18,7 @@ expected:
   experts_routed_total: 256
   experts_activated_per_token: 8
   experts_shared: 1
-signature: ARCH_SIGNATURE_QWEN35_MOE   # placeholder; fill from real config.json
+signature: 2d4eef791ca555e3bebc03296b39872e8ff4ec02be34ca303442821113231ce0   # measured from Qwen/Qwen3.5-122B-A10B @ dc4d3484 config.json
 
 lora_targets:
   full_attention: [q_proj, k_proj, v_proj, o_proj]
